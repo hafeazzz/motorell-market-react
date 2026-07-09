@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
+import * as THREE from 'three'
 
 // ---------- Konfigurasi ----------
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL
@@ -158,6 +159,12 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   border:1px solid var(--line)}
 .hero-media img{width:100%;height:100%;object-fit:cover}
 .hero-media .blp{position:absolute;inset:14% 10%;opacity:1}
+.bike3d{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
+.bike3d:active{cursor:grabbing}
+.bike3d canvas{display:block;width:100% !important;height:100% !important}
+.hero-hint{position:absolute;left:14px;bottom:12px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.14em;color:var(--dim);background:rgba(255,255,255,.85);
+  border:1px solid var(--line);padding:6px 11px;border-radius:999px;pointer-events:none}
 .spec-rail{display:flex;flex-wrap:wrap;border:1px solid var(--line);
   border-radius:12px;margin-top:36px;overflow:hidden;background:var(--panel)}
 .spec-rail span{flex:1;min-width:170px;padding:18px 22px;font-family:var(--mono);
@@ -429,6 +436,220 @@ function Blueprint() {
       <path d="M206 62 l16 -10" />
     </svg>
   )
+}
+
+// ---------- Motor 3D interaktif (hero) ----------
+function Bike3D() {
+  const mountRef = useRef(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    const mount = mountRef.current
+    if (!mount) return
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    let renderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    } catch {
+      setFailed(true)
+      return
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    mount.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 50)
+    camera.position.set(3.1, 1.45, 4.2)
+    camera.lookAt(0, 0.7, 0)
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.15))
+    const key = new THREE.DirectionalLight(0xffffff, 2.4)
+    key.position.set(3, 5, 4)
+    key.castShadow = true
+    key.shadow.mapSize.set(1024, 1024)
+    scene.add(key)
+    const fill = new THREE.DirectionalLight(0xffe8d6, 0.5)
+    fill.position.set(-4, 2, -3)
+    scene.add(fill)
+
+    // lantai penangkap bayangan
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(2.4, 48),
+      new THREE.ShadowMaterial({ opacity: 0.13 }),
+    )
+    ground.rotation.x = -Math.PI / 2
+    ground.receiveShadow = true
+    scene.add(ground)
+
+    // ---- rakit motor dari bentuk dasar ----
+    const bike = new THREE.Group()
+    const mat = (color, o = {}) =>
+      new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3, ...o })
+    const M = {
+      tire: mat('#17171b', { roughness: 0.93, metalness: 0.04 }),
+      rim: mat('#c9c9cf', { metalness: 0.85, roughness: 0.22 }),
+      frame: mat('#1b1b21', { metalness: 0.55, roughness: 0.4 }),
+      chrome: mat('#d8d8dd', { metalness: 0.9, roughness: 0.18 }),
+      tank: mat('#ff3d00', { metalness: 0.45, roughness: 0.3 }),
+      dark: mat('#101014', { roughness: 0.85, metalness: 0.1 }),
+      engine: mat('#2d2d34', { metalness: 0.75, roughness: 0.32 }),
+    }
+    const shadowed = (m) => { m.castShadow = true; return m }
+    const V = (x, y, z = 0) => new THREE.Vector3(x, y, z)
+    const tube = (a, b, r, material) => {
+      const dir = new THREE.Vector3().subVectors(b, a)
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(r, r, dir.length(), 14), material)
+      mesh.position.copy(a).add(b).multiplyScalar(0.5)
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize())
+      return shadowed(mesh)
+    }
+
+    const wheels = []
+    const makeWheel = (x) => {
+      const g = new THREE.Group()
+      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.13, 18, 44), M.tire)))
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.07, 28), M.rim)
+      rim.rotation.x = Math.PI / 2
+      g.add(shadowed(rim))
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.17, 14), M.engine)
+      hub.rotation.x = Math.PI / 2
+      g.add(hub)
+      g.position.set(x, 0.5, 0)
+      bike.add(g)
+      wheels.push(g)
+    }
+    makeWheel(-1.05)
+    makeWheel(1.05)
+
+    // rangka
+    const rearAxle = V(-1.05, 0.5), steer = V(0.72, 1.3)
+    const seatPost = V(-0.33, 1.04), crank = V(0.02, 0.64)
+    bike.add(tube(rearAxle, seatPost, 0.045, M.frame))
+    bike.add(tube(seatPost, steer, 0.05, M.frame))
+    bike.add(tube(crank, seatPost, 0.045, M.frame))
+    bike.add(tube(crank, steer, 0.05, M.frame))
+    bike.add(tube(rearAxle, crank, 0.04, M.frame))
+    // garpu depan (dua batang)
+    bike.add(tube(V(0.78, 1.34, 0.07), V(1.05, 0.5, 0.07), 0.035, M.chrome))
+    bike.add(tube(V(0.78, 1.34, -0.07), V(1.05, 0.5, -0.07), 0.035, M.chrome))
+    // setang + grip
+    bike.add(tube(V(0.7, 1.42, -0.3), V(0.7, 1.42, 0.3), 0.03, M.chrome))
+    bike.add(tube(V(0.72, 1.3), V(0.7, 1.42), 0.04, M.chrome))
+    const gripL = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.14, 12), M.dark)
+    gripL.rotation.x = Math.PI / 2
+    gripL.position.set(0.7, 1.42, 0.34)
+    bike.add(shadowed(gripL))
+    const gripR = gripL.clone()
+    gripR.position.z = -0.34
+    bike.add(gripR)
+    // tangki (aksen Motorell)
+    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.42, 28, 22), M.tank)
+    tank.scale.set(1.25, 0.58, 0.72)
+    tank.position.set(0.16, 1.14, 0)
+    bike.add(shadowed(tank))
+    // jok
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.1, 0.27), M.dark)
+    seat.position.set(-0.46, 1.1, 0)
+    bike.add(shadowed(seat))
+    // mesin
+    const engine = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.32, 0.3), M.engine)
+    engine.position.set(0, 0.74, 0)
+    bike.add(shadowed(engine))
+    // knalpot
+    bike.add(tube(V(0.24, 0.6, 0.14), V(-0.98, 0.7, 0.17), 0.05, M.chrome))
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.05, 0.22, 14), M.chrome)
+    tip.rotation.z = Math.PI / 2
+    tip.position.set(-1.06, 0.705, 0.17)
+    bike.add(shadowed(tip))
+    // lampu depan
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.1, 18, 14),
+      mat('#fff4dd', { emissive: 0xffe3b0, emissiveIntensity: 0.8, roughness: 0.4 }))
+    lamp.position.set(0.84, 1.26, 0)
+    bike.add(lamp)
+    // spatbor belakang & depan (busur)
+    const fenderR = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.045, 10, 30, Math.PI * 0.75), M.frame)
+    fenderR.position.set(-1.05, 0.5, 0)
+    fenderR.rotation.z = Math.PI * 0.35
+    bike.add(shadowed(fenderR))
+    const fenderF = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.04, 10, 26, Math.PI * 0.5), M.chrome)
+    fenderF.position.set(1.05, 0.5, 0)
+    fenderF.rotation.z = Math.PI * 0.28
+    bike.add(shadowed(fenderF))
+
+    bike.position.y = 0.02
+    scene.add(bike)
+
+    // ---- interaksi: seret untuk memutar ----
+    let rotY = -0.6, targetY = -0.6, dragging = false, lastX = 0
+    const autoSpin = !reduced
+    const onDown = (e) => {
+      dragging = true
+      lastX = e.clientX
+      if (mount.setPointerCapture) mount.setPointerCapture(e.pointerId)
+    }
+    const onMove = (e) => {
+      if (!dragging) return
+      targetY += (e.clientX - lastX) * 0.012
+      lastX = e.clientX
+    }
+    const onUp = () => { dragging = false }
+    mount.addEventListener('pointerdown', onDown)
+    mount.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+
+    // ---- ukuran mengikuti kontainer ----
+    const resize = () => {
+      const w = mount.clientWidth || 1, h = mount.clientHeight || 1
+      renderer.setSize(w, h)
+      camera.aspect = w / h
+      camera.updateProjectionMatrix()
+    }
+    resize()
+    const ro = new ResizeObserver(resize)
+    ro.observe(mount)
+
+    // ---- loop render ----
+    let raf, t = 0
+    const loop = () => {
+      raf = requestAnimationFrame(loop)
+      t += 0.016
+      if (autoSpin && !dragging) targetY += 0.0038
+      rotY += (targetY - rotY) * 0.08
+      bike.rotation.y = rotY
+      if (!reduced) {
+        bike.position.y = 0.02 + Math.sin(t * 1.3) * 0.018
+        for (const w of wheels) w.rotation.z -= 0.045
+      }
+      renderer.render(scene, camera)
+    }
+    loop()
+
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+      mount.removeEventListener('pointerdown', onDown)
+      mount.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      scene.traverse((o) => {
+        if (o.geometry) o.geometry.dispose()
+        if (o.material) {
+          if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose())
+          else o.material.dispose()
+        }
+      })
+      renderer.dispose()
+      if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement)
+    }
+  }, [])
+
+  if (failed) return <Blueprint />
+  return <div ref={mountRef} className="bike3d" role="img"
+    aria-label="Model 3D motor Motorell — seret untuk memutar" />
 }
 
 // ---------- Modal login / daftar ----------
@@ -972,7 +1193,6 @@ function Card({ l, nav }) {
 
 function HomeView({ listings, nav }) {
   // listings sudah difilter hanya status 'published' oleh App.
-  const featured = listings.find((l) => Array.isArray(l.photos) && l.photos.length > 0) || listings[0]
   const minPrice = listings.length ? Math.min(...listings.map((l) => Number(l.price))) : null
 
   return (
@@ -992,9 +1212,8 @@ function HomeView({ listings, nav }) {
               </div>
             </div>
             <div className="hero-media">
-              {featured && Array.isArray(featured.photos) && featured.photos[0]
-                ? <img src={featured.photos[0]} alt={featured.title} />
-                : <Blueprint />}
+              <Bike3D />
+              <span className="hero-hint">3D · SERET UNTUK MEMUTAR</span>
             </div>
           </div>
           <div className="spec-rail">
