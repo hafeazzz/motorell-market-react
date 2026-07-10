@@ -120,6 +120,14 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   transition:background .3s,border-color .3s,backdrop-filter .3s}
 .nav.scrolled{background:rgba(255,255,255,.86);backdrop-filter:blur(16px);
   border-color:var(--line)}
+.nav.on-dark{color:#f4f4f2}
+.nav.on-dark .logo small{color:rgba(244,244,242,.5)}
+.nav.on-dark .btn-quiet{color:rgba(244,244,242,.72)}
+.nav.on-dark .btn-quiet:hover{color:#fff}
+.nav.on-dark .btn-ghost{border-color:rgba(244,244,242,.32);color:#f4f4f2}
+.nav.on-dark .btn-ghost:hover:not(:disabled){border-color:#fff}
+.nav.on-dark .btn-dark{background:#f4f4f2;color:#0b0b0d}
+.nav.on-dark .btn-dark:hover:not(:disabled){background:#fff}
 .nav-in{display:flex;align-items:center;justify-content:space-between;padding:16px 0}
 .logo{font-weight:800;font-size:19px;letter-spacing:.01em;display:flex;
   align-items:center;gap:8px}
@@ -143,19 +151,40 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .btn-sm{padding:9px 17px;font-size:13px}
 .btn-full{width:100%}
 
-/* ---------- hero ---------- */
-.hero{padding:132px 0 40px;border-bottom:1px solid var(--line)}
+/* ---------- hero (dark, sinematik — ref. lusion.co) ---------- */
+.hero{
+  --ink:#f4f4f2; --muted:#9d9da4; --dim:#6b6b72;
+  --line:rgba(255,255,255,.12); --line-2:rgba(255,255,255,.22);
+  --panel:rgba(255,255,255,.035); --panel-2:rgba(255,255,255,.07);
+  --bg-2:#0b0b0d; --bg-3:#18181c;
+  position:relative;overflow:hidden;background:#0b0b0d;color:var(--ink);
+  min-height:100svh;display:flex;flex-direction:column;justify-content:center;
+  padding:128px 0 46px;isolation:isolate}
+.hero::before{content:"";position:absolute;inset:-10%;z-index:0;pointer-events:none;
+  background:radial-gradient(46% 40% at 74% 38%, rgba(255,61,0,.16), transparent 68%),
+             radial-gradient(60% 55% at 18% 82%, rgba(80,90,140,.14), transparent 70%)}
+.hero::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;opacity:.05;
+  mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:180px 180px;animation:grain 1s steps(3) infinite}
+@keyframes grain{0%,100%{transform:translate(0,0)}33%{transform:translate(-2%,1%)}66%{transform:translate(1%,-2%)}}
+.hero .container{position:relative;z-index:2;width:100%}
+@keyframes heroUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
 .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(28px,5vw,72px);
   align-items:center;min-height:66vh}
-.hero-copy h1{font-size:clamp(46px,6.4vw,86px);font-weight:750;line-height:.97;
+.hero-copy{animation:heroUp .9s cubic-bezier(.16,1,.3,1) both}
+.hero-copy h1{font-size:clamp(46px,7vw,96px);font-weight:750;line-height:.95;
   letter-spacing:-.03em;margin:22px 0 22px}
 .hero-copy h1 em{font-style:normal;color:var(--accent)}
 .hero-copy p{font-size:16.5px;line-height:1.62;color:var(--muted);max-width:440px;margin-bottom:26px}
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
+.hero .btn-dark{background:var(--ink);color:#0b0b0d}
+.hero .btn-dark:hover:not(:disabled){background:#fff}
 .hero-media{aspect-ratio:5/4;border-radius:16px;overflow:hidden;position:relative;
-  background:radial-gradient(120% 110% at 50% 30%, #fbfbfa, var(--bg-3) 78%);
+  animation:heroUp 1.1s .15s cubic-bezier(.16,1,.3,1) both;
+  background:radial-gradient(120% 110% at 50% 28%, #1c1c20, #0b0b0d 78%);
   border:1px solid var(--line)}
 .hero-media img{width:100%;height:100%;object-fit:cover}
 .hero-media .blp{position:absolute;inset:14% 10%;opacity:1}
@@ -166,15 +195,15 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   opacity:0;transition:opacity .5s}
 .bike3d canvas.ready{opacity:1}
 .hero-hint{position:absolute;left:14px;bottom:14px;font-family:var(--mono);font-size:10px;
-  letter-spacing:.14em;color:var(--dim);background:rgba(255,255,255,.85);
-  border:1px solid var(--line);padding:6px 11px;border-radius:999px;pointer-events:none;
-  display:flex;align-items:center;gap:7px;opacity:1;transition:opacity .4s}
+  letter-spacing:.14em;color:rgba(244,244,242,.55);background:rgba(255,255,255,.06);
+  backdrop-filter:blur(8px);border:1px solid var(--line-2);padding:6px 11px;border-radius:999px;
+  pointer-events:none;display:flex;align-items:center;gap:7px;opacity:1;transition:opacity .4s}
 .hero-hint.hide{opacity:0}
 .hero-hint .hand{display:inline-block;animation:swipe 1.6s ease-in-out infinite}
 @keyframes swipe{0%,100%{transform:translateX(-2px)}50%{transform:translateX(3px)}}
 .bike-controls{position:absolute;right:14px;bottom:14px;display:flex;gap:6px}
-.bike-ctrl{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.9);
-  backdrop-filter:blur(6px);border:1px solid var(--line-2);color:var(--ink);font-size:14px;
+.bike-ctrl{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.07);
+  backdrop-filter:blur(8px);border:1px solid var(--line-2);color:var(--ink);font-size:14px;
   line-height:1;display:flex;align-items:center;justify-content:center;
   transition:border-color .18s,color .18s,transform .15s}
 .bike-ctrl:hover{border-color:var(--accent);color:var(--accent)}
@@ -186,6 +215,20 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   border-top-color:var(--accent);animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:680px){.bike-ctrl{width:29px;height:29px}}
+.hero-cursor{position:absolute;top:0;left:0;width:34px;height:34px;margin:-17px 0 0 -17px;
+  border-radius:50%;border:1.5px solid rgba(255,255,255,.75);pointer-events:none;z-index:4;
+  opacity:0;transition:width .25s,height .25s,margin .25s,opacity .2s;mix-blend-mode:difference;
+  will-change:transform}
+.hero-cursor.on{opacity:1}
+.hero-cursor.big{width:64px;height:64px;margin:-32px 0 0 -32px}
+@media(hover:hover) and (pointer:fine){.hero{cursor:none}}
+.scroll-cue{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:2;
+  display:flex;flex-direction:column;align-items:center;gap:9px;font-family:var(--mono);
+  font-size:9.5px;letter-spacing:.24em;color:rgba(244,244,242,.4);pointer-events:none}
+.scroll-cue .line{width:1px;height:32px;background:rgba(255,255,255,.18);position:relative;overflow:hidden}
+.scroll-cue .line::after{content:"";position:absolute;left:0;top:-100%;width:100%;height:100%;
+  background:var(--accent);animation:scrollcue 1.8s ease-in-out infinite}
+@keyframes scrollcue{0%{top:-100%}55%{top:100%}100%{top:100%}}
 .spec-rail{display:flex;flex-wrap:wrap;border:1px solid var(--line);
   border-radius:12px;margin-top:36px;overflow:hidden;background:var(--panel)}
 .spec-rail span{flex:1;min-width:170px;padding:18px 22px;font-family:var(--mono);
@@ -494,24 +537,44 @@ function Bike3D() {
     camera.position.set(3.1, 1.45, 4.2)
     camera.lookAt(0, 0.7, 0)
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.15))
-    const key = new THREE.DirectionalLight(0xffffff, 2.4)
+    // panggung studio gelap — cahaya lebih kontras & dramatis
+    scene.add(new THREE.HemisphereLight(0x8a8ea6, 0x0a0a0c, 0.5))
+    const key = new THREE.DirectionalLight(0xfff4e6, 2.8)
     key.position.set(3, 5, 4)
     key.castShadow = true
     key.shadow.mapSize.set(1024, 1024)
     scene.add(key)
-    const fill = new THREE.DirectionalLight(0xffe8d6, 0.5)
+    const fill = new THREE.DirectionalLight(0xffd9b3, 0.32)
     fill.position.set(-4, 2, -3)
     scene.add(fill)
+    const rim = new THREE.DirectionalLight(0x7fa8ff, 0.85)
+    rim.position.set(-2.4, 1.8, -3.6)
+    scene.add(rim)
 
-    // lantai penangkap bayangan
+    // lantai penangkap bayangan + kolam cahaya lembut (panggung studio)
     const ground = new THREE.Mesh(
       new THREE.CircleGeometry(2.4, 48),
-      new THREE.ShadowMaterial({ opacity: 0.13 }),
+      new THREE.ShadowMaterial({ opacity: 0.5 }),
     )
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
     scene.add(ground)
+
+    const glowCanvas = document.createElement('canvas')
+    glowCanvas.width = glowCanvas.height = 256
+    const gctx = glowCanvas.getContext('2d')
+    const grad = gctx.createRadialGradient(128, 128, 0, 128, 128, 128)
+    grad.addColorStop(0, 'rgba(255,255,255,.5)')
+    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    gctx.fillStyle = grad
+    gctx.fillRect(0, 0, 256, 256)
+    const glow = new THREE.Mesh(
+      new THREE.CircleGeometry(1.5, 40),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(glowCanvas), transparent: true, opacity: 0.16 }),
+    )
+    glow.rotation.x = -Math.PI / 2
+    glow.position.y = 0.002
+    scene.add(glow)
 
     // ---- rakit motor dari bentuk dasar ----
     const bike = new THREE.Group()
@@ -522,7 +585,7 @@ function Bike3D() {
       rim: mat('#c9c9cf', { metalness: 0.85, roughness: 0.22 }),
       frame: mat('#1b1b21', { metalness: 0.55, roughness: 0.4 }),
       chrome: mat('#d8d8dd', { metalness: 0.9, roughness: 0.18 }),
-      tank: mat('#ff3d00', { metalness: 0.45, roughness: 0.3 }),
+      tank: mat('#ff3d00', { metalness: 0.45, roughness: 0.3, emissive: '#4a0f00', emissiveIntensity: 0.35 }),
       dark: mat('#101014', { roughness: 0.85, metalness: 0.1 }),
       engine: mat('#2d2d34', { metalness: 0.75, roughness: 0.32 }),
     }
@@ -1292,13 +1355,46 @@ function Card({ l, nav }) {
   )
 }
 
+// ---------- Cursor kustom ala studio kreatif (hanya di dalam hero) ----------
+function HeroCursor({ targetRef }) {
+  const dotRef = useRef(null)
+
+  useEffect(() => {
+    const el = targetRef.current
+    const dot = dotRef.current
+    if (!el || !dot) return
+    if (window.matchMedia('(hover:none),(pointer:coarse)').matches) return
+
+    const move = (e) => {
+      const r = el.getBoundingClientRect()
+      dot.style.transform = 'translate(' + (e.clientX - r.left) + 'px,' + (e.clientY - r.top) + 'px)'
+      const big = Boolean(e.target.closest('a,button'))
+      dot.classList.toggle('big', big)
+    }
+    const enter = (e) => { if (e.pointerType === 'mouse' || !e.pointerType) dot.classList.add('on') }
+    const leave = () => dot.classList.remove('on')
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerenter', enter)
+    el.addEventListener('pointerleave', leave)
+    return () => {
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerenter', enter)
+      el.removeEventListener('pointerleave', leave)
+    }
+  }, [targetRef])
+
+  return <span ref={dotRef} className="hero-cursor" aria-hidden="true" />
+}
+
 function HomeView({ listings, nav }) {
   // listings sudah difilter hanya status 'published' oleh App.
   const minPrice = listings.length ? Math.min(...listings.map((l) => Number(l.price))) : null
+  const heroRef = useRef(null)
 
   return (
     <>
-      <section className="hero">
+      <section className="hero" ref={heroRef}>
+        <HeroCursor targetRef={heroRef} />
         <div className="container">
           <div className="hero-grid">
             <div className="hero-copy">
@@ -1323,6 +1419,7 @@ function HomeView({ listings, nav }) {
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
           </div>
         </div>
+        <div className="scroll-cue" aria-hidden="true"><span className="line" />SCROLL</div>
       </section>
 
       <section className="section" id="etalase">
@@ -1496,7 +1593,7 @@ export default function App() {
     <>
       <style>{CSS}</style>
 
-      <header className={'nav' + (scrolled ? ' scrolled' : '')}>
+      <header className={'nav' + (scrolled ? ' scrolled' : '') + (route.name === 'home' && !scrolled ? ' on-dark' : '')}>
         <div className="container nav-in">
           <a className="logo" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>
             MOTORELL<i>●</i><small>MARKET</small>
