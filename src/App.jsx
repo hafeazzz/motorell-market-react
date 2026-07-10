@@ -252,7 +252,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   overflow:hidden;display:flex;flex-direction:column;text-align:left;
   transition:transform .25s,box-shadow .25s,border-color .25s}
 .card:hover{transform:translateY(-5px);box-shadow:var(--shadow);border-color:var(--line-2)}
-.card-media{aspect-ratio:16/10;position:relative;overflow:hidden;
+.card-media{aspect-ratio:1/1;position:relative;overflow:hidden;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%)}
 .card-media img{width:100%;height:100%;object-fit:cover;transition:transform .5s}
 .card:hover .card-media img{transform:scale(1.04)}
@@ -288,13 +288,13 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   margin-bottom:28px;display:inline-flex;gap:8px}
 .back:hover{color:var(--accent)}
 .detail-grid{display:grid;grid-template-columns:7fr 5fr;gap:clamp(26px,3.5vw,56px);align-items:start}
-.gallery-main{aspect-ratio:4/3;border-radius:14px;overflow:hidden;position:relative;
+.gallery-main{aspect-ratio:1/1;border-radius:14px;overflow:hidden;position:relative;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%);
   border:1px solid var(--line)}
 .gallery-main img{width:100%;height:100%;object-fit:cover}
 .gallery-main .blp{position:absolute;inset:13% 10%;opacity:1}
 .thumbs{display:flex;gap:10px;margin-top:11px;flex-wrap:wrap}
-.thumbs button{width:78px;height:60px;border-radius:9px;overflow:hidden;
+.thumbs button{width:64px;height:64px;border-radius:9px;overflow:hidden;
   border:1.5px solid var(--line);opacity:.6;transition:opacity .2s,border-color .2s;background:var(--bg-2)}
 .thumbs button.on{opacity:1;border-color:var(--accent)}
 .thumbs img{width:100%;height:100%;object-fit:cover}
@@ -412,7 +412,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .a-list{display:flex;flex-direction:column;gap:11px}
 .a-row{background:var(--panel);border:1px solid var(--line);border-radius:12px;
   padding:15px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;box-shadow:var(--shadow)}
-.a-thumb{width:76px;height:56px;border-radius:8px;overflow:hidden;flex:none;
+.a-thumb{width:64px;height:64px;border-radius:8px;overflow:hidden;flex:none;
   background:var(--bg-2);border:1px solid var(--line);
   display:flex;align-items:center;justify-content:center}
 .a-thumb img{width:100%;height:100%;object-fit:cover}
@@ -428,14 +428,14 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .st.draft{color:var(--muted)}
 .a-actions{display:flex;gap:7px;flex-wrap:wrap}
 .photo-strip{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px}
-.photo-strip .ph{position:relative;width:90px;height:66px;border-radius:9px;overflow:hidden;
+.photo-strip .ph{position:relative;width:74px;height:74px;border-radius:9px;overflow:hidden;
   border:1px solid var(--line-2)}
 .photo-strip img{width:100%;height:100%;object-fit:cover}
 .photo-strip .rm{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
   background:rgba(255,255,255,.92);border:1px solid var(--line-2);font-size:11px;
   display:flex;align-items:center;justify-content:center;color:var(--ink)}
 .photo-strip .rm:hover{color:var(--accent);border-color:var(--accent)}
-.up-tile{width:90px;height:66px;border:1.5px dashed var(--line-2);border-radius:9px;
+.up-tile{width:74px;height:74px;border:1.5px dashed var(--line-2);border-radius:9px;
   display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--dim);
   transition:border-color .2s,color .2s}
 .up-tile:hover{border-color:var(--accent);color:var(--accent)}
