@@ -161,10 +161,31 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .hero-media .blp{position:absolute;inset:14% 10%;opacity:1}
 .bike3d{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
 .bike3d:active{cursor:grabbing}
-.bike3d canvas{display:block;width:100% !important;height:100% !important}
-.hero-hint{position:absolute;left:14px;bottom:12px;font-family:var(--mono);font-size:10px;
+.bike3d:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bike3d canvas{display:block;width:100% !important;height:100% !important;
+  opacity:0;transition:opacity .5s}
+.bike3d canvas.ready{opacity:1}
+.hero-hint{position:absolute;left:14px;bottom:14px;font-family:var(--mono);font-size:10px;
   letter-spacing:.14em;color:var(--dim);background:rgba(255,255,255,.85);
-  border:1px solid var(--line);padding:6px 11px;border-radius:999px;pointer-events:none}
+  border:1px solid var(--line);padding:6px 11px;border-radius:999px;pointer-events:none;
+  display:flex;align-items:center;gap:7px;opacity:1;transition:opacity .4s}
+.hero-hint.hide{opacity:0}
+.hero-hint .hand{display:inline-block;animation:swipe 1.6s ease-in-out infinite}
+@keyframes swipe{0%,100%{transform:translateX(-2px)}50%{transform:translateX(3px)}}
+.bike-controls{position:absolute;right:14px;bottom:14px;display:flex;gap:6px}
+.bike-ctrl{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.9);
+  backdrop-filter:blur(6px);border:1px solid var(--line-2);color:var(--ink);font-size:14px;
+  line-height:1;display:flex;align-items:center;justify-content:center;
+  transition:border-color .18s,color .18s,transform .15s}
+.bike-ctrl:hover{border-color:var(--accent);color:var(--accent)}
+.bike-ctrl:active{transform:scale(.9)}
+.bike-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:var(--bg-2);opacity:1;transition:opacity .35s;pointer-events:none}
+.bike-loading.done{opacity:0}
+.bike-spin{width:26px;height:26px;border-radius:50%;border:2.5px solid var(--line-2);
+  border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:680px){.bike-ctrl{width:29px;height:29px}}
 .spec-rail{display:flex;flex-wrap:wrap;border:1px solid var(--line);
   border-radius:12px;margin-top:36px;overflow:hidden;background:var(--panel)}
 .spec-rail span{flex:1;min-width:170px;padding:18px 22px;font-family:var(--mono);
@@ -441,12 +462,19 @@ function Blueprint() {
 // ---------- Motor 3D interaktif (hero) ----------
 function Bike3D() {
   const mountRef = useRef(null)
+  const apiRef = useRef(null)
   const [failed, setFailed] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [hintHidden, setHintHidden] = useState(false)
+  const [spinning, setSpinning] = useState(true)
+  const reducedRef = useRef(false)
 
   useEffect(() => {
     const mount = mountRef.current
     if (!mount) return
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    reducedRef.current = reduced
+    setSpinning(!reduced)
 
     let renderer
     try {
@@ -584,12 +612,25 @@ function Bike3D() {
     bike.position.y = 0.02
     scene.add(bike)
 
-    // ---- interaksi: seret untuk memutar ----
-    let rotY = -0.6, targetY = -0.6, dragging = false, lastX = 0
-    const autoSpin = !reduced
+    // ---- interaksi: seret untuk memutar, roda + tombol untuk zoom ----
+    const ROT_START = -0.6
+    let rotY = ROT_START, targetY = ROT_START, dragging = false, lastX = 0, engaged = false
+    let autoSpin = !reduced
+    const lookTarget = new THREE.Vector3(0, 0.7, 0)
+    const camVec = camera.position.clone().sub(lookTarget)
+    let zoom = 1
+    const ZOOM_MIN = 0.62, ZOOM_MAX = 1.65
+    const applyZoom = () => {
+      zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom))
+      camera.position.copy(lookTarget).add(camVec.clone().multiplyScalar(zoom))
+      camera.lookAt(lookTarget)
+    }
+    const setEngaged = () => { engaged = true }
+
     const onDown = (e) => {
       dragging = true
       lastX = e.clientX
+      setEngaged()
       if (mount.setPointerCapture) mount.setPointerCapture(e.pointerId)
     }
     const onMove = (e) => {
@@ -598,9 +639,39 @@ function Bike3D() {
       lastX = e.clientX
     }
     const onUp = () => { dragging = false }
+    const onWheel = (e) => {
+      if (!engaged) return // biarkan scroll halaman normal sampai pengguna berinteraksi
+      e.preventDefault()
+      zoom += e.deltaY * 0.0015
+      applyZoom()
+    }
+    const onKey = (e) => {
+      setEngaged()
+      if (e.key === 'ArrowLeft') targetY -= 0.24
+      else if (e.key === 'ArrowRight') targetY += 0.24
+      else if (e.key === '+' || e.key === '=') { zoom -= 0.14; applyZoom() }
+      else if (e.key === '-' || e.key === '_') { zoom += 0.14; applyZoom() }
+      else if (e.key === 'Home') resetView()
+      else return
+      e.preventDefault()
+    }
+    function resetView() {
+      targetY = ROT_START
+      zoom = 1
+      applyZoom()
+    }
     mount.addEventListener('pointerdown', onDown)
     mount.addEventListener('pointermove', onMove)
+    mount.addEventListener('wheel', onWheel, { passive: false })
+    mount.addEventListener('keydown', onKey)
     window.addEventListener('pointerup', onUp)
+
+    apiRef.current = {
+      zoomIn: () => { setEngaged(); zoom -= 0.16; applyZoom() },
+      zoomOut: () => { setEngaged(); zoom += 0.16; applyZoom() },
+      reset: () => { setEngaged(); resetView() },
+      toggleSpin: () => { autoSpin = !autoSpin; setSpinning(autoSpin); return autoSpin },
+    }
 
     // ---- ukuran mengikuti kontainer ----
     const resize = () => {
@@ -614,7 +685,7 @@ function Bike3D() {
     ro.observe(mount)
 
     // ---- loop render ----
-    let raf, t = 0
+    let raf, t = 0, framed = false
     const loop = () => {
       raf = requestAnimationFrame(loop)
       t += 0.016
@@ -626,6 +697,7 @@ function Bike3D() {
         for (const w of wheels) w.rotation.z -= 0.045
       }
       renderer.render(scene, camera)
+      if (!framed) { framed = true; renderer.domElement.classList.add('ready'); setReady(true) }
     }
     loop()
 
@@ -634,7 +706,10 @@ function Bike3D() {
       ro.disconnect()
       mount.removeEventListener('pointerdown', onDown)
       mount.removeEventListener('pointermove', onMove)
+      mount.removeEventListener('wheel', onWheel)
+      mount.removeEventListener('keydown', onKey)
       window.removeEventListener('pointerup', onUp)
+      apiRef.current = null
       scene.traverse((o) => {
         if (o.geometry) o.geometry.dispose()
         if (o.material) {
@@ -648,8 +723,34 @@ function Bike3D() {
   }, [])
 
   if (failed) return <Blueprint />
-  return <div ref={mountRef} className="bike3d" role="img"
-    aria-label="Model 3D motor Motorell — seret untuk memutar" />
+  return (
+    <>
+      <div ref={mountRef} className="bike3d" role="img" tabIndex={0}
+        onPointerDown={() => setHintHidden(true)}
+        onKeyDown={() => setHintHidden(true)}
+        aria-label="Model 3D motor Motorell — seret atau pakai panah kiri/kanan untuk memutar, scroll atau tombol +/- untuk zoom" />
+      <div className={'bike-loading' + (ready ? ' done' : '')} aria-hidden="true">
+        <span className="bike-spin" />
+      </div>
+      <span className={'hero-hint' + (hintHidden ? ' hide' : '')}>
+        <span className="hand" aria-hidden="true">⟷</span>3D · SERET UNTUK MEMUTAR
+      </span>
+      <div className="bike-controls">
+        <button type="button" className="bike-ctrl" aria-label="Perkecil tampilan"
+          onClick={() => apiRef.current && apiRef.current.zoomOut()}>–</button>
+        <button type="button" className="bike-ctrl" aria-label="Perbesar tampilan"
+          onClick={() => apiRef.current && apiRef.current.zoomIn()}>+</button>
+        {!reducedRef.current && (
+          <button type="button" className="bike-ctrl" aria-label={spinning ? 'Jeda putar otomatis' : 'Lanjutkan putar otomatis'}
+            onClick={() => apiRef.current && apiRef.current.toggleSpin()}>
+            {spinning ? '❚❚' : '▶'}
+          </button>
+        )}
+        <button type="button" className="bike-ctrl" aria-label="Atur ulang tampilan"
+          onClick={() => apiRef.current && apiRef.current.reset()}>⟲</button>
+      </div>
+    </>
+  )
 }
 
 // ---------- Modal login / daftar ----------
@@ -1213,7 +1314,6 @@ function HomeView({ listings, nav }) {
             </div>
             <div className="hero-media">
               <Bike3D />
-              <span className="hero-hint">3D · SERET UNTUK MEMUTAR</span>
             </div>
           </div>
           <div className="spec-rail">
