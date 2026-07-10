@@ -83,6 +83,19 @@ function useCountdown(expiresAt) {
   return { left, text: mm + ':' + ss }
 }
 
+const prefersReduced = () =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// Foto yang muncul dengan fade halus begitu selesai dimuat
+function FadeImg({ className = '', ...props }) {
+  const [ok, setOk] = useState(false)
+  return (
+    <img {...props} draggable={false}
+      className={[className, ok ? 'ok' : ''].filter(Boolean).join(' ')}
+      onLoad={() => setOk(true)} />
+  )
+}
+
 // ---------- Gaya (tema terang) ----------
 const CSS = `
 :root{
@@ -120,14 +133,6 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   transition:background .3s,border-color .3s,backdrop-filter .3s}
 .nav.scrolled{background:rgba(255,255,255,.86);backdrop-filter:blur(16px);
   border-color:var(--line)}
-.nav.on-dark{color:#f4f4f2}
-.nav.on-dark .logo small{color:rgba(244,244,242,.5)}
-.nav.on-dark .btn-quiet{color:rgba(244,244,242,.72)}
-.nav.on-dark .btn-quiet:hover{color:#fff}
-.nav.on-dark .btn-ghost{border-color:rgba(244,244,242,.32);color:#f4f4f2}
-.nav.on-dark .btn-ghost:hover:not(:disabled){border-color:#fff}
-.nav.on-dark .btn-dark{background:#f4f4f2;color:#0b0b0d}
-.nav.on-dark .btn-dark:hover:not(:disabled){background:#fff}
 .nav-in{display:flex;align-items:center;justify-content:space-between;padding:16px 0}
 .logo{font-weight:800;font-size:19px;letter-spacing:.01em;display:flex;
   align-items:center;gap:8px}
@@ -151,84 +156,28 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .btn-sm{padding:9px 17px;font-size:13px}
 .btn-full{width:100%}
 
-/* ---------- hero (dark, sinematik — ref. lusion.co) ---------- */
-.hero{
-  --ink:#f4f4f2; --muted:#9d9da4; --dim:#6b6b72;
-  --line:rgba(255,255,255,.12); --line-2:rgba(255,255,255,.22);
-  --panel:rgba(255,255,255,.035); --panel-2:rgba(255,255,255,.07);
-  --bg-2:#0b0b0d; --bg-3:#18181c;
-  position:relative;overflow:hidden;background:#0b0b0d;color:var(--ink);
-  min-height:100svh;display:flex;flex-direction:column;justify-content:center;
-  padding:128px 0 46px;isolation:isolate}
-.hero::before{content:"";position:absolute;inset:-10%;z-index:0;pointer-events:none;
-  background:radial-gradient(46% 40% at 74% 38%, rgba(255,61,0,.16), transparent 68%),
-             radial-gradient(60% 55% at 18% 82%, rgba(80,90,140,.14), transparent 70%)}
-.hero::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;opacity:.05;
-  mix-blend-mode:overlay;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size:180px 180px;animation:grain 1s steps(3) infinite}
-@keyframes grain{0%,100%{transform:translate(0,0)}33%{transform:translate(-2%,1%)}66%{transform:translate(1%,-2%)}}
-.hero .container{position:relative;z-index:2;width:100%}
-@keyframes heroUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+/* ---------- hero ---------- */
+.hero{padding:132px 0 40px;border-bottom:1px solid var(--line)}
 .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(28px,5vw,72px);
   align-items:center;min-height:66vh}
-.hero-copy{animation:heroUp .9s cubic-bezier(.16,1,.3,1) both}
-.hero-copy h1{font-size:clamp(46px,7vw,96px);font-weight:750;line-height:.95;
+.hero-copy h1{font-size:clamp(46px,6.4vw,86px);font-weight:750;line-height:.97;
   letter-spacing:-.03em;margin:22px 0 22px}
 .hero-copy h1 em{font-style:normal;color:var(--accent)}
 .hero-copy p{font-size:16.5px;line-height:1.62;color:var(--muted);max-width:440px;margin-bottom:26px}
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
-.hero .btn-dark{background:var(--ink);color:#0b0b0d}
-.hero .btn-dark:hover:not(:disabled){background:#fff}
 .hero-media{aspect-ratio:5/4;border-radius:16px;overflow:hidden;position:relative;
-  animation:heroUp 1.1s .15s cubic-bezier(.16,1,.3,1) both;
-  background:radial-gradient(120% 110% at 50% 28%, #1c1c20, #0b0b0d 78%);
+  background:radial-gradient(120% 110% at 50% 30%, #fbfbfa, var(--bg-3) 78%);
   border:1px solid var(--line)}
 .hero-media img{width:100%;height:100%;object-fit:cover}
 .hero-media .blp{position:absolute;inset:14% 10%;opacity:1}
 .bike3d{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
 .bike3d:active{cursor:grabbing}
-.bike3d:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.bike3d canvas{display:block;width:100% !important;height:100% !important;
-  opacity:0;transition:opacity .5s}
-.bike3d canvas.ready{opacity:1}
-.hero-hint{position:absolute;left:14px;bottom:14px;font-family:var(--mono);font-size:10px;
-  letter-spacing:.14em;color:rgba(244,244,242,.55);background:rgba(255,255,255,.06);
-  backdrop-filter:blur(8px);border:1px solid var(--line-2);padding:6px 11px;border-radius:999px;
-  pointer-events:none;display:flex;align-items:center;gap:7px;opacity:1;transition:opacity .4s}
-.hero-hint.hide{opacity:0}
-.hero-hint .hand{display:inline-block;animation:swipe 1.6s ease-in-out infinite}
-@keyframes swipe{0%,100%{transform:translateX(-2px)}50%{transform:translateX(3px)}}
-.bike-controls{position:absolute;right:14px;bottom:14px;display:flex;gap:6px}
-.bike-ctrl{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.07);
-  backdrop-filter:blur(8px);border:1px solid var(--line-2);color:var(--ink);font-size:14px;
-  line-height:1;display:flex;align-items:center;justify-content:center;
-  transition:border-color .18s,color .18s,transform .15s}
-.bike-ctrl:hover{border-color:var(--accent);color:var(--accent)}
-.bike-ctrl:active{transform:scale(.9)}
-.bike-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  background:var(--bg-2);opacity:1;transition:opacity .35s;pointer-events:none}
-.bike-loading.done{opacity:0}
-.bike-spin{width:26px;height:26px;border-radius:50%;border:2.5px solid var(--line-2);
-  border-top-color:var(--accent);animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:680px){.bike-ctrl{width:29px;height:29px}}
-.hero-cursor{position:absolute;top:0;left:0;width:34px;height:34px;margin:-17px 0 0 -17px;
-  border-radius:50%;border:1.5px solid rgba(255,255,255,.75);pointer-events:none;z-index:4;
-  opacity:0;transition:width .25s,height .25s,margin .25s,opacity .2s;mix-blend-mode:difference;
-  will-change:transform}
-.hero-cursor.on{opacity:1}
-.hero-cursor.big{width:64px;height:64px;margin:-32px 0 0 -32px}
-@media(hover:hover) and (pointer:fine){.hero{cursor:none}}
-.scroll-cue{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:2;
-  display:flex;flex-direction:column;align-items:center;gap:9px;font-family:var(--mono);
-  font-size:9.5px;letter-spacing:.24em;color:rgba(244,244,242,.4);pointer-events:none}
-.scroll-cue .line{width:1px;height:32px;background:rgba(255,255,255,.18);position:relative;overflow:hidden}
-.scroll-cue .line::after{content:"";position:absolute;left:0;top:-100%;width:100%;height:100%;
-  background:var(--accent);animation:scrollcue 1.8s ease-in-out infinite}
-@keyframes scrollcue{0%{top:-100%}55%{top:100%}100%{top:100%}}
+.bike3d canvas{display:block;width:100% !important;height:100% !important}
+.hero-hint{position:absolute;left:14px;bottom:12px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.14em;color:var(--dim);background:rgba(255,255,255,.85);
+  border:1px solid var(--line);padding:6px 11px;border-radius:999px;pointer-events:none}
 .spec-rail{display:flex;flex-wrap:wrap;border:1px solid var(--line);
   border-radius:12px;margin-top:36px;overflow:hidden;background:var(--panel)}
 .spec-rail span{flex:1;min-width:170px;padding:18px 22px;font-family:var(--mono);
@@ -248,27 +197,47 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 
 /* ---------- grid unit ---------- */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  overflow:hidden;display:flex;flex-direction:column;text-align:left;
-  transition:transform .25s,box-shadow .25s,border-color .25s}
-.card:hover{transform:translateY(-5px);box-shadow:var(--shadow);border-color:var(--line-2)}
-.card-media{aspect-ratio:1/1;position:relative;overflow:hidden;
+.card-wrap{opacity:0;transform:translateY(24px);
+  transition:opacity .55s ease,transform .6s cubic-bezier(.2,.7,.25,1)}
+.card-wrap.shown{opacity:1;transform:none}
+.card{width:100%;height:100%;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;
+  text-align:left;
+  transform:perspective(950px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg))
+    translateY(var(--lift,0px));
+  transition:transform .16s ease-out,box-shadow .25s,border-color .25s}
+.card:hover{--lift:-6px;box-shadow:var(--shadow);border-color:var(--line-2)}
+.card-media{aspect-ratio:16/10;position:relative;overflow:hidden;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%)}
-.card-media img{width:100%;height:100%;object-fit:cover;transition:transform .5s}
-.card:hover .card-media img{transform:scale(1.04)}
+.card-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  opacity:0;transition:opacity .45s ease,transform .6s cubic-bezier(.2,.6,.25,1)}
+.card-media img.ok{opacity:1}
+.card-media img.ph2{opacity:0}
+.card:hover .card-media img.ph2.ok{opacity:1}
+.card:hover .card-media img{transform:scale(1.055)}
+.card-media::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.5) 50%,transparent 58%);
+  transform:translateX(-130%);transition:transform .65s ease}
+.card:hover .card-media::after{transform:translateX(130%)}
 .card-media .blp{position:absolute;inset:11% 8%;opacity:1}
-.badge{position:absolute;top:13px;left:13px;font-family:var(--mono);font-size:10.5px;
+.badge{position:absolute;top:13px;left:13px;z-index:2;font-family:var(--mono);font-size:10.5px;
   font-weight:600;letter-spacing:.08em;padding:6px 11px;border-radius:999px;
   background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border:1px solid var(--line-2);
-  color:var(--ink)}
+  color:var(--ink);transition:transform .25s ease}
+.card:hover .badge{transform:translateY(-2px)}
 .card-body{padding:19px 19px 17px;display:flex;flex-direction:column;gap:6px}
 .card-body h3{font-size:17.5px;font-weight:680;letter-spacing:-.01em}
 .card-meta{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
 .card-price{font-size:18px;font-weight:750;margin-top:9px;letter-spacing:-.01em}
-.card-go{border-top:1px solid var(--line);padding:14px 19px;font-size:13.5px;
+.card-go{position:relative;border-top:1px solid var(--line);padding:14px 19px;font-size:13.5px;
   font-weight:600;color:var(--muted);display:flex;justify-content:space-between;
   transition:color .2s}
+.card-go::before{content:"";position:absolute;top:-1px;left:0;height:2px;width:0;
+  background:var(--accent);transition:width .38s ease}
+.card-go .aro{transition:transform .22s ease}
 .card:hover .card-go{color:var(--accent)}
+.card:hover .card-go::before{width:100%}
+.card:hover .card-go .aro{transform:translateX(5px)}
 .empty{border:1px dashed var(--line-2);border-radius:var(--radius);padding:60px 24px;
   text-align:center;color:var(--muted);font-size:15px;grid-column:1/-1;background:var(--panel)}
 
@@ -288,13 +257,13 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   margin-bottom:28px;display:inline-flex;gap:8px}
 .back:hover{color:var(--accent)}
 .detail-grid{display:grid;grid-template-columns:7fr 5fr;gap:clamp(26px,3.5vw,56px);align-items:start}
-.gallery-main{aspect-ratio:1/1;border-radius:14px;overflow:hidden;position:relative;
+.gallery-main{aspect-ratio:4/3;border-radius:14px;overflow:hidden;position:relative;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%);
   border:1px solid var(--line)}
 .gallery-main img{width:100%;height:100%;object-fit:cover}
 .gallery-main .blp{position:absolute;inset:13% 10%;opacity:1}
 .thumbs{display:flex;gap:10px;margin-top:11px;flex-wrap:wrap}
-.thumbs button{width:64px;height:64px;border-radius:9px;overflow:hidden;
+.thumbs button{width:78px;height:60px;border-radius:9px;overflow:hidden;
   border:1.5px solid var(--line);opacity:.6;transition:opacity .2s,border-color .2s;background:var(--bg-2)}
 .thumbs button.on{opacity:1;border-color:var(--accent)}
 .thumbs img{width:100%;height:100%;object-fit:cover}
@@ -412,7 +381,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .a-list{display:flex;flex-direction:column;gap:11px}
 .a-row{background:var(--panel);border:1px solid var(--line);border-radius:12px;
   padding:15px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;box-shadow:var(--shadow)}
-.a-thumb{width:64px;height:64px;border-radius:8px;overflow:hidden;flex:none;
+.a-thumb{width:76px;height:56px;border-radius:8px;overflow:hidden;flex:none;
   background:var(--bg-2);border:1px solid var(--line);
   display:flex;align-items:center;justify-content:center}
 .a-thumb img{width:100%;height:100%;object-fit:cover}
@@ -428,14 +397,14 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .st.draft{color:var(--muted)}
 .a-actions{display:flex;gap:7px;flex-wrap:wrap}
 .photo-strip{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px}
-.photo-strip .ph{position:relative;width:74px;height:74px;border-radius:9px;overflow:hidden;
+.photo-strip .ph{position:relative;width:90px;height:66px;border-radius:9px;overflow:hidden;
   border:1px solid var(--line-2)}
 .photo-strip img{width:100%;height:100%;object-fit:cover}
 .photo-strip .rm{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
   background:rgba(255,255,255,.92);border:1px solid var(--line-2);font-size:11px;
   display:flex;align-items:center;justify-content:center;color:var(--ink)}
 .photo-strip .rm:hover{color:var(--accent);border-color:var(--accent)}
-.up-tile{width:74px;height:74px;border:1.5px dashed var(--line-2);border-radius:9px;
+.up-tile{width:90px;height:66px;border:1.5px dashed var(--line-2);border-radius:9px;
   display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--dim);
   transition:border-color .2s,color .2s}
 .up-tile:hover{border-color:var(--accent);color:var(--accent)}
@@ -480,6 +449,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   *{animation-duration:.001s !important;transition-duration:.001s !important}
+  .card-media::after{display:none}
 }
 `
 
@@ -505,19 +475,12 @@ function Blueprint() {
 // ---------- Motor 3D interaktif (hero) ----------
 function Bike3D() {
   const mountRef = useRef(null)
-  const apiRef = useRef(null)
   const [failed, setFailed] = useState(false)
-  const [ready, setReady] = useState(false)
-  const [hintHidden, setHintHidden] = useState(false)
-  const [spinning, setSpinning] = useState(true)
-  const reducedRef = useRef(false)
 
   useEffect(() => {
     const mount = mountRef.current
     if (!mount) return
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    reducedRef.current = reduced
-    setSpinning(!reduced)
 
     let renderer
     try {
@@ -537,44 +500,24 @@ function Bike3D() {
     camera.position.set(3.1, 1.45, 4.2)
     camera.lookAt(0, 0.7, 0)
 
-    // panggung studio gelap — cahaya lebih kontras & dramatis
-    scene.add(new THREE.HemisphereLight(0x8a8ea6, 0x0a0a0c, 0.5))
-    const key = new THREE.DirectionalLight(0xfff4e6, 2.8)
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.15))
+    const key = new THREE.DirectionalLight(0xffffff, 2.4)
     key.position.set(3, 5, 4)
     key.castShadow = true
     key.shadow.mapSize.set(1024, 1024)
     scene.add(key)
-    const fill = new THREE.DirectionalLight(0xffd9b3, 0.32)
+    const fill = new THREE.DirectionalLight(0xffe8d6, 0.5)
     fill.position.set(-4, 2, -3)
     scene.add(fill)
-    const rim = new THREE.DirectionalLight(0x7fa8ff, 0.85)
-    rim.position.set(-2.4, 1.8, -3.6)
-    scene.add(rim)
 
-    // lantai penangkap bayangan + kolam cahaya lembut (panggung studio)
+    // lantai penangkap bayangan
     const ground = new THREE.Mesh(
       new THREE.CircleGeometry(2.4, 48),
-      new THREE.ShadowMaterial({ opacity: 0.5 }),
+      new THREE.ShadowMaterial({ opacity: 0.13 }),
     )
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
     scene.add(ground)
-
-    const glowCanvas = document.createElement('canvas')
-    glowCanvas.width = glowCanvas.height = 256
-    const gctx = glowCanvas.getContext('2d')
-    const grad = gctx.createRadialGradient(128, 128, 0, 128, 128, 128)
-    grad.addColorStop(0, 'rgba(255,255,255,.5)')
-    grad.addColorStop(1, 'rgba(255,255,255,0)')
-    gctx.fillStyle = grad
-    gctx.fillRect(0, 0, 256, 256)
-    const glow = new THREE.Mesh(
-      new THREE.CircleGeometry(1.5, 40),
-      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(glowCanvas), transparent: true, opacity: 0.16 }),
-    )
-    glow.rotation.x = -Math.PI / 2
-    glow.position.y = 0.002
-    scene.add(glow)
 
     // ---- rakit motor dari bentuk dasar ----
     const bike = new THREE.Group()
@@ -585,7 +528,7 @@ function Bike3D() {
       rim: mat('#c9c9cf', { metalness: 0.85, roughness: 0.22 }),
       frame: mat('#1b1b21', { metalness: 0.55, roughness: 0.4 }),
       chrome: mat('#d8d8dd', { metalness: 0.9, roughness: 0.18 }),
-      tank: mat('#ff3d00', { metalness: 0.45, roughness: 0.3, emissive: '#4a0f00', emissiveIntensity: 0.35 }),
+      tank: mat('#ff3d00', { metalness: 0.45, roughness: 0.3 }),
       dark: mat('#101014', { roughness: 0.85, metalness: 0.1 }),
       engine: mat('#2d2d34', { metalness: 0.75, roughness: 0.32 }),
     }
@@ -675,25 +618,12 @@ function Bike3D() {
     bike.position.y = 0.02
     scene.add(bike)
 
-    // ---- interaksi: seret untuk memutar, roda + tombol untuk zoom ----
-    const ROT_START = -0.6
-    let rotY = ROT_START, targetY = ROT_START, dragging = false, lastX = 0, engaged = false
-    let autoSpin = !reduced
-    const lookTarget = new THREE.Vector3(0, 0.7, 0)
-    const camVec = camera.position.clone().sub(lookTarget)
-    let zoom = 1
-    const ZOOM_MIN = 0.62, ZOOM_MAX = 1.65
-    const applyZoom = () => {
-      zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom))
-      camera.position.copy(lookTarget).add(camVec.clone().multiplyScalar(zoom))
-      camera.lookAt(lookTarget)
-    }
-    const setEngaged = () => { engaged = true }
-
+    // ---- interaksi: seret untuk memutar ----
+    let rotY = -0.6, targetY = -0.6, dragging = false, lastX = 0
+    const autoSpin = !reduced
     const onDown = (e) => {
       dragging = true
       lastX = e.clientX
-      setEngaged()
       if (mount.setPointerCapture) mount.setPointerCapture(e.pointerId)
     }
     const onMove = (e) => {
@@ -702,39 +632,9 @@ function Bike3D() {
       lastX = e.clientX
     }
     const onUp = () => { dragging = false }
-    const onWheel = (e) => {
-      if (!engaged) return // biarkan scroll halaman normal sampai pengguna berinteraksi
-      e.preventDefault()
-      zoom += e.deltaY * 0.0015
-      applyZoom()
-    }
-    const onKey = (e) => {
-      setEngaged()
-      if (e.key === 'ArrowLeft') targetY -= 0.24
-      else if (e.key === 'ArrowRight') targetY += 0.24
-      else if (e.key === '+' || e.key === '=') { zoom -= 0.14; applyZoom() }
-      else if (e.key === '-' || e.key === '_') { zoom += 0.14; applyZoom() }
-      else if (e.key === 'Home') resetView()
-      else return
-      e.preventDefault()
-    }
-    function resetView() {
-      targetY = ROT_START
-      zoom = 1
-      applyZoom()
-    }
     mount.addEventListener('pointerdown', onDown)
     mount.addEventListener('pointermove', onMove)
-    mount.addEventListener('wheel', onWheel, { passive: false })
-    mount.addEventListener('keydown', onKey)
     window.addEventListener('pointerup', onUp)
-
-    apiRef.current = {
-      zoomIn: () => { setEngaged(); zoom -= 0.16; applyZoom() },
-      zoomOut: () => { setEngaged(); zoom += 0.16; applyZoom() },
-      reset: () => { setEngaged(); resetView() },
-      toggleSpin: () => { autoSpin = !autoSpin; setSpinning(autoSpin); return autoSpin },
-    }
 
     // ---- ukuran mengikuti kontainer ----
     const resize = () => {
@@ -748,7 +648,7 @@ function Bike3D() {
     ro.observe(mount)
 
     // ---- loop render ----
-    let raf, t = 0, framed = false
+    let raf, t = 0
     const loop = () => {
       raf = requestAnimationFrame(loop)
       t += 0.016
@@ -760,7 +660,6 @@ function Bike3D() {
         for (const w of wheels) w.rotation.z -= 0.045
       }
       renderer.render(scene, camera)
-      if (!framed) { framed = true; renderer.domElement.classList.add('ready'); setReady(true) }
     }
     loop()
 
@@ -769,10 +668,7 @@ function Bike3D() {
       ro.disconnect()
       mount.removeEventListener('pointerdown', onDown)
       mount.removeEventListener('pointermove', onMove)
-      mount.removeEventListener('wheel', onWheel)
-      mount.removeEventListener('keydown', onKey)
       window.removeEventListener('pointerup', onUp)
-      apiRef.current = null
       scene.traverse((o) => {
         if (o.geometry) o.geometry.dispose()
         if (o.material) {
@@ -786,34 +682,8 @@ function Bike3D() {
   }, [])
 
   if (failed) return <Blueprint />
-  return (
-    <>
-      <div ref={mountRef} className="bike3d" role="img" tabIndex={0}
-        onPointerDown={() => setHintHidden(true)}
-        onKeyDown={() => setHintHidden(true)}
-        aria-label="Model 3D motor Motorell — seret atau pakai panah kiri/kanan untuk memutar, scroll atau tombol +/- untuk zoom" />
-      <div className={'bike-loading' + (ready ? ' done' : '')} aria-hidden="true">
-        <span className="bike-spin" />
-      </div>
-      <span className={'hero-hint' + (hintHidden ? ' hide' : '')}>
-        <span className="hand" aria-hidden="true">⟷</span>3D · SERET UNTUK MEMUTAR
-      </span>
-      <div className="bike-controls">
-        <button type="button" className="bike-ctrl" aria-label="Perkecil tampilan"
-          onClick={() => apiRef.current && apiRef.current.zoomOut()}>–</button>
-        <button type="button" className="bike-ctrl" aria-label="Perbesar tampilan"
-          onClick={() => apiRef.current && apiRef.current.zoomIn()}>+</button>
-        {!reducedRef.current && (
-          <button type="button" className="bike-ctrl" aria-label={spinning ? 'Jeda putar otomatis' : 'Lanjutkan putar otomatis'}
-            onClick={() => apiRef.current && apiRef.current.toggleSpin()}>
-            {spinning ? '❚❚' : '▶'}
-          </button>
-        )}
-        <button type="button" className="bike-ctrl" aria-label="Atur ulang tampilan"
-          onClick={() => apiRef.current && apiRef.current.reset()}>⟲</button>
-      </div>
-    </>
-  )
+  return <div ref={mountRef} className="bike3d" role="img"
+    aria-label="Model 3D motor Motorell — seret untuk memutar" />
 }
 
 // ---------- Modal login / daftar ----------
@@ -1337,64 +1207,74 @@ function DetailView({ listing, nav, onBook }) {
 }
 
 // ---------- Kartu & beranda ----------
-function Card({ l, nav }) {
+function Card({ l, nav, index = 0 }) {
   const photos = Array.isArray(l.photos) ? l.photos : []
-  return (
-    <button className="card" onClick={() => nav('#/unit/' + l.slug)}>
-      <div className="card-media">
-        {photos[0] ? <img src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
-        <span className="badge">GRADE {l.grade}</span>
-      </div>
-      <div className="card-body">
-        <h3>{l.title}</h3>
-        <span className="card-meta">{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' KM' : 'KM —'}{l.color ? ' · ' + l.color.toUpperCase() : ''}</span>
-        <span className="card-price">{rupiah(l.price)}</span>
-      </div>
-      <span className="card-go"><span>Lihat detail</span><span>→</span></span>
-    </button>
-  )
-}
+  const wrapRef = useRef(null)
+  const cardRef = useRef(null)
+  const [shown, setShown] = useState(false)
+  const reduced = useRef(false)
 
-// ---------- Cursor kustom ala studio kreatif (hanya di dalam hero) ----------
-function HeroCursor({ targetRef }) {
-  const dotRef = useRef(null)
-
+  // muncul berurutan saat kartu masuk layar
   useEffect(() => {
-    const el = targetRef.current
-    const dot = dotRef.current
-    if (!el || !dot) return
-    if (window.matchMedia('(hover:none),(pointer:coarse)').matches) return
+    reduced.current = prefersReduced()
+    const el = wrapRef.current
+    if (!el) return
+    if (reduced.current) { setShown(true); return }
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (en.isIntersecting) { setShown(true); io.disconnect() }
+      }
+    }, { threshold: 0.15 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
 
-    const move = (e) => {
-      const r = el.getBoundingClientRect()
-      dot.style.transform = 'translate(' + (e.clientX - r.left) + 'px,' + (e.clientY - r.top) + 'px)'
-      const big = Boolean(e.target.closest('a,button'))
-      dot.classList.toggle('big', big)
-    }
-    const enter = (e) => { if (e.pointerType === 'mouse' || !e.pointerType) dot.classList.add('on') }
-    const leave = () => dot.classList.remove('on')
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerenter', enter)
-    el.addEventListener('pointerleave', leave)
-    return () => {
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerenter', enter)
-      el.removeEventListener('pointerleave', leave)
-    }
-  }, [targetRef])
+  // kemiringan 3D halus mengikuti posisi kursor
+  const onMove = (e) => {
+    if (reduced.current) return
+    const el = cardRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width - 0.5
+    const py = (e.clientY - r.top) / r.height - 0.5
+    el.style.setProperty('--ry', (px * 7).toFixed(2) + 'deg')
+    el.style.setProperty('--rx', (py * -5).toFixed(2) + 'deg')
+  }
+  const onLeave = () => {
+    const el = cardRef.current
+    if (!el) return
+    el.style.setProperty('--ry', '0deg')
+    el.style.setProperty('--rx', '0deg')
+  }
 
-  return <span ref={dotRef} className="hero-cursor" aria-hidden="true" />
+  return (
+    <div ref={wrapRef} className={'card-wrap' + (shown ? ' shown' : '')}
+      style={{ transitionDelay: shown ? (index % 3) * 70 + 'ms' : '0ms' }}>
+      <button ref={cardRef} className="card" onClick={() => nav('#/unit/' + l.slug)}
+        onPointerMove={onMove} onPointerLeave={onLeave}>
+        <div className="card-media">
+          {photos[0] ? <FadeImg src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
+          {photos[1] && <FadeImg className="ph2" src={photos[1]} alt="" loading="lazy" />}
+          <span className="badge">GRADE {l.grade}</span>
+        </div>
+        <div className="card-body">
+          <h3>{l.title}</h3>
+          <span className="card-meta">{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' KM' : 'KM —'}{l.color ? ' · ' + l.color.toUpperCase() : ''}</span>
+          <span className="card-price">{rupiah(l.price)}</span>
+        </div>
+        <span className="card-go"><span>Lihat detail</span><span className="aro">→</span></span>
+      </button>
+    </div>
+  )
 }
 
 function HomeView({ listings, nav }) {
   // listings sudah difilter hanya status 'published' oleh App.
   const minPrice = listings.length ? Math.min(...listings.map((l) => Number(l.price))) : null
-  const heroRef = useRef(null)
 
   return (
     <>
-      <section className="hero" ref={heroRef}>
-        <HeroCursor targetRef={heroRef} />
+      <section className="hero">
         <div className="container">
           <div className="hero-grid">
             <div className="hero-copy">
@@ -1410,6 +1290,7 @@ function HomeView({ listings, nav }) {
             </div>
             <div className="hero-media">
               <Bike3D />
+              <span className="hero-hint">3D · SERET UNTUK MEMUTAR</span>
             </div>
           </div>
           <div className="spec-rail">
@@ -1419,7 +1300,6 @@ function HomeView({ listings, nav }) {
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
           </div>
         </div>
-        <div className="scroll-cue" aria-hidden="true"><span className="line" />SCROLL</div>
       </section>
 
       <section className="section" id="etalase">
@@ -1435,7 +1315,7 @@ function HomeView({ listings, nav }) {
           <div className="grid">
             {listings.length === 0 && (
               <div className="empty">Etalase sedang kosong — unit baru sedang dalam proses kurasi.</div>)}
-            {listings.map((l) => <Card key={l.id} l={l} nav={nav} />)}
+            {listings.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
           </div>
         </div>
       </section>
@@ -1593,7 +1473,7 @@ export default function App() {
     <>
       <style>{CSS}</style>
 
-      <header className={'nav' + (scrolled ? ' scrolled' : '') + (route.name === 'home' && !scrolled ? ' on-dark' : '')}>
+      <header className={'nav' + (scrolled ? ' scrolled' : '')}>
         <div className="container nav-in">
           <a className="logo" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>
             MOTORELL<i>●</i><small>MARKET</small>
