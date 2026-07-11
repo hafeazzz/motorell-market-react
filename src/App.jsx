@@ -6,6 +6,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
 import * as THREE from 'three'
@@ -19,6 +20,9 @@ const supabase = SUPA_URL && SUPA_KEY ? createClient(SUPA_URL, SUPA_KEY) : null
 // DP dikunci flat Rp500.000 untuk semua unit (bukan persentase).
 // Nilai ini juga divalidasi ulang di Edge Function create-dp-payment.
 const DP_FIXED = 500000
+
+// Batas foto per unit — foto pertama dalam urutan menjadi sampul etalase.
+const MAX_PHOTOS = 10
 
 // Opsi garansi — HARGA FINAL divalidasi ulang di Edge Function.
 // Kalau mengubah harga di sini, ubah juga di create-dp-payment.
@@ -203,7 +207,6 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .hero-inner{position:relative;z-index:3;width:100%;pointer-events:none}
 .hero-copy,.spec-rail{pointer-events:auto}
 .hero-copy{max-width:580px}
-.badge.hero-grade{position:absolute;left:clamp(20px,5vw,64px);bottom:56px;top:auto;z-index:4}
 .hero-copy h1{font-size:clamp(46px,6.4vw,86px);font-weight:750;line-height:.97;
   letter-spacing:-.03em;margin:22px 0 22px}
 .hero-copy h1 em{font-style:normal;color:var(--accent)}
@@ -211,10 +214,6 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
-.hero-hint{position:absolute;left:clamp(20px,5vw,64px);bottom:20px;z-index:4;
-  font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);
-  background:rgba(255,255,255,.85);border:1px solid var(--line);
-  padding:6px 11px;border-radius:999px;pointer-events:none}
 .spec-rail{display:flex;flex-wrap:wrap;border:1px solid var(--line);
   border-radius:12px;margin-top:52px;overflow:hidden;background:rgba(255,255,255,.78);
   backdrop-filter:blur(10px);max-width:900px}
@@ -250,8 +249,6 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .card-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   opacity:0;transition:opacity .45s ease,transform .6s cubic-bezier(.2,.6,.25,1)}
 .card-media img.ok{opacity:1}
-.card-media img.ph2{opacity:0}
-.card:hover .card-media img.ph2.ok{opacity:1}
 .card:hover .card-media img{transform:scale(1.055)}
 .card-media::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.5) 50%,transparent 58%);
@@ -318,8 +315,34 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .gallery-main{aspect-ratio:4/3;border-radius:14px;overflow:hidden;position:relative;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%);
   border:1px solid var(--line)}
-.gallery-main img{width:100%;height:100%;object-fit:cover}
+.gallery-main img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.gallery-main.has-photo img{cursor:zoom-in;touch-action:pan-y;user-select:none}
 .gallery-main .blp{position:absolute;inset:13% 10%;opacity:1}
+.g-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:40px;height:40px;
+  border-radius:50%;background:rgba(255,255,255,.92);border:1px solid var(--line-2);
+  font-size:15px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 10px rgba(17,17,20,.14);transition:opacity .2s,border-color .2s,color .2s}
+.g-arrow:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.g-arrow:disabled{opacity:.3;cursor:default}
+.g-arrow.prev{left:12px}
+.g-arrow.next{right:12px}
+.g-count{position:absolute;top:12px;right:12px;z-index:3;font-family:var(--mono);font-size:11px;
+  font-weight:600;letter-spacing:.05em;color:var(--muted);background:rgba(255,255,255,.9);
+  border:1px solid var(--line);padding:4px 11px;border-radius:999px;pointer-events:none}
+.lightbox{position:fixed;inset:0;z-index:140;background:rgba(13,13,16,.93);overflow:hidden}
+.lightbox img{position:absolute;inset:0;margin:auto;max-width:92vw;max-height:84vh;
+  width:auto;height:auto;object-fit:contain;cursor:grab;touch-action:pan-y;user-select:none}
+.lightbox img:active{cursor:grabbing}
+.lightbox .g-arrow{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.3);color:#fff}
+.lightbox .g-arrow:hover:not(:disabled){border-color:#fff;color:#fff}
+.lightbox .g-arrow.prev{left:20px}
+.lightbox .g-arrow.next{right:20px}
+.lightbox .g-count{top:auto;bottom:20px;left:50%;right:auto;transform:translateX(-50%);
+  background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.25);color:#fff}
+.lb-close{position:absolute;top:16px;right:16px;z-index:4;width:42px;height:42px;border-radius:50%;
+  border:1.5px solid rgba(255,255,255,.4);color:#fff;font-size:16px;
+  display:flex;align-items:center;justify-content:center;transition:border-color .2s}
+.lb-close:hover{border-color:#fff}
 .thumbs{display:flex;gap:10px;margin-top:11px;flex-wrap:wrap}
 .thumbs button{width:78px;height:60px;border-radius:9px;overflow:hidden;
   border:1.5px solid var(--line);opacity:.6;transition:opacity .2s,border-color .2s;background:var(--bg-2)}
@@ -456,7 +479,12 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .a-actions{display:flex;gap:7px;flex-wrap:wrap}
 .photo-strip{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px}
 .photo-strip .ph{position:relative;width:90px;height:66px;border-radius:9px;overflow:hidden;
-  border:1px solid var(--line-2)}
+  border:1px solid var(--line-2);cursor:grab}
+.photo-strip .ph:active{cursor:grabbing}
+.photo-strip .ph.main{border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent)}
+.ph-main-tag{position:absolute;left:0;right:0;bottom:0;font-family:var(--mono);font-size:8px;
+  font-weight:600;letter-spacing:.09em;text-align:center;background:var(--accent);color:#fff;
+  padding:2.5px 0;pointer-events:none}
 .photo-strip img{width:100%;height:100%;object-fit:cover}
 .photo-strip .rm{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
   background:rgba(255,255,255,.92);border:1px solid var(--line-2);font-size:11px;
@@ -1085,18 +1113,26 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
 
-  async function addFiles(e) {
-    const files = Array.from(e.target.files || [])
+  async function handleFiles(picked) {
+    const files = Array.from(picked || []).filter((x) => x.type.startsWith('image/'))
     if (!files.length) return
-    e.target.value = ''
     setErr('')
+    const remaining = MAX_PHOTOS - photos.length
+    if (remaining <= 0) {
+      setErr('Maksimal ' + MAX_PHOTOS + ' foto per unit sudah tercapai. Hapus salah satu foto dulu untuk menambah yang baru.')
+      return
+    }
+    if (files.length > remaining) {
+      setErr('Maksimal ' + MAX_PHOTOS + ' foto per unit — hanya ' + remaining + ' foto pertama dari pilihanmu yang diunggah.')
+    }
+    const batch = files.slice(0, remaining)
     if (!editing) {
       slugRef.current = slugify((f.brand || 'unit') + ' ' + (f.model || '') + ' ' + f.year) + '-' + slugRef.current.slice(-4)
     }
-    for (let i = 0; i < files.length; i++) {
-      setUpMsg('Mengunggah foto ' + (i + 1) + ' dari ' + files.length + '…')
+    for (let i = 0; i < batch.length; i++) {
+      setUpMsg('Mengunggah foto ' + (i + 1) + ' dari ' + batch.length + '…')
       try {
-        const blob = await compressImage(files[i])
+        const blob = await compressImage(batch[i])
         const path = slugRef.current + '/' + Date.now() + '-' + i + '.jpg'
         const { error } = await supabase.storage.from('unit-photos')
           .upload(path, blob, { contentType: 'image/jpeg' })
@@ -1109,6 +1145,18 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
       }
     }
     setUpMsg('')
+  }
+
+  // urutan foto: index 0 = sampul etalase
+  const dragFrom = useRef(null)
+  const movePhoto = (from, to) => {
+    if (from === null || from === undefined || from === to) return
+    setPhotos((p) => {
+      const n = [...p]
+      const [m] = n.splice(from, 1)
+      n.splice(to, 0, m)
+      return n
+    })
   }
 
   async function save(e) {
@@ -1185,20 +1233,38 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
                 <textarea id="u-issues" value={f.known_issues} onChange={set('known_issues')}
                   placeholder="Contoh: baret halus di sayap kiri, ban belakang 70%…" /></div>
               <div className="field full">
-                <label>Foto unit (otomatis dikompres sebelum diunggah)</label>
-                <div className="photo-strip">
+                <label>Foto unit — {photos.length}/{MAX_PHOTOS} (otomatis dikompres sebelum diunggah)</label>
+                <div className="photo-strip"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    if (e.dataTransfer.files && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files)
+                  }}>
                   {photos.map((url, i) => (
-                    <div className="ph" key={url}>
+                    <div className={'ph' + (i === 0 ? ' main' : '')} key={url} draggable
+                      onDragStart={() => { dragFrom.current = i }}
+                      onDragEnd={() => { dragFrom.current = null }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault(); e.stopPropagation()
+                        movePhoto(dragFrom.current, i); dragFrom.current = null
+                      }}>
                       <img src={url} alt={'Foto ' + (i + 1)} />
+                      {i === 0 && <span className="ph-main-tag">FOTO UTAMA</span>}
                       <button type="button" className="rm" aria-label="Hapus foto"
                         onClick={() => setPhotos((p) => p.filter((u) => u !== url))}>✕</button>
                     </div>
                   ))}
-                  <button type="button" className="up-tile" aria-label="Tambah foto"
-                    onClick={() => fileRef.current && fileRef.current.click()}>＋</button>
+                  {photos.length < MAX_PHOTOS && (
+                    <button type="button" className="up-tile" aria-label="Tambah foto"
+                      onClick={() => fileRef.current && fileRef.current.click()}>＋</button>
+                  )}
                 </div>
-                <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={addFiles} />
+                <input ref={fileRef} type="file" accept="image/*" multiple hidden
+                  onChange={(e) => { const fl = Array.from(e.target.files || []); e.target.value = ''; handleFiles(fl) }} />
                 {upMsg && <p className="f-info">{upMsg}</p>}
+                <p className="f-info">Foto pertama = sampul di etalase. Seret thumbnail untuk mengubah urutan,
+                  atau jatuhkan file gambar langsung ke area ini.</p>
               </div>
             </div>
             {err && <p className="f-err">{err}</p>}
@@ -1296,15 +1362,113 @@ function AdminPanel({ profile, toast, nav }) {
   )
 }
 
+// ---------- Galeri foto swipeable (detail unit) ----------
+// Swipe/drag horizontal (touch & mouse) via gesture framer-motion,
+// panah kiri-kanan untuk desktop, thumbnail strip + counter sebagai
+// indikator posisi, dan klik foto untuk lightbox fullscreen.
+const slideFx = {
+  enter: (d) => ({ x: d > 0 ? '55%' : '-55%', opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (d) => ({ x: d > 0 ? '-55%' : '55%', opacity: 0 }),
+}
+const slideSpring = { x: { type: 'spring', stiffness: 340, damping: 34 }, opacity: { duration: 0.22 } }
+
+function Gallery({ photos, title }) {
+  const [[idx, dir], setPos] = useState([0, 0])
+  const [zoom, setZoom] = useState(false)
+  // onTap framer-motion tetap menyala setelah drag — tandai supaya
+  // swipe tidak ikut membuka lightbox.
+  const wasDragged = useRef(false)
+  const many = photos.length > 1
+
+  const go = useCallback((to) => {
+    setPos(([cur]) => {
+      const n = Math.max(0, Math.min(photos.length - 1, to))
+      return n === cur ? [cur, 0] : [n, n > cur ? 1 : -1]
+    })
+  }, [photos.length])
+
+  useEffect(() => { setPos([0, 0]); setZoom(false) }, [photos])
+
+  useEffect(() => {
+    if (!zoom) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') setZoom(false)
+      if (e.key === 'ArrowRight') go(idx + 1)
+      if (e.key === 'ArrowLeft') go(idx - 1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zoom, idx, go])
+
+  const onDragEnd = (e, info) => {
+    if (info.offset.x < -70 || info.velocity.x < -500) go(idx + 1)
+    else if (info.offset.x > 70 || info.velocity.x > 500) go(idx - 1)
+    setTimeout(() => { wasDragged.current = false }, 120)
+  }
+
+  if (!photos.length) return <div className="gallery-main"><Blueprint /></div>
+
+  const frame = (inLightbox) => (
+    <>
+      <AnimatePresence initial={false} custom={dir} mode="popLayout">
+        <motion.img key={idx} src={photos[idx]}
+          alt={title + ' — foto ' + (idx + 1) + ' dari ' + photos.length}
+          custom={dir} variants={slideFx} initial="enter" animate="center" exit="exit"
+          transition={slideSpring}
+          drag={many ? 'x' : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.55}
+          onDragStart={() => { wasDragged.current = true }}
+          onDragEnd={onDragEnd}
+          onTap={() => { if (!wasDragged.current && !inLightbox) setZoom(true) }}
+          draggable={false} />
+      </AnimatePresence>
+      {many && (
+        <>
+          <button type="button" className="g-arrow prev" onClick={() => go(idx - 1)}
+            disabled={idx === 0} aria-label="Foto sebelumnya">←</button>
+          <button type="button" className="g-arrow next" onClick={() => go(idx + 1)}
+            disabled={idx === photos.length - 1} aria-label="Foto berikutnya">→</button>
+          <span className="g-count">{idx + 1} / {photos.length}</span>
+        </>
+      )}
+    </>
+  )
+
+  return (
+    <>
+      <div className="gallery-main has-photo" role="group" aria-label={'Galeri foto ' + title}>
+        {frame(false)}
+      </div>
+      {many && (
+        <div className="thumbs">
+          {photos.map((url, i) => (
+            <button key={url} type="button" className={i === idx ? 'on' : ''} onClick={() => go(i)}
+              aria-label={'Foto ' + (i + 1)}>
+              <img src={url} alt="" loading="lazy" />
+            </button>
+          ))}
+        </div>
+      )}
+      <AnimatePresence>
+        {zoom && (
+          <motion.div className="lightbox" role="dialog" aria-modal="true" aria-label={'Foto ' + title}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setZoom(false) }}>
+            {frame(true)}
+            <button type="button" className="lb-close" onClick={() => setZoom(false)} aria-label="Tutup">✕</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+
 // ---------- Halaman detail unit ----------
 function DetailView({ listing, nav, onBook }) {
-  const [idx, setIdx] = useState(0)
   const [wcode, setWcode] = useState('standard')
   const photos = Array.isArray(listing.photos) ? listing.photos : []
   const warranty = WARRANTIES.find((w) => w.code === wcode) || WARRANTIES[0]
   const canBook = listing.status === 'published'
-
-  useEffect(() => { setIdx(0) }, [listing.id])
 
   return (
     <section className="detail">
@@ -1312,19 +1476,7 @@ function DetailView({ listing, nav, onBook }) {
         <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
         <div className="detail-grid">
           <div>
-            <div className="gallery-main">
-              {photos[idx] ? <img src={photos[idx]} alt={listing.title} /> : <Blueprint />}
-            </div>
-            {photos.length > 1 && (
-              <div className="thumbs">
-                {photos.map((url, i) => (
-                  <button key={url} className={i === idx ? 'on' : ''} onClick={() => setIdx(i)}
-                    aria-label={'Foto ' + (i + 1)}>
-                    <img src={url} alt="" />
-                  </button>
-                ))}
-              </div>
-            )}
+            <Gallery photos={photos} title={listing.title} />
             <div className="desc">
               <h4>Tentang unit ini</h4>
               <p>{listing.description || 'Deskripsi lengkap menyusul. Hubungi Motorell untuk detail unit ini.'}</p>
@@ -1433,7 +1585,6 @@ function Card({ l, nav, index = 0 }) {
         onPointerMove={onMove} onPointerLeave={onLeave}>
         <div className="card-media">
           {photos[0] ? <FadeImg src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
-          {photos[1] && <FadeImg className="ph2" src={photos[1]} alt="" loading="lazy" />}
           <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>
         </div>
         <div className="card-body">
@@ -1484,11 +1635,6 @@ function HomeView({ listings, nav }) {
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
           </div>
         </div>
-        {introUnit && (
-          <span className={'badge hero-grade g-' + String(introUnit.grade || '').toLowerCase()}>
-            GRADE {introUnit.grade}</span>
-        )}
-        <span className="hero-hint">3D · SERET UNTUK MEMUTAR</span>
       </section>
 
       <section className="section" id="etalase">
