@@ -9,6 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 // ---------- Konfigurasi ----------
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL
@@ -173,6 +174,25 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .bike3d{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
 .bike3d:active{cursor:grabbing}
 .bike3d canvas{display:block;width:100% !important;height:100% !important}
+.bike3d-fallback-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+/* foto unit asli yang "berubah" jadi render 3D saat hero dimuat */
+.bike3d-photo{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none;
+  clip-path:inset(0 0 0 0%);
+  transition:clip-path 1.2s cubic-bezier(.65,0,.35,1), opacity .7s ease .5s}
+.bike3d-photo img{width:100%;height:100%;object-fit:cover;object-position:center 40%;
+  transform:scale(1.1);animation:bike3d-kenburns 2.6s cubic-bezier(.25,.4,.3,1) forwards}
+.bike3d-photo.is-revealed{clip-path:inset(0 0 0 100%);opacity:0}
+.bike3d-photo::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(100deg,transparent 55%,rgba(255,255,255,.65) 63%,transparent 72%);
+  transform:translateX(-140%);animation:bike3d-sheen 1.3s .35s ease-out forwards}
+@keyframes bike3d-kenburns{from{transform:scale(1.14)}to{transform:scale(1.03)}}
+@keyframes bike3d-sheen{to{transform:translateX(140%)}}
+@media(prefers-reduced-motion:reduce){
+  .bike3d-photo{transition:opacity .4s ease}
+  .bike3d-photo.is-revealed{clip-path:inset(0 0 0 0%)}
+  .bike3d-photo img{animation:none;transform:none}
+  .bike3d-photo::after{display:none}
+}
 .hero-fade{position:absolute;inset:0;z-index:2;pointer-events:none;
   background:
     linear-gradient(90deg, rgba(255,255,255,.99) 0%, rgba(255,255,255,.82) 30%, rgba(255,255,255,0) 56%),
@@ -220,7 +240,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
     translateY(var(--lift,0px));
   transition:transform .16s ease-out,box-shadow .25s,border-color .25s}
 .card:hover{--lift:-6px;box-shadow:var(--shadow);border-color:var(--line-2)}
-.card-media{aspect-ratio:16/10;position:relative;overflow:hidden;
+.card-media{aspect-ratio:1/1;position:relative;overflow:hidden;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%)}
 .card-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   opacity:0;transition:opacity .45s ease,transform .6s cubic-bezier(.2,.6,.25,1)}
@@ -490,9 +510,19 @@ function Blueprint() {
 }
 
 // ---------- Motor 3D interaktif (hero) ----------
-function Bike3D() {
+// Dibuka dengan foto asli salah satu unit di etalase, lalu "menyingkap"
+// jadi render 3D yang bisa diputar — bukan langsung tampil sebagai kartun.
+function Bike3D({ introPhoto }) {
   const mountRef = useRef(null)
   const [failed, setFailed] = useState(false)
+  const [revealed, setRevealed] = useState(!introPhoto)
+
+  useEffect(() => {
+    if (!introPhoto) return
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const t = setTimeout(() => setRevealed(true), reduced ? 60 : 1050)
+    return () => clearTimeout(t)
+  }, [introPhoto])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -510,9 +540,16 @@ function Bike3D() {
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.08
     mount.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
+    // environment map studio lembut — sumber pantulan realistis di bodi
+    // krom/tangki, biar tidak flat seperti render kartun.
+    const pmrem = new THREE.PMREMGenerator(renderer)
+    const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    scene.environment = envTex
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 50)
     // Kamera "melihat" ke titik di kiri motor, bukan ke motornya langsung —
     // pada frame lebar (hero full-bleed) ini mendorong motor ke sisi kanan,
@@ -529,6 +566,9 @@ function Bike3D() {
     const fill = new THREE.DirectionalLight(0xffe8d6, 0.5)
     fill.position.set(-4, 2, -3)
     scene.add(fill)
+    const rim = new THREE.DirectionalLight(0xdfe9ff, 0.9)
+    rim.position.set(-2.4, 3.2, -4.4)
+    scene.add(rim)
 
     // lantai penangkap bayangan
     const ground = new THREE.Mesh(
@@ -542,14 +582,16 @@ function Bike3D() {
     // ---- rakit motor dari bentuk dasar ----
     const bike = new THREE.Group()
     const mat = (color, o = {}) =>
-      new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3, ...o })
+      new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3, envMapIntensity: 1, ...o })
+    const physical = (color, o = {}) =>
+      new THREE.MeshPhysicalMaterial({ color, roughness: 0.4, metalness: 0.5, envMapIntensity: 1.15, ...o })
     const M = {
-      tire: mat('#17171b', { roughness: 0.93, metalness: 0.04 }),
-      rim: mat('#c9c9cf', { metalness: 0.85, roughness: 0.22 }),
+      tire: mat('#17171b', { roughness: 0.93, metalness: 0.04, envMapIntensity: 0.3 }),
+      rim: physical('#c9c9cf', { metalness: 0.92, roughness: 0.16, clearcoat: 0.5, clearcoatRoughness: 0.2 }),
       frame: mat('#1b1b21', { metalness: 0.55, roughness: 0.4 }),
-      chrome: mat('#d8d8dd', { metalness: 0.9, roughness: 0.18 }),
-      tank: mat('#ff3d00', { metalness: 0.45, roughness: 0.3 }),
-      dark: mat('#101014', { roughness: 0.85, metalness: 0.1 }),
+      chrome: physical('#e4e4e8', { metalness: 0.97, roughness: 0.06, clearcoat: 0.8, clearcoatRoughness: 0.08, envMapIntensity: 1.5 }),
+      tank: physical('#ff3d00', { metalness: 0.55, roughness: 0.22, clearcoat: 0.9, clearcoatRoughness: 0.1, envMapIntensity: 1.3 }),
+      dark: mat('#101014', { roughness: 0.85, metalness: 0.1, envMapIntensity: 0.5 }),
       engine: mat('#2d2d34', { metalness: 0.75, roughness: 0.32 }),
     }
     const shadowed = (m) => { m.castShadow = true; return m }
@@ -697,13 +739,28 @@ function Bike3D() {
         }
       })
       renderer.dispose()
+      envTex.dispose()
+      pmrem.dispose()
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement)
     }
   }, [])
 
-  if (failed) return <Blueprint />
-  return <div ref={mountRef} className="bike3d" role="img"
-    aria-label="Model 3D motor Motorell — seret untuk memutar" />
+  if (failed) {
+    return introPhoto
+      ? <img className="bike3d-fallback-photo" src={introPhoto} alt="" />
+      : <Blueprint />
+  }
+  return (
+    <>
+      <div ref={mountRef} className="bike3d" role="img"
+        aria-label="Model 3D motor Motorell — seret untuk memutar" />
+      {introPhoto && (
+        <div className={'bike3d-photo' + (revealed ? ' is-revealed' : '')} aria-hidden="true">
+          <img src={introPhoto} alt="" />
+        </div>
+      )}
+    </>
+  )
 }
 
 // ---------- Modal login / daftar ----------
@@ -1291,13 +1348,18 @@ function Card({ l, nav, index = 0 }) {
 function HomeView({ listings, nav }) {
   // listings sudah difilter hanya status 'published' oleh App.
   const minPrice = listings.length ? Math.min(...listings.map((l) => Number(l.price))) : null
+  // Foto unit asli terbaik (unit grade A dengan foto) untuk pembuka animasi hero.
+  const introPhoto = (
+    listings.find((l) => l.grade === 'A' && l.photos?.[0]) ||
+    listings.find((l) => l.photos?.[0])
+  )?.photos?.[0] || null
 
   return (
     <>
       <section className="hero">
         <div className="hero-grid-lines" aria-hidden="true" />
         <div className="hero-3d">
-          <Bike3D />
+          <Bike3D introPhoto={introPhoto} />
         </div>
         <div className="hero-fade" aria-hidden="true" />
         <div className="container hero-inner">
