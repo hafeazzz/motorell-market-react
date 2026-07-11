@@ -198,8 +198,12 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   background:
     linear-gradient(90deg, rgba(255,255,255,.99) 0%, rgba(255,255,255,.82) 30%, rgba(255,255,255,0) 56%),
     linear-gradient(0deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,0) 24%)}
-.hero-inner{position:relative;z-index:3;width:100%}
+/* pointer-events:none supaya drag di atas motor tembus ke canvas 3D di bawah;
+   hanya blok teks & spec-rail yang kembali menangkap klik */
+.hero-inner{position:relative;z-index:3;width:100%;pointer-events:none}
+.hero-copy,.spec-rail{pointer-events:auto}
 .hero-copy{max-width:580px}
+.badge.hero-grade{position:absolute;left:clamp(20px,5vw,64px);bottom:56px;top:auto;z-index:4}
 .hero-copy h1{font-size:clamp(46px,6.4vw,86px);font-weight:750;line-height:.97;
   letter-spacing:-.03em;margin:22px 0 22px}
 .hero-copy h1 em{font-style:normal;color:var(--accent)}
@@ -254,11 +258,26 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   transform:translateX(-130%);transition:transform .65s ease}
 .card:hover .card-media::after{transform:translateX(130%)}
 .card-media .blp{position:absolute;inset:11% 8%;opacity:1}
-.badge{position:absolute;top:13px;left:13px;z-index:2;font-family:var(--mono);font-size:10.5px;
+.badge{position:absolute;bottom:13px;left:13px;z-index:2;font-family:var(--mono);font-size:10.5px;
   font-weight:600;letter-spacing:.08em;padding:6px 11px;border-radius:999px;
   background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border:1px solid var(--line-2);
-  color:var(--ink);transition:transform .25s ease}
+  color:var(--ink);transition:transform .25s ease;overflow:hidden}
 .card:hover .badge{transform:translateY(-2px)}
+/* varian warna per grade: S emas, A diamond, B silver — teks gelap agar kontras */
+.badge.g-s{background:linear-gradient(135deg,#ffe975 0%,#ffd700 38%,#b8860b 100%);
+  border-color:rgba(184,134,11,.55);color:#231a00;
+  box-shadow:0 2px 9px rgba(184,134,11,.35),inset 0 1px 1px rgba(255,255,255,.7)}
+.badge.g-a{background:linear-gradient(135deg,#ffffff 0%,#e8f4ff 42%,#b0e0e6 100%);
+  border-color:rgba(116,170,196,.5);color:#0e2a38;
+  box-shadow:0 2px 9px rgba(116,170,196,.32),inset 0 1px 1px rgba(255,255,255,.85)}
+.badge.g-b{background:linear-gradient(135deg,#e2e2e2 0%,#c0c0c0 46%,#a8a8a8 100%);
+  border-color:rgba(118,118,122,.45);color:#232327;
+  box-shadow:0 2px 7px rgba(90,90,94,.3),inset 0 1px 1px rgba(255,255,255,.6)}
+/* kilau lembut yang menyapu pelan di badge S (shine) dan A (shimmer) */
+.badge.g-s::after,.badge.g-a::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 32%,rgba(255,255,255,.6) 47%,transparent 62%);
+  transform:translateX(-130%);animation:badge-shine 3.6s ease-in-out infinite}
+@keyframes badge-shine{0%{transform:translateX(-130%)}22%{transform:translateX(130%)}100%{transform:translateX(130%)}}
 .card-body{padding:19px 19px 17px;display:flex;flex-direction:column;gap:6px}
 .card-body h3{font-size:17.5px;font-weight:680;letter-spacing:-.01em}
 .card-meta{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
@@ -1150,6 +1169,7 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
                 <input id="u-price" type="number" min="0" value={f.price} onChange={set('price')} placeholder="20800000" required /></div>
               <div className="field"><label htmlFor="u-grade">Grade kurasi</label>
                 <select id="u-grade" value={f.grade} onChange={set('grade')}>
+                  <option value="S">S — istimewa, seperti baru</option>
                   <option value="A">A — siap pakai</option>
                   <option value="B">B — minus ringan tercatat</option>
                 </select></div>
@@ -1414,7 +1434,7 @@ function Card({ l, nav, index = 0 }) {
         <div className="card-media">
           {photos[0] ? <FadeImg src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
           {photos[1] && <FadeImg className="ph2" src={photos[1]} alt="" loading="lazy" />}
-          <span className="badge">GRADE {l.grade}</span>
+          <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>
         </div>
         <div className="card-body">
           <h3>{l.title}</h3>
@@ -1430,11 +1450,12 @@ function Card({ l, nav, index = 0 }) {
 function HomeView({ listings, nav }) {
   // listings sudah difilter hanya status 'published' oleh App.
   const minPrice = listings.length ? Math.min(...listings.map((l) => Number(l.price))) : null
-  // Foto unit asli terbaik (unit grade A dengan foto) untuk pembuka animasi hero.
-  const introPhoto = (
+  // Unit asli terbaik (grade tertinggi yang punya foto) untuk pembuka animasi hero.
+  const introUnit =
+    listings.find((l) => l.grade === 'S' && l.photos?.[0]) ||
     listings.find((l) => l.grade === 'A' && l.photos?.[0]) ||
-    listings.find((l) => l.photos?.[0])
-  )?.photos?.[0] || null
+    listings.find((l) => l.photos?.[0]) || null
+  const introPhoto = introUnit?.photos?.[0] || null
 
   return (
     <>
@@ -1446,10 +1467,10 @@ function HomeView({ listings, nav }) {
         <div className="hero-fade" aria-hidden="true" />
         <div className="container hero-inner">
           <div className="hero-copy">
-            <p className="kicker">Motorell Market — showroom terkurasi</p>
+            <p className="kicker">Motorell Market showroom terkurasi</p>
             <h1>Pilih. Kunci.<br />Bawa <em>pulang.</em></h1>
             <p>Setiap unit di lantai showroom ini sudah lolos inspeksi 175 titik oleh mekanik
-              Motorell — lengkap dengan catatan jujur tentang kondisinya.</p>
+              Motorell(lengkap dengan catatan jujur tentang kondisinya)</p>
             {minPrice && <p className="from">Unit tersedia mulai <b>{rupiah(minPrice)}</b></p>}
             <div className="hero-cta">
               <a className="btn btn-dark" href="#etalase">Lihat semua unit</a>
@@ -1463,6 +1484,10 @@ function HomeView({ listings, nav }) {
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
           </div>
         </div>
+        {introUnit && (
+          <span className={'badge hero-grade g-' + String(introUnit.grade || '').toLowerCase()}>
+            GRADE {introUnit.grade}</span>
+        )}
         <span className="hero-hint">3D · SERET UNTUK MEMUTAR</span>
       </section>
 
