@@ -127,6 +127,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;
   text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:11px}
 .kicker::before{content:"";width:24px;height:2px;background:var(--accent)}
+.hero .kicker::before{display:none}
 
 /* ---------- nav ---------- */
 .nav{position:fixed;inset:0 0 auto 0;z-index:60;
@@ -275,12 +276,17 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   text-align:center;color:var(--muted);font-size:15px;grid-column:1/-1;background:var(--panel)}
 
 /* ---------- trust ---------- */
-.trust{display:grid;grid-template-columns:repeat(3,1fr);gap:0;
+.trust{display:grid;grid-template-columns:repeat(2,1fr);gap:0;
   border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
-.trust div{padding:34px 30px;border-right:1px solid var(--line)}
-.trust div:last-child{border-right:none}
+.trust > div{padding:34px 30px;border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:flex-start}
+.trust > div:last-child{border-right:none}
+/* angka dikunci pada tinggi baris yang sama dan diratakan ke bawah,
+   supaya baseline "180" dan "Rp 500.000" sejajar walau ukuran font beda */
 .trust .n{font-family:var(--font);font-size:44px;font-weight:780;letter-spacing:-.03em;
-  color:var(--accent);line-height:1;margin-bottom:14px}
+  color:var(--accent);line-height:1;height:44px;display:flex;align-items:flex-end;
+  margin-bottom:14px}
+.trust .n.sm{font-size:30px}
 .trust h4{font-size:16px;font-weight:680;margin-bottom:9px}
 .trust p{font-size:13.5px;color:var(--muted);line-height:1.6}
 
@@ -605,77 +611,153 @@ function Bike3D({ introPhoto }) {
       return shadowed(mesh)
     }
 
+    // Proporsi mengacu gaya neo-retro Yamaha XSR: wheelbase ±2.1 unit,
+    // roda jari-jari, garpu teleskopik menyudut, tangki teardrop, jok flat.
+    const REAR = V(-1.02, 0.52), FRONT = V(1.08, 0.52)
+
+    // ---- roda jari-jari (spoke wheel) ----
     const wheels = []
-    const makeWheel = (x) => {
+    const makeWheel = (x, front) => {
       const g = new THREE.Group()
-      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.13, 18, 44), M.tire)))
-      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.07, 28), M.rim)
-      rim.rotation.x = Math.PI / 2
-      g.add(shadowed(rim))
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.17, 14), M.engine)
+      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.12, 20, 48), M.tire)))
+      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.355, 0.028, 12, 40), M.rim)))
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.16, 18), M.engine)
       hub.rotation.x = Math.PI / 2
-      g.add(hub)
-      g.position.set(x, 0.5, 0)
+      g.add(shadowed(hub))
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2
+        const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 6), M.chrome)
+        sp.position.set(Math.cos(a) * 0.22, Math.sin(a) * 0.22, i % 2 ? 0.035 : -0.035)
+        sp.rotation.z = a - Math.PI / 2
+        g.add(sp)
+      }
+      if (front) {
+        const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.185, 0.015, 30), M.chrome)
+        disc.rotation.x = Math.PI / 2
+        disc.position.z = 0.095
+        g.add(disc)
+      }
+      g.position.set(x, 0.52, 0)
       bike.add(g)
       wheels.push(g)
     }
-    makeWheel(-1.05)
-    makeWheel(1.05)
+    makeWheel(REAR.x, false)
+    makeWheel(FRONT.x, true)
 
-    // rangka
-    const rearAxle = V(-1.05, 0.5), steer = V(0.72, 1.3)
-    const seatPost = V(-0.33, 1.04), crank = V(0.02, 0.64)
-    bike.add(tube(rearAxle, seatPost, 0.045, M.frame))
-    bike.add(tube(seatPost, steer, 0.05, M.frame))
-    bike.add(tube(crank, seatPost, 0.045, M.frame))
-    bike.add(tube(crank, steer, 0.05, M.frame))
-    bike.add(tube(rearAxle, crank, 0.04, M.frame))
-    // garpu depan (dua batang)
-    bike.add(tube(V(0.78, 1.34, 0.07), V(1.05, 0.5, 0.07), 0.035, M.chrome))
-    bike.add(tube(V(0.78, 1.34, -0.07), V(1.05, 0.5, -0.07), 0.035, M.chrome))
-    // setang + grip
-    bike.add(tube(V(0.7, 1.42, -0.3), V(0.7, 1.42, 0.3), 0.03, M.chrome))
-    bike.add(tube(V(0.72, 1.3), V(0.7, 1.42), 0.04, M.chrome))
-    const gripL = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.14, 12), M.dark)
-    gripL.rotation.x = Math.PI / 2
-    gripL.position.set(0.7, 1.42, 0.34)
-    bike.add(shadowed(gripL))
-    const gripR = gripL.clone()
-    gripR.position.z = -0.34
-    bike.add(gripR)
-    // tangki (aksen Motorell)
-    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.42, 28, 22), M.tank)
-    tank.scale.set(1.25, 0.58, 0.72)
-    tank.position.set(0.16, 1.14, 0)
+    // ---- rangka (backbone + downtube + cradle + seat rail) ----
+    bike.add(tube(V(0.55, 1.18), V(0.63, 1.34), 0.055, M.frame))       // steering head
+    bike.add(tube(V(0.6, 1.3), V(-0.3, 1.06), 0.05, M.frame))          // backbone
+    bike.add(tube(V(-0.3, 1.06), V(-0.92, 0.98), 0.038, M.frame))      // seat rail
+    bike.add(tube(V(0.57, 1.22), V(0.38, 0.6), 0.045, M.frame))        // downtube
+    bike.add(tube(V(0.38, 0.56), V(-0.3, 0.56), 0.04, M.frame))        // cradle bawah
+    bike.add(tube(V(-0.3, 1.06), V(-0.32, 0.6), 0.045, M.frame))       // tiang belakang
+    // swingarm (lengan ayun dua sisi)
+    bike.add(tube(V(-0.32, 0.64, 0.1), V(REAR.x, REAR.y, 0.1), 0.032, M.frame))
+    bike.add(tube(V(-0.32, 0.64, -0.1), V(REAR.x, REAR.y, -0.1), 0.032, M.frame))
+
+    // ---- garpu depan teleskopik (menyudut/rake, dua tabung per sisi) ----
+    for (const zs of [0.085, -0.085]) {
+      bike.add(tube(V(0.66, 1.38, zs), V(0.88, 0.94, zs), 0.03, M.chrome))   // tabung atas
+      bike.add(tube(V(0.88, 0.94, zs), V(FRONT.x, FRONT.y, zs), 0.042, M.dark)) // slider bawah
+    }
+    // segitiga penjepit (triple clamp)
+    const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.26), M.engine)
+    clamp.position.set(0.655, 1.36, 0)
+    bike.add(shadowed(clamp))
+
+    // ---- setang retro + grip ----
+    bike.add(tube(V(0.64, 1.38), V(0.6, 1.5), 0.028, M.chrome))        // riser
+    bike.add(tube(V(0.6, 1.5, -0.34), V(0.6, 1.5, 0.34), 0.024, M.dark))
+    for (const zs of [0.38, -0.38]) {
+      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.15, 12), M.dark)
+      grip.rotation.x = Math.PI / 2
+      grip.position.set(0.6, 1.5, zs)
+      bike.add(shadowed(grip))
+    }
+
+    // ---- lampu depan bulat klasik ----
+    const lampHouse = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.14, 24), M.engine)
+    lampHouse.rotation.z = Math.PI / 2
+    lampHouse.position.set(0.76, 1.2, 0)
+    bike.add(shadowed(lampHouse))
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(0.125, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5),
+      mat('#fff4dd', { emissive: 0xffe3b0, emissiveIntensity: 0.9, roughness: 0.25 }))
+    lens.rotation.z = -Math.PI / 2
+    lens.position.set(0.82, 1.2, 0)
+    bike.add(lens)
+
+    // ---- tangki teardrop (aksen Motorell) + tutup bensin ----
+    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 24), M.tank)
+    tank.scale.set(1.35, 0.52, 0.72)
+    tank.position.set(0.14, 1.18, 0)
+    tank.rotation.z = 0.07
     bike.add(shadowed(tank))
-    // jok
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.1, 0.27), M.dark)
-    seat.position.set(-0.46, 1.1, 0)
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.03, 14), M.chrome)
+    cap.position.set(0.24, 1.45, 0)
+    bike.add(cap)
+
+    // ---- jok single flat ----
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.075, 0.28), M.dark)
+    seat.position.set(-0.52, 1.08, 0)
     bike.add(shadowed(seat))
-    // mesin
-    const engine = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.32, 0.3), M.engine)
-    engine.position.set(0, 0.74, 0)
-    bike.add(shadowed(engine))
-    // knalpot
-    bike.add(tube(V(0.24, 0.6, 0.14), V(-0.98, 0.7, 0.17), 0.05, M.chrome))
-    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.05, 0.22, 14), M.chrome)
-    tip.rotation.z = Math.PI / 2
-    tip.position.set(-1.06, 0.705, 0.17)
-    bike.add(shadowed(tip))
-    // lampu depan
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.1, 18, 14),
-      mat('#fff4dd', { emissive: 0xffe3b0, emissiveIntensity: 0.8, roughness: 0.4 }))
-    lamp.position.set(0.84, 1.26, 0)
-    bike.add(lamp)
-    // spatbor belakang & depan (busur)
-    const fenderR = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.045, 10, 30, Math.PI * 0.75), M.frame)
-    fenderR.position.set(-1.05, 0.5, 0)
-    fenderR.rotation.z = Math.PI * 0.35
-    bike.add(shadowed(fenderR))
-    const fenderF = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.04, 10, 26, Math.PI * 0.5), M.chrome)
-    fenderF.position.set(1.05, 0.5, 0)
-    fenderF.rotation.z = Math.PI * 0.28
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.24), M.dark)
+    tail.position.set(-0.9, 1.06, 0)
+    bike.add(shadowed(tail))
+    const tailLamp = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.12),
+      mat('#d02010', { emissive: 0xa01008, emissiveIntensity: 0.6 }))
+    tailLamp.position.set(-0.97, 1.05, 0)
+    bike.add(tailLamp)
+
+    // ---- mesin: crankcase + silinder bersirip + tutup samping ----
+    const crank = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.3, 0.32), M.engine)
+    crank.position.set(0.02, 0.62, 0)
+    bike.add(shadowed(crank))
+    const cyl = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.3, 0.28), M.engine)
+    cyl.position.set(0.1, 0.9, 0)
+    cyl.rotation.z = -0.15
+    bike.add(shadowed(cyl))
+    for (let i = 0; i < 4; i++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.018, 0.34), M.rim)
+      fin.position.set(0.1 + (i - 1.5) * 0.0105, 0.9 + (i - 1.5) * 0.07, 0)
+      fin.rotation.z = -0.15
+      bike.add(fin)
+    }
+    const cover = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 22), M.rim)
+    cover.rotation.x = Math.PI / 2
+    cover.position.set(-0.06, 0.6, 0.17)
+    bike.add(cover)
+
+    // ---- knalpot: header melengkung + muffler ----
+    const exCurve = new THREE.CatmullRomCurve3([
+      V(0.16, 0.8, 0.17), V(0.36, 0.6, 0.2), V(0.3, 0.44, 0.2),
+      V(-0.2, 0.42, 0.21), V(-0.72, 0.5, 0.22),
+    ])
+    bike.add(shadowed(new THREE.Mesh(new THREE.TubeGeometry(exCurve, 32, 0.042, 12), M.chrome)))
+    const mufDir = new THREE.Vector3().subVectors(V(-1.18, 0.56, 0.22), V(-0.72, 0.5, 0.22))
+    const muffler = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, mufDir.length(), 18), M.chrome)
+    muffler.position.set(-0.95, 0.53, 0.22)
+    muffler.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), mufDir.normalize())
+    bike.add(shadowed(muffler))
+
+    // ---- twin shock belakang (per aksen oranye) ----
+    for (const zs of [0.155, -0.155]) {
+      bike.add(tube(V(-0.6, 1.0, zs), V(-0.92, 0.56, zs), 0.024, M.chrome))
+      const springDir = new THREE.Vector3().subVectors(V(-0.84, 0.67, zs), V(-0.68, 0.89, zs))
+      const spring = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, springDir.length(), 12), M.tank)
+      spring.position.set(-0.76, 0.78, zs)
+      spring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), springDir.normalize())
+      bike.add(spring)
+    }
+
+    // ---- spatbor pendek depan & belakang ----
+    const fenderF = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.035, 10, 26, Math.PI * 0.42), M.frame)
+    fenderF.position.set(FRONT.x, FRONT.y, 0)
+    fenderF.rotation.z = Math.PI * 0.32
     bike.add(shadowed(fenderF))
+    const fenderR = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.04, 10, 26, Math.PI * 0.4), M.frame)
+    fenderR.position.set(REAR.x, REAR.y, 0)
+    fenderR.rotation.z = Math.PI * 0.38
+    bike.add(shadowed(fenderR))
 
     bike.position.y = 0.02
     scene.add(bike)
@@ -1413,11 +1495,9 @@ function HomeView({ listings, nav }) {
               lolos pemeriksaan dan layak kamu bawa pulang.</p>
           </div>
           <div className="trust">
-            <div><div className="n">175</div><h4>Titik inspeksi</h4>
-              <p>Mesin, rangka, kelistrikan, dokumen, dan uji jalan diperiksa mekanik sebelum unit boleh tayang. Minusnya pun ditulis apa adanya.</p></div>
             <div><div className="n">180</div><h4>Hari garansi maksimal</h4>
               <p>Tiga paket garansi mesin bisa dipilih saat booking — dari 30 hari standar sampai 180 hari plus servis berkala.</p></div>
-            <div><div className="n" style={{ fontSize: 30, paddingTop: 6 }}>{rupiah(DP_FIXED)}</div><h4>DP kunci unit via QRIS</h4>
+            <div><div className="n sm">{rupiah(DP_FIXED)}</div><h4>DP kunci unit via QRIS</h4>
               <p>Unit terkunci otomatis begitu DP masuk, aman dari serobotan. DP kembali penuh bila unit tidak sesuai laporan kurasi.</p></div>
           </div>
         </div>
