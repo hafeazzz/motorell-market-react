@@ -156,10 +156,29 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .btn-sm{padding:9px 17px;font-size:13px}
 .btn-full{width:100%}
 
-/* ---------- hero ---------- */
-.hero{padding:132px 0 40px;border-bottom:1px solid var(--line)}
-.hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(28px,5vw,72px);
-  align-items:center;min-height:66vh}
+/* ---------- hero (full-bleed, 3D as ambient background) ---------- */
+.hero{position:relative;min-height:94vh;display:flex;align-items:center;
+  padding:148px 0 44px;border-bottom:1px solid var(--line);overflow:hidden;
+  background:
+    radial-gradient(1200px 640px at 80% 34%, #fafaf9, transparent 62%),
+    linear-gradient(180deg,#ffffff 0%,#fbfbfa 100%)}
+.hero-grid-lines{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.55;
+  background-image:
+    linear-gradient(90deg, var(--line) 1px, transparent 1px),
+    linear-gradient(0deg, var(--line) 1px, transparent 1px);
+  background-size:64px 64px;
+  mask-image:radial-gradient(80% 70% at 68% 40%, #000 0%, transparent 72%);
+  -webkit-mask-image:radial-gradient(80% 70% at 68% 40%, #000 0%, transparent 72%)}
+.hero-3d{position:absolute;inset:0;z-index:1}
+.bike3d{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
+.bike3d:active{cursor:grabbing}
+.bike3d canvas{display:block;width:100% !important;height:100% !important}
+.hero-fade{position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.99) 0%, rgba(255,255,255,.82) 30%, rgba(255,255,255,0) 56%),
+    linear-gradient(0deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,0) 24%)}
+.hero-inner{position:relative;z-index:3;width:100%}
+.hero-copy{max-width:580px}
 .hero-copy h1{font-size:clamp(46px,6.4vw,86px);font-weight:750;line-height:.97;
   letter-spacing:-.03em;margin:22px 0 22px}
 .hero-copy h1 em{font-style:normal;color:var(--accent)}
@@ -167,19 +186,13 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
-.hero-media{aspect-ratio:5/4;border-radius:16px;overflow:hidden;position:relative;
-  background:radial-gradient(120% 110% at 50% 30%, #fbfbfa, var(--bg-3) 78%);
-  border:1px solid var(--line)}
-.hero-media img{width:100%;height:100%;object-fit:cover}
-.hero-media .blp{position:absolute;inset:14% 10%;opacity:1}
-.bike3d{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
-.bike3d:active{cursor:grabbing}
-.bike3d canvas{display:block;width:100% !important;height:100% !important}
-.hero-hint{position:absolute;left:14px;bottom:12px;font-family:var(--mono);font-size:10px;
-  letter-spacing:.14em;color:var(--dim);background:rgba(255,255,255,.85);
-  border:1px solid var(--line);padding:6px 11px;border-radius:999px;pointer-events:none}
+.hero-hint{position:absolute;left:clamp(20px,5vw,64px);bottom:20px;z-index:4;
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);
+  background:rgba(255,255,255,.85);border:1px solid var(--line);
+  padding:6px 11px;border-radius:999px;pointer-events:none}
 .spec-rail{display:flex;flex-wrap:wrap;border:1px solid var(--line);
-  border-radius:12px;margin-top:36px;overflow:hidden;background:var(--panel)}
+  border-radius:12px;margin-top:52px;overflow:hidden;background:rgba(255,255,255,.78);
+  backdrop-filter:blur(10px);max-width:900px}
 .spec-rail span{flex:1;min-width:170px;padding:18px 22px;font-family:var(--mono);
   font-size:12px;letter-spacing:.05em;color:var(--muted);
   border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
@@ -432,8 +445,12 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .grid{grid-template-columns:repeat(2,1fr)}
   .detail-grid{grid-template-columns:1fr}
   .panel{position:static}
-  .hero-grid{grid-template-columns:1fr;min-height:0}
-  .hero-media{max-width:520px}
+  .hero{min-height:0;padding-top:128px}
+  .hero-fade{background:
+    linear-gradient(0deg, rgba(255,255,255,.97) 0%, rgba(255,255,255,.55) 46%, rgba(255,255,255,.1) 100%)}
+  .hero-3d{opacity:.5}
+  .hero-copy{max-width:100%}
+  .spec-rail{max-width:100%}
 }
 @media(max-width:680px){
   .grid{grid-template-columns:1fr}
@@ -497,8 +514,11 @@ function Bike3D() {
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 50)
-    camera.position.set(3.1, 1.45, 4.2)
-    camera.lookAt(0, 0.7, 0)
+    // Kamera "melihat" ke titik di kiri motor, bukan ke motornya langsung —
+    // pada frame lebar (hero full-bleed) ini mendorong motor ke sisi kanan,
+    // menyisakan ruang kosong di kiri untuk teks headline.
+    camera.position.set(3.6, 1.55, 5.0)
+    camera.lookAt(-1.6, 0.75, 0)
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.15))
     const key = new THREE.DirectionalLight(0xffffff, 2.4)
@@ -1275,22 +1295,21 @@ function HomeView({ listings, nav }) {
   return (
     <>
       <section className="hero">
-        <div className="container">
-          <div className="hero-grid">
-            <div className="hero-copy">
-              <p className="kicker">Motorell Market — showroom terkurasi</p>
-              <h1>Pilih. Kunci.<br />Bawa <em>pulang.</em></h1>
-              <p>Setiap unit di lantai showroom ini sudah lolos inspeksi 175 titik oleh mekanik
-                Motorell — lengkap dengan catatan jujur tentang kondisinya.</p>
-              {minPrice && <p className="from">Unit tersedia mulai <b>{rupiah(minPrice)}</b></p>}
-              <div className="hero-cta">
-                <a className="btn btn-dark" href="#etalase">Lihat semua unit</a>
-                <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
-              </div>
-            </div>
-            <div className="hero-media">
-              <Bike3D />
-              <span className="hero-hint">3D · SERET UNTUK MEMUTAR</span>
+        <div className="hero-grid-lines" aria-hidden="true" />
+        <div className="hero-3d">
+          <Bike3D />
+        </div>
+        <div className="hero-fade" aria-hidden="true" />
+        <div className="container hero-inner">
+          <div className="hero-copy">
+            <p className="kicker">Motorell Market — showroom terkurasi</p>
+            <h1>Pilih. Kunci.<br />Bawa <em>pulang.</em></h1>
+            <p>Setiap unit di lantai showroom ini sudah lolos inspeksi 175 titik oleh mekanik
+              Motorell — lengkap dengan catatan jujur tentang kondisinya.</p>
+            {minPrice && <p className="from">Unit tersedia mulai <b>{rupiah(minPrice)}</b></p>}
+            <div className="hero-cta">
+              <a className="btn btn-dark" href="#etalase">Lihat semua unit</a>
+              <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
             </div>
           </div>
           <div className="spec-rail">
@@ -1300,6 +1319,7 @@ function HomeView({ listings, nav }) {
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
           </div>
         </div>
+        <span className="hero-hint">3D · SERET UNTUK MEMUTAR</span>
       </section>
 
       <section className="section" id="etalase">
