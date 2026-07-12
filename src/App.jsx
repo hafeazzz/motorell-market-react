@@ -32,6 +32,12 @@ const WARRANTIES = [
   { code: 'max', name: 'Garansi Max', desc: 'Mesin 180 hari + 2× servis + tune-up', price: 750000 },
 ]
 
+// Payment gateway QRIS belum siap produksi — untuk sementara tombol booking
+// mengarahkan ke WhatsApp CS. Ganti balik ke 'qris' saat gateway sudah siap;
+// BookingModal & invokeCreatePayment tetap utuh, tidak dihapus.
+const PAYMENT_MODE = 'whatsapp' // 'whatsapp' | 'qris'
+const CS_WHATSAPP_NUMBER = '6285180643531'
+
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n) || 0))
 const fmt = (n) => new Intl.NumberFormat('id-ID').format(Number(n) || 0)
 const slugify = (s) =>
@@ -56,6 +62,18 @@ async function compressImage(file, maxW = 1600, quality = 0.82) {
   } catch {
     return file
   }
+}
+
+function buildWaMessage(listing) {
+  const link = window.location.origin + window.location.pathname + '#/unit/' + listing.slug
+  return 'Halo Motorell, saya mau tanya soal ' + listing.title + ' (' + rupiah(listing.price) + '). ' +
+    'Apakah masih tersedia?\n' + link
+}
+
+function openWhatsAppCS(listing, toast) {
+  toast('Kamu akan diarahkan ke WhatsApp CS kami untuk melanjutkan pembayaran')
+  const url = 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' + encodeURIComponent(buildWaMessage(listing))
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 async function invokeCreatePayment(listing_id, warranty_code) {
@@ -312,6 +330,9 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   margin-bottom:28px;display:inline-flex;gap:8px}
 .back:hover{color:var(--accent)}
 .detail-grid{display:grid;grid-template-columns:7fr 5fr;gap:clamp(26px,3.5vw,56px);align-items:start}
+/* CTA menempel di bawah layar HP — panel harga lengkap tetap ada di alur
+   normal untuk desktop/tablet, ini cuma jalan pintas biar tak perlu scroll jauh */
+.sticky-cta{display:none}
 .gallery-main{aspect-ratio:4/3;border-radius:14px;overflow:hidden;position:relative;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%);
   border:1px solid var(--line)}
@@ -364,7 +385,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .specs div:last-child{border-right:none}
 .specs small{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
   color:var(--dim);text-transform:uppercase;margin-bottom:6px}
-.specs b{font-size:14px;font-weight:700}
+.specs b{font-size:14px;font-weight:700;white-space:nowrap}
 .w-title{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;
   color:var(--muted);margin-bottom:12px}
 .w-opts{display:flex;flex-direction:column;gap:9px;margin-bottom:24px}
@@ -381,11 +402,11 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .w-body span{font-size:12.5px;color:var(--muted)}
 .w-price{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
 .rows{border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-bottom:19px}
-.row{display:flex;justify-content:space-between;gap:12px;padding:13px 16px;font-size:14px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:13px 16px;font-size:14px}
 .row + .row{border-top:1px solid var(--line)}
-.row span{color:var(--muted)}
+.row span{color:var(--muted);min-width:0}
 .row span small{display:block;font-size:11px;color:var(--dim)}
-.row b{font-weight:680}
+.row b{font-weight:680;white-space:nowrap;flex:none}
 .row.hl{background:var(--panel-2)}
 .row.hl b{color:var(--accent);font-size:16px;font-weight:760}
 .fine{font-size:12px;color:var(--dim);line-height:1.58;margin-top:15px}
@@ -540,6 +561,27 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .specs div:nth-child(2){border-right:none}
   .a-row{align-items:flex-start}
 }
+/* ---------- mobile: CTA sticky, safe-area, tap target ≥44px ---------- */
+@media(max-width:767px){
+  .nav-in{padding-top:env(safe-area-inset-top)}
+  .sticky-cta{display:flex;align-items:center;gap:12px;position:fixed;left:0;right:0;bottom:0;
+    z-index:70;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);box-shadow:0 -6px 24px rgba(17,17,20,.1);
+    padding:12px clamp(16px,5vw,24px) calc(12px + env(safe-area-inset-bottom))}
+  .sticky-cta-price{display:flex;flex-direction:column;line-height:1.2;flex:none}
+  .sticky-cta-price span{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;
+    color:var(--muted);text-transform:uppercase}
+  .sticky-cta-price b{font-size:15px;font-weight:760;white-space:nowrap;letter-spacing:-.01em}
+  .sticky-cta .btn{flex:1;white-space:nowrap;min-height:46px}
+  .detail{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+  .toast{bottom:calc(86px + env(safe-area-inset-bottom))}
+  /* tap target ≥44px tanpa mengubah proporsi di desktop */
+  .m-close{width:42px;height:42px}
+  .g-arrow{width:44px;height:44px}
+  .lb-close{width:44px;height:44px}
+  .photo-strip .rm{width:30px;height:30px;font-size:13px}
+  .thumbs button{width:64px;height:50px}
+}
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   *{animation-duration:.001s !important;transition-duration:.001s !important}
@@ -593,7 +635,10 @@ function Bike3D({ introPhoto }) {
       setFailed(true)
       return
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    // Layar sempit (HP) dapat cap lebih rendah — hemat GPU tanpa kelihatan buram
+    // karena render area-nya juga lebih kecil.
+    const dprCap = window.innerWidth <= 480 ? 1.5 : 2
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -1619,17 +1664,33 @@ function DetailView({ listing, nav, onBook }) {
             <div className="rows">
               <div className="row"><span>Harga unit</span><b>{rupiah(listing.price)}</b></div>
               <div className="row"><span>{warranty.name}<small>dibayar saat pelunasan</small></span><b>{warranty.price ? rupiah(warranty.price) : 'Termasuk'}</b></div>
-              <div className="row hl"><span>DP kunci unit<small>dibayar sekarang via QRIS</small></span><b>{rupiah(DP_FIXED)}</b></div>
+              <div className="row hl"><span>DP kunci unit<small>{PAYMENT_MODE === 'whatsapp' ? 'dikonfirmasi via WhatsApp CS' : 'dibayar sekarang via QRIS'}</small></span><b>{rupiah(DP_FIXED)}</b></div>
             </div>
 
             <button className="btn btn-accent btn-full" disabled={!canBook}
               onClick={() => onBook(listing, warranty)}>
-              {canBook ? 'Booking DP via QRIS' : listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
+              {canBook
+                ? (PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : 'Booking DP via QRIS')
+                : listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
             </button>
-            <p className="fine">DP {rupiah(DP_FIXED)} mengunci unit 3 hari kerja. Sisa pembayaran + garansi
-              dibayar saat serah terima di Motorell. DP kembali penuh bila unit tidak sesuai laporan kurasi.</p>
+            <p className="fine">{PAYMENT_MODE === 'whatsapp'
+              ? 'Tim Motorell akan membalas chat WhatsApp-mu untuk konfirmasi ketersediaan dan proses DP ' +
+                rupiah(DP_FIXED) + ' yang mengunci unit selama 3 hari kerja.'
+              : 'DP ' + rupiah(DP_FIXED) + ' mengunci unit 3 hari kerja. Sisa pembayaran + garansi ' +
+                'dibayar saat serah terima di Motorell. DP kembali penuh bila unit tidak sesuai laporan kurasi.'}</p>
           </aside>
         </div>
+        {canBook && (
+          <div className="sticky-cta">
+            <div className="sticky-cta-price">
+              <span>Harga unit</span>
+              <b>{rupiah(listing.price)}</b>
+            </div>
+            <button className="btn btn-accent" onClick={() => onBook(listing, warranty)}>
+              {PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : 'Booking DP via QRIS'}
+            </button>
+          </div>
+        )}
       </div>
     </section>
   )
@@ -1873,6 +1934,7 @@ export default function App() {
   }, [session, pending, listings])
 
   const requestBooking = useCallback((listing, warranty) => {
+    if (PAYMENT_MODE === 'whatsapp') { openWhatsAppCS(listing, toast); return }
     if (!session) {
       setPending({ slug: listing.slug, wcode: warranty.code })
       setAuthOpen(true)
