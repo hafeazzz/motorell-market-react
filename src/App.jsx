@@ -459,6 +459,10 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .a-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
   flex-wrap:wrap;margin-bottom:28px}
 .a-head h1{font-size:clamp(27px,3.4vw,40px);font-weight:750;letter-spacing:-.025em}
+.a-tabs{display:flex;gap:6px;background:var(--bg-2);border:1px solid var(--line);
+  border-radius:999px;padding:4px;width:fit-content;margin-bottom:24px}
+.a-tabs button{padding:9px 18px;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--muted)}
+.a-tabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(17,17,20,.08)}
 .a-list{display:flex;flex-direction:column;gap:11px}
 .a-row{background:var(--panel);border:1px solid var(--line);border-radius:12px;
   padding:15px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;box-shadow:var(--shadow)}
@@ -1280,8 +1284,86 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
   )
 }
 
+// ---------- Kelola staf (khusus role admin) ----------
+const ROLE_LABEL = { admin: 'Admin', kurator: 'Kurator', null: 'Tanpa akses' }
+
+function StaffPanel({ profile, toast }) {
+  const [rows, setRows] = useState(null)
+  const [err, setErr] = useState('')
+  const [busyId, setBusyId] = useState(null)
+
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.from('profiles')
+      .select('*').order('full_name', { ascending: true })
+    if (error) { setErr(error.message); setRows([]); return }
+    setErr(''); setRows(data || [])
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  async function setRole(p, role) {
+    setBusyId(p.id)
+    const { error } = await supabase.from('profiles').update({ role }).eq('id', p.id)
+    setBusyId(null)
+    if (error) { toast('Gagal ubah akses: ' + error.message); return }
+    toast((p.full_name || 'Pengguna') + ' sekarang ' + (ROLE_LABEL[role] || role).toLowerCase())
+    load()
+  }
+
+  return (
+    <div>
+      <p className="f-info" style={{ marginBottom: 18 }}>
+        Orang baru harus <b>Daftar</b> lewat tombol Masuk di navbar dulu (email + password) sebelum
+        namanya muncul di sini. Setelah itu, atur akses lewat daftar di bawah — tidak perlu SQL manual lagi.
+      </p>
+
+      {rows === null && !err && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
+      {err && (
+        <div className="empty" style={{ textAlign: 'left' }}>
+          Tidak bisa memuat daftar pengguna: <span className="mono">{err}</span><br />
+          Kemungkinan kebijakan RLS tabel <span className="mono">profiles</span> belum mengizinkan admin
+          melihat/mengubah baris pengguna lain. Tanyakan ke asisten teknismu untuk menambahkan policy tersebut.
+        </div>
+      )}
+      {rows && rows.length === 0 && !err && (
+        <div className="empty">Belum ada pengguna terdaftar selain kamu.</div>
+      )}
+      {rows && rows.length > 0 && (
+        <div className="a-list">
+          {rows.map((p) => {
+            const isSelf = p.id === profile.id
+            return (
+              <div className="a-row" key={p.id}>
+                <div className="a-info">
+                  <b>{p.full_name || 'Tanpa nama'}{isSelf ? ' (kamu)' : ''}</b>
+                  <span>{p.email || p.id}</span>
+                </div>
+                <div className="a-actions">
+                  {isSelf ? (
+                    <span className="f-info" style={{ margin: 0 }}>
+                      {ROLE_LABEL[p.role] || p.role} — minta admin lain untuk mengubah aksesmu sendiri</span>
+                  ) : (
+                    ['admin', 'kurator', null].map((r) => (
+                      <button key={String(r)} type="button"
+                        className={'btn btn-sm ' + (p.role === r ? 'btn-dark' : 'btn-ghost')}
+                        disabled={busyId === p.id}
+                        onClick={() => setRole(p, r)}>
+                        {ROLE_LABEL[r]}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---------- Panel admin ----------
 function AdminPanel({ profile, toast, nav }) {
+  const [view, setView] = useState('units') // units | staff
   const [rows, setRows] = useState(null)
   const [form, setForm] = useState(null) // null | {} (baru) | listing (edit)
 
@@ -1304,53 +1386,69 @@ function AdminPanel({ profile, toast, nav }) {
     toast(msg); load()
   }
 
+  const canManageStaff = profile.role === 'admin'
+
   return (
     <section className="admin">
       <div className="container">
         <div className="a-head">
           <div>
             <p className="kicker">Panel admin — {profile.full_name}</p>
-            <h1>Kelola etalase</h1>
+            <h1>{view === 'staff' ? 'Kelola staf' : 'Kelola etalase'}</h1>
           </div>
-          <button className="btn btn-accent" onClick={() => setForm({})}>+ Tambah unit</button>
+          {view === 'units' && (
+            <button className="btn btn-accent" onClick={() => setForm({})}>+ Tambah unit</button>)}
         </div>
 
-        {rows === null && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
-        {rows && rows.length === 0 && (
-          <div className="empty">Belum ada unit. Klik "Tambah unit" untuk mengisi etalase pertamamu.</div>
-        )}
-        {rows && rows.length > 0 && (
-          <div className="a-list">
-            {rows.map((l) => (
-              <div className="a-row" key={l.id}>
-                <div className="a-thumb">
-                  {Array.isArray(l.photos) && l.photos[0]
-                    ? <img src={l.photos[0]} alt="" />
-                    : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
-                </div>
-                <div className="a-info">
-                  <b>{l.title}</b>
-                  <span>{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' km' : 'km —'} · grade {l.grade} · {Array.isArray(l.photos) ? l.photos.length : 0} foto</span>
-                </div>
-                <span className="a-price">{rupiah(l.price)}</span>
-                <span className={'st ' + l.status}>{STATUS_LABEL[l.status] || l.status}</span>
-                <div className="a-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={() => setForm(l)}>Edit</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => nav('#/unit/' + l.slug)}>Lihat</button>
-                  {l.status === 'draft' && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l, 'published')}>Tayangkan</button>)}
-                  {l.status === 'published' && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l, 'draft')}>Tarik</button>)}
-                  {(l.status === 'booked' || l.status === 'sold') && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l, 'published')}>Kembalikan ke etalase</button>)}
-                  {(l.status === 'published' || l.status === 'booked') && (
-                    <button className="btn btn-ghost btn-sm"
-                      onClick={() => { if (confirm('Tandai ' + l.title + ' sebagai TERJUAL? Unit akan hilang dari etalase.')) setStatus(l, 'sold') }}>
-                      Tandai terjual</button>)}
-                </div>
-              </div>
-            ))}
+        {canManageStaff && (
+          <div className="a-tabs">
+            <button type="button" className={view === 'units' ? 'on' : ''} onClick={() => setView('units')}>Etalase</button>
+            <button type="button" className={view === 'staff' ? 'on' : ''} onClick={() => setView('staff')}>Staf</button>
           </div>
+        )}
+
+        {view === 'staff' && canManageStaff && <StaffPanel profile={profile} toast={toast} />}
+
+        {view === 'units' && (
+          <>
+            {rows === null && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
+            {rows && rows.length === 0 && (
+              <div className="empty">Belum ada unit. Klik "Tambah unit" untuk mengisi etalase pertamamu.</div>
+            )}
+            {rows && rows.length > 0 && (
+              <div className="a-list">
+                {rows.map((l) => (
+                  <div className="a-row" key={l.id}>
+                    <div className="a-thumb">
+                      {Array.isArray(l.photos) && l.photos[0]
+                        ? <img src={l.photos[0]} alt="" />
+                        : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
+                    </div>
+                    <div className="a-info">
+                      <b>{l.title}</b>
+                      <span>{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' km' : 'km —'} · grade {l.grade} · {Array.isArray(l.photos) ? l.photos.length : 0} foto</span>
+                    </div>
+                    <span className="a-price">{rupiah(l.price)}</span>
+                    <span className={'st ' + l.status}>{STATUS_LABEL[l.status] || l.status}</span>
+                    <div className="a-actions">
+                      <button className="btn btn-ghost btn-sm" onClick={() => setForm(l)}>Edit</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => nav('#/unit/' + l.slug)}>Lihat</button>
+                      {l.status === 'draft' && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l, 'published')}>Tayangkan</button>)}
+                      {l.status === 'published' && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l, 'draft')}>Tarik</button>)}
+                      {(l.status === 'booked' || l.status === 'sold') && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l, 'published')}>Kembalikan ke etalase</button>)}
+                      {(l.status === 'published' || l.status === 'booked') && (
+                        <button className="btn btn-ghost btn-sm"
+                          onClick={() => { if (confirm('Tandai ' + l.title + ' sebagai TERJUAL? Unit akan hilang dari etalase.')) setStatus(l, 'sold') }}>
+                          Tandai terjual</button>)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
       {form !== null && (
