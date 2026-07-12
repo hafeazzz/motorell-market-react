@@ -156,7 +156,8 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   transition:background .3s,border-color .3s,backdrop-filter .3s}
 .nav.scrolled{background:rgba(255,255,255,.86);backdrop-filter:blur(16px);
   border-color:var(--line)}
-.nav-in{display:flex;align-items:center;justify-content:space-between;padding:16px 0}
+.nav-in{display:flex;align-items:center;justify-content:space-between;
+  padding-block:calc(16px + env(safe-area-inset-top)) 16px}
 .logo{font-weight:800;font-size:19px;letter-spacing:.01em;display:flex;
   align-items:center;gap:8px}
 .logo i{font-style:normal;color:var(--accent);font-size:15px}
@@ -179,9 +180,12 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .btn-sm{padding:9px 17px;font-size:13px}
 .btn-full{width:100%}
 
-/* ---------- hero (full-bleed, 3D as ambient background) ---------- */
-.hero{position:relative;min-height:94vh;min-height:94svh;min-height:94dvh;display:flex;align-items:center;
-  padding:148px 0 44px;border-bottom:1px solid var(--line);overflow:hidden;
+/* ---------- hero (full-bleed, 3D as ambient background) ----------
+   Basis mobile dulu (tinggi otomatis, padding atas secukupnya untuk lolos
+   dari nav fixed); baru di layar besar hero dikunci ke tinggi viewport dan
+   padding atas ditambah — lihat @media(min-width:1021px) di bagian bawah. */
+.hero{position:relative;min-height:0;display:flex;align-items:center;
+  padding:128px 0 44px;border-bottom:1px solid var(--line);overflow:hidden;
   background:
     radial-gradient(1200px 640px at 80% 34%, #fafaf9, transparent 62%),
     linear-gradient(180deg,#ffffff 0%,#fbfbfa 100%)}
@@ -192,7 +196,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   background-size:64px 64px;
   mask-image:radial-gradient(80% 70% at 68% 40%, #000 0%, transparent 72%);
   -webkit-mask-image:radial-gradient(80% 70% at 68% 40%, #000 0%, transparent 72%)}
-.hero-3d{position:absolute;inset:0;z-index:1}
+.hero-3d{position:absolute;inset:0;z-index:1;opacity:.5}
 .bike3d{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
 .bike3d:active{cursor:grabbing}
 .bike3d canvas{display:block;width:100% !important;height:100% !important}
@@ -216,14 +220,12 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   .bike3d-photo::after{display:none}
 }
 .hero-fade{position:absolute;inset:0;z-index:2;pointer-events:none;
-  background:
-    linear-gradient(90deg, rgba(255,255,255,.99) 0%, rgba(255,255,255,.82) 30%, rgba(255,255,255,0) 56%),
-    linear-gradient(0deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,0) 24%)}
+  background:linear-gradient(0deg, rgba(255,255,255,.97) 0%, rgba(255,255,255,.55) 46%, rgba(255,255,255,.1) 100%)}
 /* pointer-events:none supaya drag di atas motor tembus ke canvas 3D di bawah;
    hanya blok teks & spec-rail yang kembali menangkap klik */
 .hero-inner{position:relative;z-index:3;width:100%;pointer-events:none}
 .hero-copy,.spec-rail{pointer-events:auto}
-.hero-copy{max-width:580px}
+.hero-copy{max-width:100%}
 .hero-copy h1{font-size:clamp(46px,6.4vw,86px);font-weight:750;line-height:.97;
   letter-spacing:-.03em;margin:22px 0 22px}
 .hero-copy h1 em{font-style:normal;color:var(--accent)}
@@ -233,7 +235,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
 .spec-rail{display:flex;flex-wrap:wrap;border:1px solid var(--line);
   border-radius:12px;margin-top:52px;overflow:hidden;background:rgba(255,255,255,.78);
-  backdrop-filter:blur(10px);max-width:900px}
+  backdrop-filter:blur(10px);max-width:100%}
 .spec-rail span{flex:1;min-width:170px;padding:18px 22px;font-family:var(--mono);
   font-size:12px;letter-spacing:.05em;color:var(--muted);
   border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
@@ -243,14 +245,14 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 /* ---------- section ---------- */
 .section{padding:clamp(60px,8vw,104px) 0}
 .section.grey{background:var(--bg-2);border-block:1px solid var(--line)}
-.sec-head{display:flex;justify-content:space-between;align-items:flex-end;gap:26px;
+.sec-head{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:26px;
   margin-bottom:clamp(30px,4vw,46px)}
 .sec-head h2{font-size:clamp(30px,4vw,50px);font-weight:740;letter-spacing:-.025em;
   line-height:1.02;margin-top:13px}
 .sec-head .aside{max-width:330px;font-size:14.5px;color:var(--muted);line-height:1.55}
 
 /* ---------- grid unit ---------- */
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.grid{display:grid;grid-template-columns:1fr;gap:18px}
 .card-wrap{opacity:0;transform:translateY(24px);
   transition:opacity .55s ease,transform .6s cubic-bezier(.2,.7,.25,1)}
 .card-wrap.shown{opacity:1;transform:none}
@@ -309,11 +311,11 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   text-align:center;color:var(--muted);font-size:15px;grid-column:1/-1;background:var(--panel)}
 
 /* ---------- trust ---------- */
-.trust{display:grid;grid-template-columns:repeat(2,1fr);gap:0;
+.trust{display:grid;grid-template-columns:1fr;gap:0;
   border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
-.trust > div{padding:34px 30px;border-right:1px solid var(--line);
+.trust > div{padding:34px 30px;border-bottom:1px solid var(--line);
   display:flex;flex-direction:column;align-items:flex-start}
-.trust > div:last-child{border-right:none}
+.trust > div:last-child{border-bottom:none}
 /* angka dikunci pada tinggi baris yang sama dan diratakan ke bawah,
    supaya baseline "180" dan "Rp 500.000" sejajar walau ukuran font beda */
 .trust .n{font-family:var(--font);font-size:44px;font-weight:780;letter-spacing:-.03em;
@@ -324,21 +326,35 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .trust p{font-size:13.5px;color:var(--muted);line-height:1.6}
 
 /* ---------- detail ---------- */
-.detail{padding:118px 0 88px}
+.detail{padding:118px 0 calc(112px + env(safe-area-inset-bottom))}
 .back{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--muted);
   margin-bottom:28px;display:inline-flex;gap:8px}
 .back:hover{color:var(--accent)}
-.detail-grid{display:grid;grid-template-columns:7fr 5fr;gap:clamp(26px,3.5vw,56px);align-items:start}
-/* CTA menempel di bawah layar HP — panel harga lengkap tetap ada di alur
-   normal untuk desktop/tablet, ini cuma jalan pintas biar tak perlu scroll jauh */
-.sticky-cta{display:none}
+.detail-grid{display:grid;grid-template-columns:1fr;gap:clamp(26px,3.5vw,56px);align-items:start}
+/* CTA menempel di bawah layar HP (basis/default) — panel harga lengkap
+   tetap ada di alur normal, sticky bar ini jalan pintas biar tak perlu
+   scroll jauh. Disembunyikan lagi di layar besar lewat
+   @media(min-width:768px) di bagian bawah, karena di situ CTA di dalam
+   panel sudah cukup dekat/terlihat tanpa perlu jalan pintas. */
+.sticky-cta{display:flex;align-items:center;gap:8px;position:fixed;left:0;right:0;bottom:0;
+  z-index:70;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);box-shadow:0 -6px 24px rgba(17,17,20,.1);
+  padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
+.sticky-cta-price{display:flex;flex-direction:column;line-height:1.2;flex:none}
+.sticky-cta-price span{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;
+  color:var(--muted);text-transform:uppercase}
+.sticky-cta-price b{font-size:13.5px;font-weight:760;white-space:nowrap;letter-spacing:-.01em}
+.sticky-cta .btn{flex:1;white-space:nowrap;min-height:46px;font-size:13px;padding:12px 14px}
+/* tombol besar di panel disembunyikan kalau sticky bar kembar sudah tampil,
+   supaya tidak ada dua CTA identik terlihat berbarengan di layar sempit */
+.panel-cta.has-sticky-twin{display:none}
 .gallery-main{aspect-ratio:4/3;border-radius:14px;overflow:hidden;position:relative;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%);
   border:1px solid var(--line)}
 .gallery-main img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .gallery-main.has-photo img{cursor:zoom-in;touch-action:pan-y;user-select:none}
 .gallery-main .blp{position:absolute;inset:13% 10%;opacity:1}
-.g-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:40px;height:40px;
+.g-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:44px;height:44px;
   border-radius:50%;background:rgba(255,255,255,.92);border:1px solid var(--line-2);
   font-size:15px;display:flex;align-items:center;justify-content:center;
   box-shadow:0 2px 10px rgba(17,17,20,.14);transition:opacity .2s,border-color .2s,color .2s}
@@ -359,12 +375,12 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .lightbox .g-arrow.next{right:20px}
 .lightbox .g-count{top:auto;bottom:20px;left:50%;right:auto;transform:translateX(-50%);
   background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.25);color:#fff}
-.lb-close{position:absolute;top:16px;right:16px;z-index:4;width:42px;height:42px;border-radius:50%;
+.lb-close{position:absolute;top:16px;right:16px;z-index:4;width:44px;height:44px;border-radius:50%;
   border:1.5px solid rgba(255,255,255,.4);color:#fff;font-size:16px;
   display:flex;align-items:center;justify-content:center;transition:border-color .2s}
 .lb-close:hover{border-color:#fff}
 .thumbs{display:flex;gap:10px;margin-top:11px;flex-wrap:wrap}
-.thumbs button{width:78px;height:60px;border-radius:9px;overflow:hidden;
+.thumbs button{width:64px;height:50px;border-radius:9px;overflow:hidden;
   border:1.5px solid var(--line);opacity:.6;transition:opacity .2s,border-color .2s;background:var(--bg-2)}
 .thumbs button.on{opacity:1;border-color:var(--accent)}
 .thumbs img{width:100%;height:100%;object-fit:cover}
@@ -375,13 +391,14 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .issues{margin-top:28px;border-left:3px solid var(--warn);padding-left:17px}
 .issues p{color:var(--muted)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
-  padding:28px;position:sticky;top:98px;box-shadow:var(--shadow)}
+  padding:28px;position:static;top:98px;box-shadow:var(--shadow)}
 .panel h1{font-size:clamp(25px,2.6vw,33px);font-weight:760;letter-spacing:-.02em;line-height:1.06}
 .panel .price{font-size:26px;font-weight:780;margin:11px 0 22px;letter-spacing:-.02em}
-.specs{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);
+.specs{display:grid;grid-template-columns:repeat(2,1fr);border:1px solid var(--line);
   border-radius:11px;overflow:hidden;margin-bottom:26px}
 .specs div{padding:13px 10px;border-right:1px solid var(--line);text-align:center}
 .specs div:last-child{border-right:none}
+.specs div:nth-child(2){border-right:none}
 .specs small{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
   color:var(--dim);text-transform:uppercase;margin-bottom:6px}
 .specs b{font-size:14px;font-weight:700;white-space:nowrap}
@@ -426,7 +443,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   position:sticky;top:0;background:var(--panel);z-index:2}
 .m-head h3{font-size:16px;font-weight:700}
 .m-head .sub{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
-.m-close{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line-2);
+.m-close{width:42px;height:42px;border-radius:50%;border:1.5px solid var(--line-2);
   font-size:15px;line-height:1;flex:none;transition:border-color .2s,color .2s}
 .m-close:hover{border-color:var(--accent);color:var(--accent)}
 .m-body{padding:20px}
@@ -457,7 +474,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   background:rgba(31,157,85,.1);padding:4px 10px;border-radius:999px}
 
 /* ---------- form ---------- */
-.f-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.f-grid{display:grid;grid-template-columns:1fr;gap:13px}
 .field{display:flex;flex-direction:column;gap:6px}
 .field.full{grid-column:1/-1}
 .field label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
@@ -485,7 +502,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .a-tabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(17,17,20,.08)}
 .a-list{display:flex;flex-direction:column;gap:11px}
 .a-row{background:var(--panel);border:1px solid var(--line);border-radius:12px;
-  padding:15px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;box-shadow:var(--shadow)}
+  padding:15px 18px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;box-shadow:var(--shadow)}
 .a-thumb{width:76px;height:56px;border-radius:8px;overflow:hidden;flex:none;
   background:var(--bg-2);border:1px solid var(--line);
   display:flex;align-items:center;justify-content:center}
@@ -510,8 +527,8 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   font-weight:600;letter-spacing:.09em;text-align:center;background:var(--accent);color:#fff;
   padding:2.5px 0;pointer-events:none}
 .photo-strip img{width:100%;height:100%;object-fit:cover}
-.photo-strip .rm{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
-  background:rgba(255,255,255,.92);border:1px solid var(--line-2);font-size:11px;
+.photo-strip .rm{position:absolute;top:4px;right:4px;width:30px;height:30px;border-radius:50%;
+  background:rgba(255,255,255,.92);border:1px solid var(--line-2);font-size:13px;
   display:flex;align-items:center;justify-content:center;color:var(--ink)}
 .photo-strip .rm:hover{color:var(--accent);border-color:var(--accent)}
 .up-tile{width:90px;height:66px;border:1.5px dashed var(--line-2);border-radius:9px;
@@ -527,7 +544,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .foot-links a:hover{color:var(--accent)}
 .foot-base{margin-top:28px;font-family:var(--mono);font-size:11px;color:var(--dim);
   display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);z-index:120;
+.toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,16px);z-index:120;
   background:var(--ink);color:#fff;font-size:13.5px;font-weight:500;padding:12px 20px;
   border-radius:999px;opacity:0;pointer-events:none;transition:.3s;max-width:88vw;
   text-align:center;box-shadow:0 12px 40px rgba(17,17,20,.24)}
@@ -538,56 +555,54 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .cfg b{color:var(--ink)}
 .cfg code{font-family:var(--mono);font-size:12.5px;color:var(--accent)}
 
-@media(max-width:1020px){
+/* ============================================================
+   MOBILE-FIRST: basis di atas dirancang untuk 320–428px. Dari sini,
+   progressive enhancement ke layar lebih besar via min-width — bukan
+   sebaliknya. Urutan breakpoint SENGAJA menaik (381 → 681 → 768 →
+   1021) supaya cascade menumpuk dengan benar.
+   ============================================================ */
+/* tablet kecil ke atas: sticky-cta & tap target kembali ke ukuran
+   "normal" (dari basis extra-small di bawah 381px) */
+@media(min-width:381px){
+  .sticky-cta{gap:12px;padding-left:clamp(16px,5vw,24px);padding-right:clamp(16px,5vw,24px)}
+  .sticky-cta-price b{font-size:15px}
+  .sticky-cta .btn{font-size:14.5px;padding:12px 24px}
+}
+@media(min-width:681px){
   .grid{grid-template-columns:repeat(2,1fr)}
-  .detail-grid{grid-template-columns:1fr}
-  .panel{position:static}
-  .hero{min-height:0;padding-top:128px}
+  .trust{grid-template-columns:repeat(2,1fr)}
+  .trust > div{border-bottom:none;border-right:1px solid var(--line)}
+  .trust > div:last-child{border-right:none}
+  .sec-head{flex-direction:row;align-items:flex-end}
+  .f-grid{grid-template-columns:1fr 1fr}
+  .specs{grid-template-columns:repeat(4,1fr)}
+  .specs div:nth-child(2){border-right:1px solid var(--line)}
+  .a-row{align-items:center}
+}
+/* dari tablet ke atas, panel harga di alur normal sudah cukup dekat —
+   sticky bar & penambahan tap-target ala mobile tak diperlukan lagi */
+@media(min-width:768px){
+  .sticky-cta{display:none}
+  .panel-cta.has-sticky-twin{display:block}
+  .detail{padding-bottom:88px}
+  .toast{bottom:24px}
+  .m-close{width:34px;height:34px}
+  .g-arrow{width:40px;height:40px}
+  .lb-close{width:42px;height:42px}
+  .photo-strip .rm{width:22px;height:22px;font-size:11px}
+  .thumbs button{width:78px;height:60px}
+}
+@media(min-width:1021px){
+  .grid{grid-template-columns:repeat(3,1fr)}
+  .detail-grid{grid-template-columns:7fr 5fr}
+  .panel{position:sticky}
+  .hero{min-height:94vh;min-height:94svh;min-height:94dvh;padding-top:148px}
   .hero-fade{background:
-    linear-gradient(0deg, rgba(255,255,255,.97) 0%, rgba(255,255,255,.55) 46%, rgba(255,255,255,.1) 100%)}
-  .hero-3d{opacity:.5}
-  .hero-copy{max-width:100%}
-  .spec-rail{max-width:100%}
-}
-@media(max-width:680px){
-  .grid{grid-template-columns:1fr}
-  .trust{grid-template-columns:1fr}
-  .trust div{border-right:none;border-bottom:1px solid var(--line)}
-  .trust div:last-child{border-bottom:none}
-  .sec-head{flex-direction:column;align-items:flex-start}
-  .f-grid{grid-template-columns:1fr}
-  .specs{grid-template-columns:repeat(2,1fr)}
-  .specs div:nth-child(2){border-right:none}
-  .a-row{align-items:flex-start}
-}
-/* ---------- mobile: CTA sticky, safe-area, tap target ≥44px ---------- */
-@media(max-width:767px){
-  .nav-in{padding-top:env(safe-area-inset-top)}
-  .sticky-cta{display:flex;align-items:center;gap:12px;position:fixed;left:0;right:0;bottom:0;
-    z-index:70;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);
-    border-top:1px solid var(--line);box-shadow:0 -6px 24px rgba(17,17,20,.1);
-    padding:12px clamp(16px,5vw,24px) calc(12px + env(safe-area-inset-bottom))}
-  .sticky-cta-price{display:flex;flex-direction:column;line-height:1.2;flex:none}
-  .sticky-cta-price span{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;
-    color:var(--muted);text-transform:uppercase}
-  .sticky-cta-price b{font-size:15px;font-weight:760;white-space:nowrap;letter-spacing:-.01em}
-  .sticky-cta .btn{flex:1;white-space:nowrap;min-height:46px}
-  .detail{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
-  .toast{bottom:calc(86px + env(safe-area-inset-bottom))}
-  /* tombol besar di panel disembunyikan kalau sticky bar kembar sudah tampil,
-     supaya tidak ada dua CTA identik terlihat berbarengan di layar sempit */
-  .panel-cta.has-sticky-twin{display:none}
-  /* tap target ≥44px tanpa mengubah proporsi di desktop */
-  .m-close{width:42px;height:42px}
-  .g-arrow{width:44px;height:44px}
-  .lb-close{width:44px;height:44px}
-  .photo-strip .rm{width:30px;height:30px;font-size:13px}
-  .thumbs button{width:64px;height:50px}
-}
-@media(max-width:380px){
-  .sticky-cta{gap:8px;padding-left:14px;padding-right:14px}
-  .sticky-cta-price b{font-size:13.5px}
-  .sticky-cta .btn{font-size:13px;padding:12px 14px}
+    linear-gradient(90deg, rgba(255,255,255,.99) 0%, rgba(255,255,255,.82) 30%, rgba(255,255,255,0) 56%),
+    linear-gradient(0deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,0) 24%)}
+  .hero-3d{opacity:1}
+  .hero-copy{max-width:580px}
+  .spec-rail{max-width:900px}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -660,11 +675,28 @@ function Bike3D({ introPhoto }) {
     const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
     scene.environment = envTex
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 50)
-    // Kamera "melihat" ke titik di kiri motor, bukan ke motornya langsung —
-    // pada frame lebar (hero full-bleed) ini mendorong motor ke sisi kanan,
-    // menyisakan ruang kosong di kiri untuk teks headline.
-    camera.position.set(3.6, 1.55, 5.0)
-    camera.lookAt(-1.6, 0.75, 0)
+    // Framing kamera responsif terhadap aspect ratio kontainer, di antara dua
+    // titik yang sudah ditentukan:
+    // - WIDE  (aspect ≥ 1.7, hero desktop full-bleed): kamera "melihat" ke titik
+    //   di kiri motor, bukan ke motornya langsung — mendorong motor ke sisi
+    //   kanan, menyisakan ruang kosong di kiri untuk teks headline. Ini persis
+    //   nilai lama, supaya tampilan desktop tidak berubah sama sekali.
+    // - NARROW (aspect ≤ 0.62, hero mobile potret): kamera mundur & motor
+    //   diposisikan di tengah, supaya seluruh bodi (roda depan-belakang,
+    //   tangki, setang) tetap masuk frame — tidak lagi terpotong seperti
+    //   sebelumnya saat frame sempit memakai framing versi wide.
+    // Di antara dua titik itu, posisi & target di-interpolasi linear.
+    const FRAME_WIDE = { pos: new THREE.Vector3(3.6, 1.55, 5.0), look: new THREE.Vector3(-1.6, 0.75, 0) }
+    const FRAME_NARROW = { pos: new THREE.Vector3(1.9, 2.15, 9.4), look: new THREE.Vector3(0.05, 0.85, 0) }
+    const ASPECT_WIDE = 1.7
+    const ASPECT_NARROW = 0.62
+    const applyCameraFrame = (aspect) => {
+      const t = THREE.MathUtils.clamp((aspect - ASPECT_NARROW) / (ASPECT_WIDE - ASPECT_NARROW), 0, 1)
+      camera.position.lerpVectors(FRAME_NARROW.pos, FRAME_WIDE.pos, t)
+      const look = new THREE.Vector3().lerpVectors(FRAME_NARROW.look, FRAME_WIDE.look, t)
+      camera.lookAt(look)
+    }
+    applyCameraFrame(1) // nilai awal sebelum resize() pertama — sama seperti lama
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.15))
     const key = new THREE.DirectionalLight(0xffffff, 2.4)
@@ -888,6 +920,7 @@ function Bike3D({ introPhoto }) {
       const w = mount.clientWidth || 1, h = mount.clientHeight || 1
       renderer.setSize(w, h)
       camera.aspect = w / h
+      applyCameraFrame(camera.aspect)
       camera.updateProjectionMatrix()
     }
     resize()
