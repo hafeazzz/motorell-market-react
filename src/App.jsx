@@ -65,9 +65,8 @@ async function compressImage(file, maxW = 1600, quality = 0.82) {
 }
 
 function buildWaMessage(listing) {
-  const link = window.location.origin + window.location.pathname + '#/unit/' + listing.slug
   return 'Halo Motorell, saya mau tanya soal ' + listing.title + ' (' + rupiah(listing.price) + '). ' +
-    'Apakah masih tersedia?\n' + link
+    'Apakah masih tersedia?'
 }
 
 function openWhatsAppCS(listing, toast) {
@@ -181,7 +180,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .btn-full{width:100%}
 
 /* ---------- hero (full-bleed, 3D as ambient background) ---------- */
-.hero{position:relative;min-height:94vh;display:flex;align-items:center;
+.hero{position:relative;min-height:94vh;min-height:94svh;min-height:94dvh;display:flex;align-items:center;
   padding:148px 0 44px;border-bottom:1px solid var(--line);overflow:hidden;
   background:
     radial-gradient(1200px 640px at 80% 34%, #fafaf9, transparent 62%),
@@ -573,14 +572,22 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
     color:var(--muted);text-transform:uppercase}
   .sticky-cta-price b{font-size:15px;font-weight:760;white-space:nowrap;letter-spacing:-.01em}
   .sticky-cta .btn{flex:1;white-space:nowrap;min-height:46px}
-  .detail{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+  .detail{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
   .toast{bottom:calc(86px + env(safe-area-inset-bottom))}
+  /* tombol besar di panel disembunyikan kalau sticky bar kembar sudah tampil,
+     supaya tidak ada dua CTA identik terlihat berbarengan di layar sempit */
+  .panel-cta.has-sticky-twin{display:none}
   /* tap target ≥44px tanpa mengubah proporsi di desktop */
   .m-close{width:42px;height:42px}
   .g-arrow{width:44px;height:44px}
   .lb-close{width:44px;height:44px}
   .photo-strip .rm{width:30px;height:30px;font-size:13px}
   .thumbs button{width:64px;height:50px}
+}
+@media(max-width:380px){
+  .sticky-cta{gap:8px;padding-left:14px;padding-right:14px}
+  .sticky-cta-price b{font-size:13.5px}
+  .sticky-cta .btn{font-size:13px;padding:12px 14px}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -1667,17 +1674,19 @@ function DetailView({ listing, nav, onBook }) {
               <div className="row hl"><span>DP kunci unit<small>{PAYMENT_MODE === 'whatsapp' ? 'dikonfirmasi via WhatsApp CS' : 'dibayar sekarang via QRIS'}</small></span><b>{rupiah(DP_FIXED)}</b></div>
             </div>
 
-            <button className="btn btn-accent btn-full" disabled={!canBook}
-              onClick={() => onBook(listing, warranty)}>
-              {canBook
-                ? (PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : 'Booking DP via QRIS')
-                : listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
-            </button>
-            <p className="fine">{PAYMENT_MODE === 'whatsapp'
-              ? 'Tim Motorell akan membalas chat WhatsApp-mu untuk konfirmasi ketersediaan dan proses DP ' +
-                rupiah(DP_FIXED) + ' yang mengunci unit selama 3 hari kerja.'
-              : 'DP ' + rupiah(DP_FIXED) + ' mengunci unit 3 hari kerja. Sisa pembayaran + garansi ' +
-                'dibayar saat serah terima di Motorell. DP kembali penuh bila unit tidak sesuai laporan kurasi.'}</p>
+            <div className={'panel-cta' + (canBook ? ' has-sticky-twin' : '')}>
+              <button className="btn btn-accent btn-full" disabled={!canBook}
+                onClick={() => onBook(listing, warranty)}>
+                {canBook
+                  ? (PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : 'Booking DP via QRIS')
+                  : listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
+              </button>
+              <p className="fine">{PAYMENT_MODE === 'whatsapp'
+                ? 'Tim Motorell akan membalas chat WhatsApp-mu untuk konfirmasi ketersediaan dan proses DP ' +
+                  rupiah(DP_FIXED) + ' yang mengunci unit selama 3 hari kerja.'
+                : 'DP ' + rupiah(DP_FIXED) + ' mengunci unit 3 hari kerja. Sisa pembayaran + garansi ' +
+                  'dibayar saat serah terima di Motorell. DP kembali penuh bila unit tidak sesuai laporan kurasi.'}</p>
+            </div>
           </aside>
         </div>
         {canBook && (
