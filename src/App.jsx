@@ -197,9 +197,21 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   mask-image:radial-gradient(80% 70% at 68% 40%, #000 0%, transparent 72%);
   -webkit-mask-image:radial-gradient(80% 70% at 68% 40%, #000 0%, transparent 72%)}
 .hero-3d{position:absolute;inset:0;z-index:1;opacity:.5}
-.bike3d{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
+/* touch-action:none — drag vertikal DI ATAS motor mengontrol tilt kamera,
+   scroll halaman tetap jalan lewat area teks/CTA (pointer-events:auto) */
+.bike3d{position:absolute;inset:0;cursor:grab;touch-action:none}
 .bike3d:active{cursor:grabbing}
 .bike3d canvas{display:block;width:100% !important;height:100% !important}
+/* petunjuk gesture — di dalam flow (bawah CTA) supaya tidak pernah
+   menimpa teks lain di ukuran layar mana pun */
+.bike3d-hint{display:inline-flex;align-items:center;gap:8px;pointer-events:none;
+  margin-top:22px;font-family:var(--mono);font-size:10.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  background:rgba(255,255,255,.88);backdrop-filter:blur(8px);
+  border:1px solid var(--line);padding:8px 14px;border-radius:999px;
+  white-space:nowrap;animation:hint-bob 2.2s ease-in-out infinite}
+.bike3d-hint svg{width:16px;height:16px;color:var(--accent)}
+@keyframes hint-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .bike3d-fallback-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 /* foto unit asli yang "berubah" jadi render 3D saat hero dimuat */
 .bike3d-photo{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none;
@@ -222,9 +234,14 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .hero-fade{position:absolute;inset:0;z-index:2;pointer-events:none;
   background:linear-gradient(0deg, rgba(255,255,255,.97) 0%, rgba(255,255,255,.55) 46%, rgba(255,255,255,.1) 100%)}
 /* pointer-events:none supaya drag di atas motor tembus ke canvas 3D di bawah;
-   hanya blok teks & spec-rail yang kembali menangkap klik */
+   hanya ELEMEN teks/tombol yang menangkap pointer — bukan kotak containernya,
+   supaya ruang kosong di sekitar teks tetap bisa dipakai gesture 3D dan
+   scroll via sentuhan pada teks tetap normal */
 .hero-inner{position:relative;z-index:3;width:100%;pointer-events:none}
-.hero-copy,.spec-rail{pointer-events:auto}
+.hero-copy{pointer-events:none}
+.hero-copy h1,.hero-copy p,.spec-rail{pointer-events:auto}
+.hero-cta{pointer-events:none}
+.hero-cta .btn{pointer-events:auto}
 .hero-copy{max-width:100%}
 .hero-copy h1{font-size:clamp(46px,6.4vw,86px);font-weight:750;line-height:.97;
   letter-spacing:-.03em;margin:22px 0 22px}
@@ -233,17 +250,17 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
-.spec-rail{display:flex;flex-wrap:wrap;border:1px solid var(--line);
-  border-radius:12px;margin-top:52px;overflow:hidden;background:rgba(255,255,255,.78);
-  backdrop-filter:blur(10px);max-width:100%}
-.spec-rail span{flex:1;min-width:170px;padding:18px 22px;font-family:var(--mono);
-  font-size:12px;letter-spacing:.05em;color:var(--muted);
-  border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
-.spec-rail span:last-child{border-right:none}
-.spec-rail b{color:var(--ink);font-size:16px;font-weight:700;font-family:var(--font)}
+/* strip spesifikasi tipis ala lembar spek — label mono kecil di atas,
+   angka besar di bawah, dipisah whitespace (bukan kotak-kotak card) */
+.spec-rail{display:grid;grid-template-columns:repeat(2,1fr);gap:26px 20px;
+  margin-top:56px;padding-top:24px;border-top:1px solid var(--line-2);max-width:100%}
+.spec-rail span{display:flex;flex-direction:column;gap:9px;font-family:var(--mono);
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.spec-rail b{color:var(--ink);font-size:clamp(19px,5vw,29px);font-weight:750;
+  letter-spacing:-.02em;line-height:1;font-family:var(--font);white-space:nowrap}
 
 /* ---------- section ---------- */
-.section{padding:clamp(60px,8vw,104px) 0}
+.section{padding:clamp(76px,11vw,132px) 0}
 .section.grey{background:var(--bg-2);border-block:1px solid var(--line)}
 .sec-head{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:26px;
   margin-bottom:clamp(30px,4vw,46px)}
@@ -310,20 +327,22 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .empty{border:1px dashed var(--line-2);border-radius:var(--radius);padding:60px 24px;
   text-align:center;color:var(--muted);font-size:15px;grid-column:1/-1;background:var(--panel)}
 
-/* ---------- trust ---------- */
-.trust{display:grid;grid-template-columns:1fr;gap:0;
-  border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
-.trust > div{padding:34px 30px;border-bottom:1px solid var(--line);
-  display:flex;flex-direction:column;align-items:flex-start}
-.trust > div:last-child{border-bottom:none}
-/* angka dikunci pada tinggi baris yang sama dan diratakan ke bawah,
-   supaya baseline "180" dan "Rp 500.000" sejajar walau ukuran font beda */
-.trust .n{font-family:var(--font);font-size:44px;font-weight:780;letter-spacing:-.03em;
-  color:var(--accent);line-height:1;height:44px;display:flex;align-items:flex-end;
-  margin-bottom:14px}
-.trust .n.sm{font-size:30px}
-.trust h4{font-size:16px;font-weight:680;margin-bottom:9px}
-.trust p{font-size:13.5px;color:var(--muted);line-height:1.6}
+/* ---------- feature editorial (foto besar + teks berselang-seling) ---------- */
+.reveal{opacity:0;transform:translateY(28px);
+  transition:opacity .6s ease,transform .7s cubic-bezier(.2,.7,.25,1)}
+.reveal.shown{opacity:1;transform:none}
+.feature{display:grid;grid-template-columns:1fr;gap:28px;align-items:center}
+.feature + .feature{margin-top:clamp(64px,10vw,120px)}
+.feature-media{aspect-ratio:4/3;border-radius:16px;overflow:hidden;position:relative;
+  background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%);
+  border:1px solid var(--line)}
+.feature-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  opacity:0;transition:opacity .5s ease}
+.feature-media img.ok{opacity:1}
+.feature-media .blp{position:absolute;inset:12% 9%}
+.feature-copy h3{font-size:clamp(30px,4.6vw,46px);font-weight:745;letter-spacing:-.025em;
+  line-height:1.04;margin:14px 0 18px}
+.feature-copy > p:not(.kicker){font-size:15.5px;line-height:1.72;color:var(--muted);max-width:46ch}
 
 /* ---------- detail ---------- */
 .detail{padding:118px 0 calc(112px + env(safe-area-inset-bottom))}
@@ -384,12 +403,24 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   border:1.5px solid var(--line);opacity:.6;transition:opacity .2s,border-color .2s;background:var(--bg-2)}
 .thumbs button.on{opacity:1;border-color:var(--accent)}
 .thumbs img{width:100%;height:100%;object-fit:cover}
-.desc{margin-top:36px}
-.desc h4{font-family:var(--mono);font-size:11.5px;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--muted);margin-bottom:13px}
-.desc p{font-size:15.5px;line-height:1.72;color:#33363c;max-width:60ch;white-space:pre-line}
-.issues{margin-top:28px;border-left:3px solid var(--warn);padding-left:17px}
-.issues p{color:var(--muted)}
+/* tab switcher detail teknis (pola Engine/Chassis ala lembar spek) */
+.dtabs-wrap{margin-top:40px}
+.dtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.dtabs button{padding:13px 16px;font-size:14px;font-weight:600;color:var(--muted);
+  position:relative;white-space:nowrap;flex:none;transition:color .2s}
+.dtabs button:hover{color:var(--ink)}
+.dtabs button.on{color:var(--ink)}
+.dtabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:var(--accent)}
+.dtab-body{padding-top:22px;font-size:15.5px;line-height:1.72;color:#33363c;
+  max-width:60ch;white-space:pre-line;min-height:96px}
+.dtab-body .muted{color:var(--muted)}
+.dtab-warranty{list-style:none;max-width:540px}
+.dtab-warranty li{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;
+  padding:13px 0;border-bottom:1px solid var(--line)}
+.dtab-warranty b{font-size:14.5px;font-weight:680;flex:none}
+.dtab-warranty span{color:var(--muted);font-size:13px;flex:1;min-width:150px}
+.dtab-warranty em{font-style:normal;font-family:var(--mono);font-size:12.5px;font-weight:600}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:28px;position:static;top:98px;box-shadow:var(--shadow)}
 .panel h1{font-size:clamp(25px,2.6vw,33px);font-weight:760;letter-spacing:-.02em;line-height:1.06}
@@ -570,9 +601,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 }
 @media(min-width:681px){
   .grid{grid-template-columns:repeat(2,1fr)}
-  .trust{grid-template-columns:repeat(2,1fr)}
-  .trust > div{border-bottom:none;border-right:1px solid var(--line)}
-  .trust > div:last-child{border-right:none}
+  .spec-rail{grid-template-columns:repeat(4,1fr)}
   .sec-head{flex-direction:row;align-items:flex-end}
   .f-grid{grid-template-columns:1fr 1fr}
   .specs{grid-template-columns:repeat(4,1fr)}
@@ -594,6 +623,8 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 }
 @media(min-width:1021px){
   .grid{grid-template-columns:repeat(3,1fr)}
+  .feature{grid-template-columns:1fr 1fr;gap:clamp(44px,6vw,88px)}
+  .feature.flip .feature-media{order:2}
   .detail-grid{grid-template-columns:7fr 5fr}
   .panel{position:sticky}
   .hero{min-height:94vh;min-height:94svh;min-height:94dvh;padding-top:148px}
@@ -633,10 +664,14 @@ function Blueprint() {
 // ---------- Motor 3D interaktif (hero) ----------
 // Dibuka dengan foto asli salah satu unit di etalase, lalu "menyingkap"
 // jadi render 3D yang bisa diputar — bukan langsung tampil sebagai kartun.
-function Bike3D({ introPhoto }) {
+function Bike3D({ introPhoto, onInteract }) {
   const mountRef = useRef(null)
   const [failed, setFailed] = useState(false)
   const [revealed, setRevealed] = useState(!introPhoto)
+  // ref supaya closure event handler di dalam effect selalu memanggil
+  // callback terbaru tanpa perlu re-mount scene
+  const interactRef = useRef(onInteract)
+  interactRef.current = onInteract
 
   useEffect(() => {
     if (!introPhoto) return
@@ -690,19 +725,37 @@ function Bike3D({ introPhoto }) {
     const FRAME_NARROW = { pos: new THREE.Vector3(1.9, 2.15, 9.4), look: new THREE.Vector3(0.05, 0.85, 0) }
     const ASPECT_WIDE = 1.7
     const ASPECT_NARROW = 0.62
-    const applyCameraFrame = (aspect) => {
-      const t = THREE.MathUtils.clamp((aspect - ASPECT_NARROW) / (ASPECT_WIDE - ASPECT_NARROW), 0, 1)
-      camera.position.lerpVectors(FRAME_NARROW.pos, FRAME_WIDE.pos, t)
-      const look = new THREE.Vector3().lerpVectors(FRAME_NARROW.look, FRAME_WIDE.look, t)
-      camera.lookAt(look)
+    // Di atas base frame itu, user bisa menambah offset sendiri:
+    // - elev  : tilt kamera naik/turun (drag vertikal), clamp -20°..35°
+    // - zoom  : faktor jarak kamera (pinch dua jari), clamp 0.6..1.6
+    // Keduanya di-lerp tiap frame supaya halus, dan double-tap mengembalikan
+    // semuanya ke default dengan animasi (bukan snap).
+    const ELEV_MIN = -20 * Math.PI / 180, ELEV_MAX = 35 * Math.PI / 180
+    const ZOOM_MIN = 0.6, ZOOM_MAX = 1.6
+    let elev = 0, targetElev = 0, zoom = 1, targetZoom = 1
+    let curAspect = 1
+    const _pos = new THREE.Vector3(), _look = new THREE.Vector3(), _sph = new THREE.Spherical()
+    const updateCamera = () => {
+      const t = THREE.MathUtils.clamp((curAspect - ASPECT_NARROW) / (ASPECT_WIDE - ASPECT_NARROW), 0, 1)
+      _pos.lerpVectors(FRAME_NARROW.pos, FRAME_WIDE.pos, t)
+      _look.lerpVectors(FRAME_NARROW.look, FRAME_WIDE.look, t)
+      _sph.setFromVector3(_pos.sub(_look))
+      // elev positif = kamera naik = phi mengecil; jaga phi tetap aman dari kutub
+      _sph.phi = THREE.MathUtils.clamp(_sph.phi - elev, 0.18, Math.PI / 2 + 0.25)
+      _sph.radius *= zoom
+      camera.position.setFromSpherical(_sph).add(_look)
+      camera.lookAt(_look)
     }
-    applyCameraFrame(1) // nilai awal sebelum resize() pertama — sama seperti lama
+    updateCamera()
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.15))
     const key = new THREE.DirectionalLight(0xffffff, 2.4)
     key.position.set(3, 5, 4)
     key.castShadow = true
-    key.shadow.mapSize.set(1024, 1024)
+    // shadow map lebih kecil di layar HP — beda visualnya tak terlihat pada
+    // render area kecil, tapi jauh lebih ringan untuk GPU kelas menengah
+    const shadowRes = window.innerWidth < 768 ? 512 : 1024
+    key.shadow.mapSize.set(shadowRes, shadowRes)
     scene.add(key)
     const fill = new THREE.DirectionalLight(0xffe8d6, 0.5)
     fill.position.set(-4, 2, -3)
@@ -897,30 +950,72 @@ function Bike3D({ introPhoto }) {
     bike.position.y = 0.02
     scene.add(bike)
 
-    // ---- interaksi: seret untuk memutar ----
-    let rotY = -0.6, targetY = -0.6, dragging = false, lastX = 0
+    // ---- interaksi: 1 jari = putar (X) + tilt (Y), 2 jari = pinch zoom,
+    //      double-tap = reset kamera. Dilepas → momentum, lalu auto-spin. ----
+    const ROT_DEFAULT = -0.6
+    let rotY = ROT_DEFAULT, targetY = ROT_DEFAULT, lastX = 0, lastY = 0
+    let velY = 0 // kecepatan sudut terakhir, dipakai sebagai inertia saat dilepas
+    let lastTapAt = 0, lastPinchDist = 0
+    const pointers = new Map()
+    const dragging = () => pointers.size > 0
     const autoSpin = !reduced
+
+    const pinchDist = () => {
+      const [a, b] = [...pointers.values()]
+      return Math.hypot(a.x - b.x, a.y - b.y) || 1
+    }
     const onDown = (e) => {
-      dragging = true
-      lastX = e.clientX
-      if (mount.setPointerCapture) mount.setPointerCapture(e.pointerId)
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      try { mount.setPointerCapture(e.pointerId) } catch { /* pointer sudah lepas */ }
+      if (pointers.size === 1) {
+        lastX = e.clientX; lastY = e.clientY; velY = 0
+        // double-tap → kembalikan kamera & rotasi ke default (lerp di loop
+        // yang membuat transisinya halus, bukan snap)
+        const now = performance.now()
+        if (now - lastTapAt < 320) {
+          targetY = ROT_DEFAULT; targetElev = 0; targetZoom = 1
+          lastTapAt = 0
+        } else lastTapAt = now
+      } else if (pointers.size === 2) {
+        lastPinchDist = pinchDist()
+      }
+      if (interactRef.current) interactRef.current()
     }
     const onMove = (e) => {
-      if (!dragging) return
-      targetY += (e.clientX - lastX) * 0.012
-      lastX = e.clientX
+      if (!pointers.has(e.pointerId)) return
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (pointers.size === 1) {
+        const dx = e.clientX - lastX, dy = e.clientY - lastY
+        targetY += dx * 0.012
+        velY = dx * 0.012
+        targetElev = THREE.MathUtils.clamp(targetElev + dy * 0.006, ELEV_MIN, ELEV_MAX)
+        lastX = e.clientX; lastY = e.clientY
+      } else if (pointers.size === 2) {
+        const d = pinchDist()
+        // jari melebar (d naik) = zoom in = kamera mendekat (faktor < 1)
+        targetZoom = THREE.MathUtils.clamp(targetZoom * (lastPinchDist / d), ZOOM_MIN, ZOOM_MAX)
+        lastPinchDist = d
+      }
     }
-    const onUp = () => { dragging = false }
+    const onUp = (e) => {
+      pointers.delete(e.pointerId)
+      if (pointers.size === 1) {
+        // dari pinch turun ke 1 jari: re-anchor supaya tidak lompat
+        const p = [...pointers.values()][0]
+        lastX = p.x; lastY = p.y
+      }
+    }
     mount.addEventListener('pointerdown', onDown)
     mount.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
 
     // ---- ukuran mengikuti kontainer ----
     const resize = () => {
       const w = mount.clientWidth || 1, h = mount.clientHeight || 1
       renderer.setSize(w, h)
       camera.aspect = w / h
-      applyCameraFrame(camera.aspect)
+      curAspect = camera.aspect
       camera.updateProjectionMatrix()
     }
     resize()
@@ -932,9 +1027,17 @@ function Bike3D({ introPhoto }) {
     const loop = () => {
       raf = requestAnimationFrame(loop)
       t += 0.016
-      if (autoSpin && !dragging) targetY += 0.0038
+      if (!dragging()) {
+        // momentum: sisa kecepatan drag meluruh halus, lalu auto-spin pelan
+        targetY += velY
+        velY *= 0.94
+        if (autoSpin) targetY += 0.0038
+      }
       rotY += (targetY - rotY) * 0.08
+      elev += (targetElev - elev) * 0.1
+      zoom += (targetZoom - zoom) * 0.1
       bike.rotation.y = rotY
+      updateCamera()
       if (!reduced) {
         bike.position.y = 0.02 + Math.sin(t * 1.3) * 0.018
         for (const w of wheels) w.rotation.z -= 0.045
@@ -949,6 +1052,7 @@ function Bike3D({ introPhoto }) {
       mount.removeEventListener('pointerdown', onDown)
       mount.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
       scene.traverse((o) => {
         if (o.geometry) o.geometry.dispose()
         if (o.material) {
@@ -971,7 +1075,7 @@ function Bike3D({ introPhoto }) {
   return (
     <>
       <div ref={mountRef} className="bike3d" role="img"
-        aria-label="Model 3D motor Motorell — seret untuk memutar" />
+        aria-label="Model 3D motor Motorell — seret untuk memutar, cubit untuk zoom" />
       {introPhoto && (
         <div className={'bike3d-photo' + (revealed ? ' is-revealed' : '')} aria-hidden="true">
           <img src={introPhoto} alt="" />
@@ -1646,6 +1750,72 @@ function Gallery({ photos, title }) {
   )
 }
 
+// ---------- Reveal: fade + slide-up halus saat elemen masuk viewport ----------
+function Reveal({ children, className = '' }) {
+  const ref = useRef(null)
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (prefersReduced()) { setShown(true); return }
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setShown(true); io.disconnect() }
+    }, { threshold: 0.16 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return (
+    <div ref={ref} className={(className + ' reveal' + (shown ? ' shown' : '')).trim()}>
+      {children}
+    </div>
+  )
+}
+
+// ---------- Tab detail teknis unit (fade transition antar konten) ----------
+const DETAIL_TABS = [
+  { id: 'unit', label: 'Tentang unit' },
+  { id: 'kurasi', label: 'Catatan kurasi' },
+  { id: 'garansi', label: 'Garansi' },
+]
+
+function DetailTabs({ listing }) {
+  const [tab, setTab] = useState('unit')
+  return (
+    <div className="dtabs-wrap">
+      <div className="dtabs" role="tablist" aria-label="Detail unit">
+        {DETAIL_TABS.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id}
+            className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div key={tab} className="dtab-body" role="tabpanel"
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+          {tab === 'unit' && (
+            <p>{listing.description || 'Deskripsi lengkap menyusul. Hubungi Motorell untuk detail unit ini.'}</p>)}
+          {tab === 'kurasi' && (
+            listing.known_issues
+              ? <p>{listing.known_issues}</p>
+              : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>)}
+          {tab === 'garansi' && (
+            <ul className="dtab-warranty">
+              {WARRANTIES.map((w) => (
+                <li key={w.code}>
+                  <b>{w.name}</b>
+                  <span>{w.desc}</span>
+                  <em>{w.price ? '+' + rupiah(w.price) : 'Termasuk'}</em>
+                </li>
+              ))}
+            </ul>)}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  )
+}
+
 // ---------- Halaman detail unit ----------
 function DetailView({ listing, nav, onBook }) {
   const [wcode, setWcode] = useState('standard')
@@ -1660,16 +1830,7 @@ function DetailView({ listing, nav, onBook }) {
         <div className="detail-grid">
           <div>
             <Gallery photos={photos} title={listing.title} />
-            <div className="desc">
-              <h4>Tentang unit ini</h4>
-              <p>{listing.description || 'Deskripsi lengkap menyusul. Hubungi Motorell untuk detail unit ini.'}</p>
-            </div>
-            {listing.known_issues && (
-              <div className="desc issues">
-                <h4>Catatan kurasi</h4>
-                <p>{listing.known_issues}</p>
-              </div>
-            )}
+            <DetailTabs listing={listing} />
           </div>
 
           <aside className="panel">
@@ -1808,13 +1969,23 @@ function HomeView({ listings, nav }) {
     listings.find((l) => l.grade === 'A' && l.photos?.[0]) ||
     listings.find((l) => l.photos?.[0]) || null
   const introPhoto = introUnit?.photos?.[0] || null
+  // Petunjuk gesture 3D tampil sekali seumur perangkat: hilang begitu user
+  // berinteraksi pertama kali, diingat lewat localStorage. Dirender di sini
+  // (bukan di dalam .hero-3d) supaya tidak ikut transparan/tertutup layer teks.
+  const [hint3d, setHint3d] = useState(() => {
+    try { return !localStorage.getItem('m3d-hint-seen') } catch { return true }
+  })
+  const dismissHint = useCallback(() => {
+    try { localStorage.setItem('m3d-hint-seen', '1') } catch { /* private mode */ }
+    setHint3d(false)
+  }, [])
 
   return (
     <>
       <section className="hero">
         <div className="hero-grid-lines" aria-hidden="true" />
         <div className="hero-3d">
-          <Bike3D introPhoto={introPhoto} />
+          <Bike3D introPhoto={introPhoto} onInteract={dismissHint} />
         </div>
         <div className="hero-fade" aria-hidden="true" />
         <div className="container hero-inner">
@@ -1828,6 +1999,15 @@ function HomeView({ listings, nav }) {
               <a className="btn btn-dark" href="#etalase">Lihat semua unit</a>
               <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
             </div>
+            {hint3d && (
+              <span className="bike3d-hint" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12m0-1.5v-2a1.5 1.5 0 0 1 3 0V12m0-1v-.5a1.5 1.5 0 0 1 3 0V13c0 4-2.5 7-6.5 7-3 0-4.5-1.5-6-4l-1.7-3.3a1.4 1.4 0 0 1 2.3-1.5L8 14" />
+                </svg>
+                Seret · tilt · cubit untuk zoom
+              </span>
+            )}
           </div>
           <div className="spec-rail">
             <span>Unit tayang<b>{listings.length} unit</b></span>
@@ -1856,9 +2036,9 @@ function HomeView({ listings, nav }) {
         </div>
       </section>
 
-      <section className="section grey" id="kurasi">
+      <section className="section" id="kurasi">
         <div className="container">
-          <div className="sec-head">
+          <div className="sec-head" style={{ marginBottom: 'clamp(48px,7vw,84px)' }}>
             <div>
               <p className="kicker">Kenapa Motorell</p>
               <h2>Beli motor,<br />tanpa was-was.</h2>
@@ -1866,12 +2046,36 @@ function HomeView({ listings, nav }) {
             <p className="aside">Kami saring dulu, baru tayang. Yang sampai ke etalase hanya unit yang
               lolos pemeriksaan dan layak kamu bawa pulang.</p>
           </div>
-          <div className="trust">
-            <div><div className="n">180</div><h4>Hari garansi maksimal</h4>
-              <p>Tiga paket garansi mesin bisa dipilih saat booking — dari 30 hari standar sampai 180 hari plus servis berkala.</p></div>
-            <div><div className="n sm">{rupiah(DP_FIXED)}</div><h4>DP kunci unit via QRIS</h4>
-              <p>Unit terkunci otomatis begitu DP masuk, aman dari serobotan. DP kembali penuh bila unit tidak sesuai laporan kurasi.</p></div>
-          </div>
+          {[
+            {
+              kicker: 'Kurasi jujur',
+              title: 'Minus pun ditulis apa adanya.',
+              text: 'Setiap unit diperiksa mekanik sebelum boleh tayang — mesin, rangka, kelistrikan, dokumen, sampai uji jalan. Catatan kurasinya kamu baca sendiri di halaman unit, bukan disembunyikan.',
+            },
+            {
+              kicker: 'Garansi',
+              title: 'Garansi mesin sampai 180 hari.',
+              text: 'Tiga paket garansi bisa dipilih saat booking — dari 30 hari standar sampai 180 hari plus servis berkala. Semua tertulis, bukan janji lisan.',
+            },
+            {
+              kicker: 'Booking aman',
+              title: 'DP ' + rupiah(DP_FIXED) + ', unit langsung terkunci.',
+              text: 'Begitu DP masuk, unit hilang dari etalase dan aman dari serobotan. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi.',
+            },
+          ].map((f, i) => (
+            <Reveal key={f.kicker} className={'feature' + (i % 2 ? ' flip' : '')}>
+              <div className="feature-media">
+                {listings[i]?.photos?.[0]
+                  ? <FadeImg src={listings[i].photos[0]} alt="" loading="lazy" />
+                  : <Blueprint />}
+              </div>
+              <div className="feature-copy">
+                <p className="kicker">{f.kicker}</p>
+                <h3>{f.title}</h3>
+                <p>{f.text}</p>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </section>
     </>
