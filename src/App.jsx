@@ -24,13 +24,20 @@ const DP_FIXED = 500000
 // Batas foto per unit — foto pertama dalam urutan menjadi sampul etalase.
 const MAX_PHOTOS = 10
 
-// Opsi garansi — HARGA FINAL divalidasi ulang di Edge Function.
+// Paket perlindungan — HARGA FINAL divalidasi ulang di Edge Function.
 // Kalau mengubah harga di sini, ubah juga di create-dp-payment.
+// Nama paket sengaja tanpa kata "Garansi" (branding), tapi deskripsi tetap
+// menjelaskan cakupan garansi mesinnya secara eksplisit.
 const WARRANTIES = [
-  { code: 'standard', name: 'Garansi Standar', desc: 'Garansi mesin 30 hari', price: 0 },
-  { code: 'plus', name: 'Garansi Plus', desc: 'Mesin 90 hari + 1× servis', price: 350000 },
-  { code: 'max', name: 'Garansi Max', desc: 'Mesin 180 hari + 2× servis + tune-up', price: 750000 },
+  { code: 'standard', name: 'Avantgard', desc: 'Garansi mesin 7 hari', price: 0 },
+  { code: 'plus', name: 'Spectre', desc: 'Garansi mesin 21 hari + free 1× ganti oli', price: 350000 },
+  { code: 'max', name: 'Cullinan', desc: 'Garansi mesin 37 hari + free 1× servis & tune up', price: 750000 },
 ]
+
+// Paket yang boleh dipilih per grade. Unit grade B hanya kebagian paket dasar
+// (Avantgard) — Spectre & Cullinan disembunyikan untuk grade B.
+const warrantiesForGrade = (grade) =>
+  grade === 'B' ? WARRANTIES.filter((w) => w.code === 'standard') : WARRANTIES
 
 // Payment gateway QRIS belum siap produksi — untuk sementara tombol booking
 // mengarahkan ke WhatsApp CS. Ganti balik ke 'qris' saat gateway sudah siap;
@@ -52,6 +59,52 @@ const GRADE_DESC = {
   S: 'Istimewa, seperti baru — minus nyaris tidak ada.',
   A: 'Siap pakai, kondisi terawat sesuai umur.',
   B: 'Minus ringan tercatat jujur di halaman detail.',
+}
+
+// Definisi grade lengkap — tampil sebagai kartu penjelasan di section kurasi.
+const GRADE_DEF = [
+  { g: 'S', text: 'Tidak berpatokan pada kilometer rendah, tapi meliputi seluruh kelayakan mesin, tampilan, dan suku cadang dalam kondisi prima — nyaris tidak ada minus.' },
+  { g: 'A', text: 'Unit siap pakai, terawat sesuai umur, tanpa masalah yang berarti.' },
+  { g: 'B', text: 'Minus ringan tercatat jujur dan tetap layak untuk digunakan sehari-hari.' },
+]
+
+// ---------- Suara klik "berat" (Web Audio) untuk tombol utama ----------
+// Sintesis nada pendek berkarakter "thud"/thunk — tanpa file audio eksternal.
+// AudioContext dibuat lazy pada klik pertama (di dalam user gesture) sehingga
+// tidak melanggar autoplay policy. Bisa dimatikan lewat localStorage 'm-mute'.
+let _audioCtx = null
+function playThunk() {
+  try {
+    if (localStorage.getItem('m-mute') === '1') return
+  } catch { /* private mode — anggap tidak mute */ }
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext
+    if (!AC) return
+    if (!_audioCtx) _audioCtx = new AC()
+    const ctx = _audioCtx
+    if (ctx.state === 'suspended') ctx.resume()
+    const t = ctx.currentTime
+    // dua osilator: badan rendah (thud) + klik atas singkat
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(0.34, t + 0.006)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16)
+    gain.connect(ctx.destination)
+    const body = ctx.createOscillator()
+    body.type = 'sine'
+    body.frequency.setValueAtTime(180, t)
+    body.frequency.exponentialRampToValueAtTime(58, t + 0.14)
+    body.connect(gain)
+    body.start(t); body.stop(t + 0.17)
+    const tick = ctx.createOscillator()
+    tick.type = 'triangle'
+    tick.frequency.setValueAtTime(320, t)
+    const tg = ctx.createGain()
+    tg.gain.setValueAtTime(0.14, t)
+    tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.04)
+    tick.connect(tg); tg.connect(ctx.destination)
+    tick.start(t); tick.stop(t + 0.05)
+  } catch { /* audio gagal — abaikan, jangan ganggu klik */ }
 }
 
 // ---------- Util ----------
@@ -131,7 +184,7 @@ const CSS = `
   --panel:#ffffff; --panel-2:#f6f6f4;
   --line:#e4e4e1; --line-2:#d4d4d0;
   --ink:#111114; --muted:#5c6067; --dim:#9a9ea6;
-  --accent:#ff3d00; --accent-ink:#dd3500; --ok:#1f9d55; --warn:#b8791b;
+  --accent:#1a2f5e; --accent-ink:#0f1d3d; --ok:#1f9d55; --warn:#b8791b;
   --radius:12px;
   --font:'Archivo',system-ui,-apple-system,sans-serif;
   --mono:'IBM Plex Mono',monospace;
@@ -147,6 +200,13 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 input,select,textarea{font-family:inherit;color:var(--ink)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
 ::selection{background:var(--ink);color:#fff}
+
+/* ---------- Tugas 1: tipografi kapital untuk heading/label/aksi ----------
+   Judul (h1–h4), nama tombol, badge, tab, dan nama paket ditulis KAPITAL
+   lewat CSS (bukan mengubah string JSX) supaya konsisten & gampang dirawat.
+   Teks isi/paragraf (deskripsi, fine print) sengaja TIDAK disentuh. */
+h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
+.dtabs button,.a-tabs button,.switcher button{text-transform:uppercase}
 
 .container{width:100%;max-width:1260px;margin-inline:auto;
   padding-inline:clamp(20px,5vw,64px)}
@@ -248,7 +308,10 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   letter-spacing:-.02em;line-height:1;font-family:var(--font);white-space:nowrap}
 
 /* ---------- section ---------- */
-.section{padding:clamp(76px,11vw,132px) 0}
+/* overflow-x:clip — menahan elemen reveal yang meluncur dari sisi (translateX)
+   agar tidak memicu horizontal scroll di HP, tanpa membuat scroll-container
+   vertikal (overflow-y tetap visible) */
+.section{padding:clamp(76px,11vw,132px) 0;overflow-x:clip}
 .section.grey{background:var(--bg-2);border-block:1px solid var(--line)}
 .sec-head{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:26px;
   margin-bottom:clamp(30px,4vw,46px)}
@@ -274,10 +337,13 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   opacity:0;transition:opacity .45s ease,transform .6s cubic-bezier(.2,.6,.25,1)}
 .card-media img.ok{opacity:1}
 .card:hover .card-media img{transform:scale(1.055)}
+/* Tugas 12b: kilau menyapu HANYA saat hover masuk. Saat kursor menjauh,
+   transisi dimatikan (base transition:none) supaya elemen kilau langsung
+   reset ke kiri tanpa animasi mundur yang terlihat. */
 .card-media::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.5) 50%,transparent 58%);
-  transform:translateX(-130%);transition:transform .65s ease}
-.card:hover .card-media::after{transform:translateX(130%)}
+  transform:translateX(-130%);transition:none}
+.card:hover .card-media::after{transform:translateX(130%);transition:transform .65s ease}
 .card-media .blp{position:absolute;inset:11% 8%;opacity:1}
 .card-reveal{position:absolute;inset:auto 0 0 0;z-index:2;
   padding:16px 14px 13px;font-size:12.5px;line-height:1.45;font-weight:500;
@@ -432,7 +498,7 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .w-opt{display:flex;align-items:center;gap:13px;border:1.5px solid var(--line);
   border-radius:11px;padding:14px 15px;text-align:left;transition:border-color .18s,background .18s}
 .w-opt:hover{border-color:var(--line-2)}
-.w-opt.on{border-color:var(--accent);background:rgba(255,61,0,.045)}
+.w-opt.on{border-color:var(--accent);background:rgba(26,47,94,.055)}
 .w-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--dim);flex:none;
   display:flex;align-items:center;justify-content:center}
 .w-opt.on .w-dot{border-color:var(--accent)}
@@ -576,7 +642,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .portal-reveal{position:fixed;inset:0;z-index:65;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 .portal-reveal-glow{width:300px;height:300px;border-radius:50%;
-  background:radial-gradient(closest-side, rgba(255,61,0,.4), rgba(255,61,0,0) 72%)}
+  background:radial-gradient(closest-side, rgba(26,47,94,.42), rgba(26,47,94,0) 72%)}
 .wa-handoff{position:fixed;inset:0;z-index:150;display:flex;align-items:center;
   justify-content:center;background:rgba(255,255,255,.82);backdrop-filter:blur(14px);
   pointer-events:none}
@@ -592,6 +658,65 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   background:var(--panel);font-size:14.5px;line-height:1.65;color:var(--muted);box-shadow:var(--shadow)}
 .cfg b{color:var(--ink)}
 .cfg code{font-family:var(--mono);font-size:12.5px;color:var(--accent)}
+
+/* ---------- Tugas 4: search bar di header (typewriter placeholder) ---------- */
+.nav-search{flex:1 1 auto;min-width:0;max-width:360px;position:relative;
+  margin:0 clamp(10px,3vw,26px)}
+.nav-search input{width:100%;background:var(--panel);border:1.5px solid var(--line-2);
+  border-radius:999px;padding:9px 16px 9px 38px;font-size:13.5px;transition:border-color .2s}
+.nav-search input:focus{outline:none;border-color:var(--ink)}
+.nav-search .si{position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  width:15px;height:15px;color:var(--muted);pointer-events:none}
+
+/* ---------- Tugas 8: kartu penjelasan grade ---------- */
+.grade-head{margin-top:clamp(56px,8vw,104px)}
+.grade-head h3{font-size:clamp(24px,3.4vw,36px);font-weight:740;letter-spacing:-.02em;margin-top:12px}
+.grade-cards{display:grid;grid-template-columns:1fr;gap:16px;margin-top:clamp(26px,4vw,40px)}
+.grade-card{border:1px solid var(--line);border-radius:14px;padding:22px 20px;
+  background:var(--panel);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px}
+.grade-card .badge{position:static;display:inline-flex;width:fit-content;font-size:11px}
+.grade-card p{font-size:14px;line-height:1.62;color:var(--muted)}
+
+/* ---------- Tugas 9b: ketentuan unit di halaman detail ---------- */
+.unit-terms{margin-top:36px;border:1px solid var(--line);border-radius:14px;
+  padding:20px 22px;background:var(--panel-2)}
+.unit-terms h4{font-size:11px;font-family:var(--mono);letter-spacing:.13em;
+  color:var(--muted);margin-bottom:15px}
+.unit-terms ul{list-style:none;display:flex;flex-direction:column;gap:11px}
+.unit-terms li{display:flex;gap:11px;font-size:14px;line-height:1.5;color:#33363c}
+.unit-terms li .dot{color:var(--accent);flex:none;font-weight:800}
+.unit-terms b{color:var(--ink)}
+.unit-terms a{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+
+/* ---------- Tugas 11: halaman kebijakan / FAQ ---------- */
+.policy{padding:118px 0 90px}
+.policy h1{font-size:clamp(30px,5vw,46px);font-weight:750;letter-spacing:-.025em;margin:14px 0 10px}
+.policy .lead{color:var(--muted);max-width:560px;line-height:1.62;margin-bottom:30px}
+.policy-item{border-top:1px solid var(--line)}
+.policy-item:last-child{border-bottom:1px solid var(--line)}
+.policy-item summary{cursor:pointer;list-style:none;padding:22px 2px;display:flex;
+  justify-content:space-between;align-items:center;gap:16px;
+  font-size:clamp(16px,2.3vw,20px);font-weight:700;letter-spacing:-.01em}
+.policy-item summary::-webkit-details-marker{display:none}
+.policy-item summary .pm{font-family:var(--mono);color:var(--muted);font-size:20px;
+  transition:transform .25s;flex:none}
+.policy-item[open] summary .pm{transform:rotate(45deg)}
+.policy-body{padding:0 2px 26px;max-width:72ch}
+.policy-body p{color:#33363c;line-height:1.74;font-size:15px}
+.policy-body p + p{margin-top:14px}
+
+/* ---------- Tugas 13b: reveal berselang-seling (teks & visual bertemu di tengah) ----------
+   Kontainer .feature memakai komponen Reveal; alih-alih menggeser seluruh
+   blok ke atas, di sini anak-anaknya (visual & teks) meluncur dari sisi
+   BERLAWANAN lalu bertemu di tengah. Arahnya dibalik pada .flip. */
+.feature.reveal{opacity:1;transform:none}
+.feature .feature-media-slide,.feature .feature-copy{opacity:0;
+  transition:opacity .7s ease,transform .8s cubic-bezier(.2,.7,.25,1)}
+.feature .feature-media-slide{transform:translateX(-46px)}
+.feature .feature-copy{transform:translateX(46px)}
+.feature.flip .feature-media-slide{transform:translateX(46px)}
+.feature.flip .feature-copy{transform:translateX(-46px)}
+.feature.shown .feature-media-slide,.feature.shown .feature-copy{opacity:1;transform:none}
 
 /* ============================================================
    MOBILE-FIRST: basis di atas dirancang untuk 320–428px. Dari sini,
@@ -631,7 +756,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 @media(min-width:1021px){
   .grid{grid-template-columns:repeat(3,1fr)}
   .feature{grid-template-columns:1fr 1fr;gap:clamp(44px,6vw,88px)}
-  .feature.flip .feature-media{order:2}
+  .feature.flip .feature-media-slide{order:2}
   .detail-grid{grid-template-columns:7fr 5fr}
   .panel{position:sticky}
   .hero{min-height:94vh;min-height:94svh;min-height:94dvh;padding-top:148px}
@@ -641,6 +766,12 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .hero-3d{opacity:1}
   .hero-copy{max-width:580px}
   .spec-rail{max-width:900px}
+}
+/* layar sempit: sembunyikan label "MARKET" di logo supaya search bar & tombol
+   Masuk tetap muat tanpa memicu horizontal scroll di HP kecil (≤560px) */
+@media(max-width:560px){
+  .logo small{display:none}
+  .nav-search{margin:0 10px}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -747,14 +878,24 @@ function Bike3D({ introPhoto, onInteract }) {
     }
     updateCamera()
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.15))
-    const key = new THREE.DirectionalLight(0xffffff, 2.4)
-    key.position.set(3, 5, 4)
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.05))
+    const key = new THREE.DirectionalLight(0xffffff, 2.7)
+    key.position.set(3.4, 5.6, 3.2)
     key.castShadow = true
     // shadow map lebih kecil di layar HP — beda visualnya tak terlihat pada
     // render area kecil, tapi jauh lebih ringan untuk GPU kelas menengah
-    const shadowRes = window.innerWidth < 768 ? 512 : 1024
+    const shadowRes = window.innerWidth < 768 ? 1024 : 2048
     key.shadow.mapSize.set(shadowRes, shadowRes)
+    // frustum bayangan dirapatkan ke motor supaya resolusi bayangan terpakai
+    // penuh (bayangan tajam mengikuti bentuk motor, bukan lingkaran samar)
+    key.shadow.camera.near = 0.5
+    key.shadow.camera.far = 22
+    key.shadow.camera.left = -3
+    key.shadow.camera.right = 3
+    key.shadow.camera.top = 3
+    key.shadow.camera.bottom = -3
+    key.shadow.bias = -0.0004
+    key.shadow.radius = 3
     scene.add(key)
     const fill = new THREE.DirectionalLight(0xffe8d6, 0.5)
     fill.position.set(-4, 2, -3)
@@ -763,16 +904,23 @@ function Bike3D({ introPhoto, onInteract }) {
     rim.position.set(-2.4, 3.2, -4.4)
     scene.add(rim)
 
-    // lantai penangkap bayangan
+    // lantai penangkap bayangan — opacity dinaikkan supaya bayangan motor
+    // terlihat kontras & realistis mengikuti bentuk bodi, bukan noda samar
     const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(2.4, 48),
-      new THREE.ShadowMaterial({ opacity: 0.13 }),
+      new THREE.CircleGeometry(3, 64),
+      new THREE.ShadowMaterial({ opacity: 0.34 }),
     )
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
     scene.add(ground)
 
-    // ---- rakit motor dari bentuk dasar ----
+    // ---- rakit motor dari bentuk dasar (siluet neo-retro ala Yamaha XSR) ----
+    // TODO(upgrade): geometri primitif Three.js tidak akan pernah fotorealistik
+    // seperti render CGI/foto XSR asli. Untuk hasil "seperti foto", ganti blok
+    // perakitan di bawah ini dengan IMPORT MODEL .glb (GLTFLoader) dari sumber
+    // berlisensi (mis. Sketchfab berbayar) — muat model, pasang castShadow di
+    // tiap mesh, lalu buang perakitan primitif ini. Yang di bawah adalah quick
+    // win untuk mendekatkan siluet ke XSR, bukan pengganti model asli.
     const bike = new THREE.Group()
     const mat = (color, o = {}) =>
       new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3, envMapIntensity: 1, ...o })
@@ -783,7 +931,7 @@ function Bike3D({ introPhoto, onInteract }) {
       rim: physical('#c9c9cf', { metalness: 0.92, roughness: 0.16, clearcoat: 0.5, clearcoatRoughness: 0.2 }),
       frame: mat('#1b1b21', { metalness: 0.55, roughness: 0.4 }),
       chrome: physical('#e4e4e8', { metalness: 0.97, roughness: 0.06, clearcoat: 0.8, clearcoatRoughness: 0.08, envMapIntensity: 1.5 }),
-      tank: physical('#ff3d00', { metalness: 0.55, roughness: 0.22, clearcoat: 0.9, clearcoatRoughness: 0.1, envMapIntensity: 1.3 }),
+      tank: physical('#1a2f5e', { metalness: 0.55, roughness: 0.22, clearcoat: 0.9, clearcoatRoughness: 0.1, envMapIntensity: 1.3 }),
       dark: mat('#101014', { roughness: 0.85, metalness: 0.1, envMapIntensity: 0.5 }),
       engine: mat('#2d2d34', { metalness: 0.75, roughness: 0.32 }),
     }
@@ -806,15 +954,17 @@ function Bike3D({ introPhoto, onInteract }) {
     const wheels = []
     const makeWheel = (x, front) => {
       const g = new THREE.Group()
-      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.12, 20, 48), M.tire)))
-      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.355, 0.028, 12, 40), M.rim)))
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.16, 18), M.engine)
+      // ban lebih gambot (tube tebal) untuk kesan dual-purpose XSR; radius luar
+      // dijaga ~0.52 supaya kontak ke lantai (bayangan) tetap pas
+      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.375, 0.145, 22, 52), M.tire)))
+      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.03, 12, 40), M.rim)))
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.16, 18), M.engine)
       hub.rotation.x = Math.PI / 2
       g.add(shadowed(hub))
       for (let i = 0; i < 18; i++) {
         const a = (i / 18) * Math.PI * 2
-        const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 6), M.chrome)
-        sp.position.set(Math.cos(a) * 0.22, Math.sin(a) * 0.22, i % 2 ? 0.035 : -0.035)
+        const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.28, 6), M.chrome)
+        sp.position.set(Math.cos(a) * 0.19, Math.sin(a) * 0.19, i % 2 ? 0.035 : -0.035)
         sp.rotation.z = a - Math.PI / 2
         g.add(sp)
       }
@@ -852,13 +1002,13 @@ function Bike3D({ introPhoto, onInteract }) {
     clamp.position.set(0.655, 1.36, 0)
     bike.add(shadowed(clamp))
 
-    // ---- setang retro + grip ----
-    bike.add(tube(V(0.64, 1.38), V(0.6, 1.5), 0.028, M.chrome))        // riser
-    bike.add(tube(V(0.6, 1.5, -0.34), V(0.6, 1.5, 0.34), 0.024, M.dark))
+    // ---- setang flat rendah (lebih sporty/rata dari sebelumnya) + grip ----
+    bike.add(tube(V(0.64, 1.38), V(0.61, 1.44), 0.028, M.chrome))      // riser pendek
+    bike.add(tube(V(0.61, 1.44, -0.34), V(0.61, 1.44, 0.34), 0.024, M.dark))  // bar flat
     for (const zs of [0.38, -0.38]) {
       const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.15, 12), M.dark)
       grip.rotation.x = Math.PI / 2
-      grip.position.set(0.6, 1.5, zs)
+      grip.position.set(0.61, 1.44, zs)
       bike.add(shadowed(grip))
     }
 
@@ -873,22 +1023,24 @@ function Bike3D({ introPhoto, onInteract }) {
     lens.position.set(0.82, 1.2, 0)
     bike.add(lens)
 
-    // ---- tangki teardrop (aksen Motorell) + tutup bensin ----
-    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 24), M.tank)
-    tank.scale.set(1.35, 0.52, 0.72)
-    tank.position.set(0.14, 1.18, 0)
-    tank.rotation.z = 0.07
+    // ---- tangki teardrop besar & bulat (ciri khas XSR) + tutup bensin ----
+    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.5, 36, 28), M.tank)
+    tank.scale.set(1.5, 0.66, 0.92)
+    tank.position.set(0.12, 1.2, 0)
+    tank.rotation.z = 0.06
     bike.add(shadowed(tank))
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.03, 14), M.chrome)
-    cap.position.set(0.24, 1.45, 0)
+    cap.position.set(0.22, 1.5, 0)
     bike.add(cap)
 
-    // ---- jok single flat ----
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.075, 0.28), M.dark)
-    seat.position.set(-0.52, 1.08, 0)
+    // ---- jok single flat, pendek & rata + buntut (seat cowl) ----
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.06, 0.3), M.dark)
+    seat.position.set(-0.5, 1.06, 0)
     bike.add(shadowed(seat))
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.24), M.dark)
-    tail.position.set(-0.9, 1.06, 0)
+    // single seat cowl belakang — sedikit meninggi menyerupai buntut XSR
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.16, 0.26), M.dark)
+    tail.position.set(-0.86, 1.1, 0)
+    tail.rotation.z = 0.16
     bike.add(shadowed(tail))
     const tailLamp = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.12),
       mat('#d02010', { emissive: 0xa01008, emissiveIntensity: 0.6 }))
@@ -1290,10 +1442,10 @@ function BookingModal({ listing, warranty, onClose, toast }) {
               <div className="rows">
                 <div className="row"><span>Harga unit</span><b>{rupiah(listing.price)}</b></div>
                 <div className="row"><span>{warranty.name}<small>dibayar saat pelunasan</small></span><b>{warranty.price ? rupiah(warranty.price) : 'Termasuk'}</b></div>
-                <div className="row hl"><span>DP kunci unit<small>dibayar sekarang via QRIS</small></span><b>{rupiah(DP_FIXED)}</b></div>
+                <div className="row hl"><span>DP kunci unit<small>Book melalui Contact Kami</small></span><b>{rupiah(DP_FIXED)}</b></div>
               </div>
-              <p className="fine">DP {rupiah(DP_FIXED)} mengunci unit selama 3 hari kerja untuk pelunasan dan
-                serah terima. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi.</p>
+              <p className="fine">DP {rupiah(DP_FIXED)} mengunci unit selama 3 hari untuk pelunasan dan
+                serah terima. DP direfund 100% apabila kondisi unit tidak sesuai deskripsi yang tercantum.</p>
               {err && <p className="f-err">{err}</p>}
               <div className="m-actions">
                 <button className="btn btn-accent btn-full" onClick={createPayment} disabled={busy}>
@@ -1334,7 +1486,7 @@ function BookingModal({ listing, warranty, onClose, toast }) {
               <div className="rows">
                 <div className="row"><span>Kode booking</span><b>{pay.booking_code}</b></div>
                 <div className="row"><span>Jumlah DP</span><b>{rupiah(pay.dp_amount)}</b></div>
-                <div className="row"><span>Garansi dipilih</span><b>{warranty.name}</b></div>
+                <div className="row"><span>Perlindungan dipilih</span><b>{warranty.name}</b></div>
                 <div className="row"><span>Status</span><b><span className="chip-ok">LUNAS DP</span></b></div>
               </div>
               <p className="m-note">Tim Motorell akan menghubungimu lewat WhatsApp untuk jadwal pelunasan
@@ -1424,7 +1576,8 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     setBusy(true)
     const payload = {
       brand: f.brand.trim(), model: f.model.trim(),
-      title: (f.brand + ' ' + f.model + ' ' + f.year).replace(/\s+/g, ' ').trim(),
+      // Tugas 9a: title cukup "Brand Model" (tahun sudah tampil terpisah di specs)
+      title: (f.brand + ' ' + f.model).replace(/\s+/g, ' ').trim(),
       year: Number(f.year), mileage_km: Number(f.mileage_km) || 0,
       color: f.color.trim() || null, price: Number(f.price),
       grade: f.grade, description: f.description.trim() || null,
@@ -1835,7 +1988,7 @@ function TiltMedia({ children, className = '' }) {
 }
 
 // ---------- Reveal: fade + slide-up halus saat elemen masuk viewport ----------
-function Reveal({ children, className = '' }) {
+function Reveal({ children, className = '', style }) {
   const ref = useRef(null)
   const [shown, setShown] = useState(false)
   useEffect(() => {
@@ -1849,7 +2002,7 @@ function Reveal({ children, className = '' }) {
     return () => io.disconnect()
   }, [])
   return (
-    <div ref={ref} className={(className + ' reveal' + (shown ? ' shown' : '')).trim()}>
+    <div ref={ref} className={(className + ' reveal' + (shown ? ' shown' : '')).trim()} style={style}>
       {children}
     </div>
   )
@@ -1859,7 +2012,7 @@ function Reveal({ children, className = '' }) {
 const DETAIL_TABS = [
   { id: 'unit', label: 'Tentang unit' },
   { id: 'kurasi', label: 'Catatan kurasi' },
-  { id: 'garansi', label: 'Garansi' },
+  { id: 'garansi', label: 'Perlindungan' },
 ]
 
 function DetailTabs({ listing }) {
@@ -1886,7 +2039,7 @@ function DetailTabs({ listing }) {
               : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>)}
           {tab === 'garansi' && (
             <ul className="dtab-warranty">
-              {WARRANTIES.map((w) => (
+              {warrantiesForGrade(listing.grade).map((w) => (
                 <li key={w.code}>
                   <b>{w.name}</b>
                   <span>{w.desc}</span>
@@ -1904,7 +2057,9 @@ function DetailTabs({ listing }) {
 function DetailView({ listing, nav, onBook }) {
   const [wcode, setWcode] = useState('standard')
   const photos = Array.isArray(listing.photos) ? listing.photos : []
-  const warranty = WARRANTIES.find((w) => w.code === wcode) || WARRANTIES[0]
+  // Tugas 7: unit grade B hanya boleh paket Avantgard
+  const avail = warrantiesForGrade(listing.grade)
+  const warranty = avail.find((w) => w.code === wcode) || avail[0]
   const canBook = listing.status === 'published'
 
   return (
@@ -1915,6 +2070,15 @@ function DetailView({ listing, nav, onBook }) {
           <div>
             <Gallery photos={photos} title={listing.title} />
             <DetailTabs listing={listing} />
+            <div className="unit-terms">
+              <h4>Ketentuan unit ini</h4>
+              <ul>
+                <li><span className="dot">•</span><span>DP flat <b>{rupiah(DP_FIXED)}</b> untuk mengunci unit — bukan persentase harga.</span></li>
+                <li><span className="dot">•</span><span>Masa hold <b>3 hari</b> untuk pelunasan dan serah terima; lewat itu unit bisa ditawarkan kembali.</span></li>
+                <li><span className="dot">•</span><span>DP <b>direfund 100%</b> bila kondisi unit tidak sesuai deskripsi yang tercantum.</span></li>
+                <li><span className="dot">•</span><span>Selengkapnya di <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>halaman kebijakan</a>.</span></li>
+              </ul>
+            </div>
           </div>
 
           <aside className="panel">
@@ -1933,9 +2097,9 @@ function DetailView({ listing, nav, onBook }) {
               <div><small>Warna</small><b>{listing.color || '—'}</b></div>
             </div>
 
-            <p className="w-title">Pilih paket garansi</p>
-            <div className="w-opts" role="radiogroup" aria-label="Paket garansi">
-              {WARRANTIES.map((w) => (
+            <p className="w-title">Pilih paket perlindungan</p>
+            <div className="w-opts" role="radiogroup" aria-label="Paket perlindungan">
+              {avail.map((w) => (
                 <button key={w.code} type="button" role="radio" aria-checked={wcode === w.code}
                   className={'w-opt' + (wcode === w.code ? ' on' : '')}
                   onClick={() => setWcode(w.code)}>
@@ -1949,7 +2113,7 @@ function DetailView({ listing, nav, onBook }) {
             <div className="rows">
               <div className="row"><span>Harga unit</span><b>{rupiah(listing.price)}</b></div>
               <div className="row"><span>{warranty.name}<small>dibayar saat pelunasan</small></span><b>{warranty.price ? rupiah(warranty.price) : 'Termasuk'}</b></div>
-              <div className="row hl"><span>DP kunci unit<small>{PAYMENT_MODE === 'whatsapp' ? 'dikonfirmasi via WhatsApp CS' : 'dibayar sekarang via QRIS'}</small></span><b>{rupiah(DP_FIXED)}</b></div>
+              <div className="row hl"><span>DP kunci unit<small>Book melalui Contact Kami</small></span><b>{rupiah(DP_FIXED)}</b></div>
             </div>
 
             <div className={'panel-cta' + (canBook ? ' has-sticky-twin' : '')}>
@@ -1961,9 +2125,11 @@ function DetailView({ listing, nav, onBook }) {
               </button>
               <p className="fine">{PAYMENT_MODE === 'whatsapp'
                 ? 'Tim Motorell akan membalas chat WhatsApp-mu untuk konfirmasi ketersediaan dan proses DP ' +
-                  rupiah(DP_FIXED) + ' yang mengunci unit selama 3 hari kerja.'
-                : 'DP ' + rupiah(DP_FIXED) + ' mengunci unit 3 hari kerja. Sisa pembayaran + garansi ' +
-                  'dibayar saat serah terima di Motorell. DP kembali penuh bila unit tidak sesuai laporan kurasi.'}</p>
+                  rupiah(DP_FIXED) + ' yang mengunci unit selama 3 hari. DP direfund 100% apabila kondisi ' +
+                  'unit tidak sesuai deskripsi yang tercantum.'
+                : 'DP ' + rupiah(DP_FIXED) + ' mengunci unit 3 hari. Sisa pembayaran + paket perlindungan ' +
+                  'dibayar saat serah terima di Motorell. DP direfund 100% apabila kondisi unit tidak sesuai ' +
+                  'deskripsi yang tercantum.'}</p>
             </div>
           </aside>
         </div>
@@ -2037,7 +2203,7 @@ function Card({ l, nav, index = 0 }) {
               video referensi desain. Isinya info BARU (bukan duplikat tahun/km/harga
               yang sudah ada di card-body di bawahnya) */}
           <div className="card-reveal">
-            {GRADE_DESC[l.grade] || 'Unit sudah lolos kurasi 175 titik'}
+            {GRADE_DESC[l.grade] || 'Unit sudah lolos kurasi 50+ titik'}
           </div>
         </div>
         <div className="card-body">
@@ -2051,9 +2217,15 @@ function Card({ l, nav, index = 0 }) {
   )
 }
 
-function HomeView({ listings, nav }) {
+function HomeView({ listings, nav, query = '' }) {
   // listings sudah difilter hanya status 'published' oleh App.
-  const minPrice = listings.length ? Math.min(...listings.map((l) => Number(l.price))) : null
+  // Tugas 4: filter etalase client-side dari kata kunci search bar navigasi
+  // (brand/model/title). Section fitur & foto intro tetap pakai listings penuh.
+  const q = query.trim().toLowerCase()
+  const shown = q
+    ? listings.filter((l) =>
+        ((l.brand || '') + ' ' + (l.model || '') + ' ' + (l.title || '')).toLowerCase().includes(q))
+    : listings
   // Unit asli terbaik (grade tertinggi yang punya foto) — dipakai sebagai foto
   // fallback kalau WebGL gagal render (bukan lagi bagian animasi pembuka).
   const introUnit =
@@ -2107,11 +2279,10 @@ function HomeView({ listings, nav }) {
         <div className="hero-fade" aria-hidden="true" />
         <div className="container hero-inner">
           <div className="hero-copy">
-            <p className="kicker">Motorell Market showroom terkurasi</p>
-            <h1>Pilih. Kunci.<br />Bawa <em>pulang.</em></h1>
-            <p>Setiap unit di lantai showroom ini sudah lolos inspeksi 175 titik oleh mekanik
-              Motorell(lengkap dengan catatan jujur tentang kondisinya)</p>
-            {minPrice && <p className="from">Unit tersedia mulai <b>{rupiah(minPrice)}</b></p>}
+            <p className="kicker">Motorell Market — Showroom motor terkurasi</p>
+            <h1>Lebih dari motor bekas.<br />Kualitas <em>anti was-was.</em></h1>
+            <p>Setiap motor telah diinspeksi, diverifikasi, dikurasi, dan siap
+              mengukir cerita perjalanan Anda.</p>
             <div className="hero-cta">
               <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
               <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
@@ -2127,8 +2298,8 @@ function HomeView({ listings, nav }) {
             )}
           </div>
           <div className="spec-rail">
-            <span>Unit tayang<b>{listings.length} unit</b></span>
-            <span>Garansi mesin<b>s.d. 180 hari</b></span>
+            <span>Unit diinspeksi<b>50 unit+</b></span>
+            <span>Garansi mesin<b>s.d. 37 hari</b></span>
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
           </div>
         </div>
@@ -2138,16 +2309,18 @@ function HomeView({ listings, nav }) {
         <div className="container">
           <div className="sec-head">
             <div>
-              <p className="kicker">Etalase</p>
-              <h2>Pilih unitmu.</h2>
+              <p className="kicker">Galeri</p>
+              <h2>Galeri Motorell.</h2>
             </div>
-            <p className="aside">Klik unit untuk melihat foto, catatan kurasi, memilih paket garansi,
-              dan mengunci unit dengan DP via QRIS.</p>
+            <p className="aside">Klik unit untuk melihat foto, catatan kurasi, memilih paket perlindungan,
+              dan mengunci unit dengan DP — book melalui Contact Kami.</p>
           </div>
           <div className="grid">
             {listings.length === 0 && (
               <div className="empty">Etalase sedang kosong — unit baru sedang dalam proses kurasi.</div>)}
-            {listings.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
+            {listings.length > 0 && shown.length === 0 && (
+              <div className="empty">Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</div>)}
+            {shown.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
           </div>
         </div>
       </section>
@@ -2157,7 +2330,7 @@ function HomeView({ listings, nav }) {
           <div className="sec-head" style={{ marginBottom: 'clamp(48px,7vw,84px)' }}>
             <div>
               <p className="kicker">Kenapa Motorell</p>
-              <h2>Beli motor,<br />tanpa was-was.</h2>
+              <h2>Beli motor,<br />anti was-was.</h2>
             </div>
             <p className="aside">Kami saring dulu, baru tayang. Yang sampai ke etalase hanya unit yang
               lolos pemeriksaan dan layak kamu bawa pulang.</p>
@@ -2169,22 +2342,24 @@ function HomeView({ listings, nav }) {
               text: 'Setiap unit diperiksa mekanik sebelum boleh tayang — mesin, rangka, kelistrikan, dokumen, sampai uji jalan. Catatan kurasinya kamu baca sendiri di halaman unit, bukan disembunyikan.',
             },
             {
-              kicker: 'Garansi',
-              title: 'Garansi mesin sampai 180 hari.',
-              text: 'Tiga paket garansi bisa dipilih saat booking — dari 30 hari standar sampai 180 hari plus servis berkala. Semua tertulis, bukan janji lisan.',
+              kicker: 'Perlindungan',
+              title: 'Garansi mesin sampai 37 hari.',
+              text: 'Tiga paket perlindungan bisa dipilih saat booking — dari 7 hari standar sampai 37 hari plus servis & tune up. Semua tertulis, bukan janji lisan.',
             },
             {
               kicker: 'Booking aman',
               title: 'DP ' + rupiah(DP_FIXED) + ', unit langsung terkunci.',
-              text: 'Begitu DP masuk, unit hilang dari etalase dan aman dari serobotan. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi.',
+              text: 'Begitu DP masuk, unit hilang dari etalase dan aman dari serobotan. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi. Sudah diinspeksi sejumlah 50+ titik dan layak kamu bawa pulang.',
             },
           ].map((f, i) => (
             <Reveal key={f.kicker} className={'feature' + (i % 2 ? ' flip' : '')}>
-              <TiltMedia className="feature-media">
-                {listings[i]?.photos?.[0]
-                  ? <FadeImg src={listings[i].photos[0]} alt="" loading="lazy" />
-                  : <Blueprint />}
-              </TiltMedia>
+              <div className="feature-media-slide">
+                <TiltMedia className="feature-media">
+                  {listings[i]?.photos?.[0]
+                    ? <FadeImg src={listings[i].photos[0]} alt="" loading="lazy" />
+                    : <Blueprint />}
+                </TiltMedia>
+              </div>
               <div className="feature-copy">
                 <p className="kicker">{f.kicker}</p>
                 <h3>{f.title}</h3>
@@ -2192,9 +2367,66 @@ function HomeView({ listings, nav }) {
               </div>
             </Reveal>
           ))}
+
+          {/* Tugas 8: kartu penjelasan grade */}
+          <div className="grade-head">
+            <p className="kicker">Sistem grade</p>
+            <h3>Tiga grade, satu standar jujur.</h3>
+          </div>
+          <div className="grade-cards">
+            {GRADE_DEF.map((gd, i) => (
+              <Reveal key={gd.g} className="grade-card"
+                style={{ transitionDelay: (i * 80) + 'ms' }}>
+                <span className={'badge g-' + gd.g.toLowerCase()}>GRADE {gd.g}</span>
+                <p>{gd.text}</p>
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
     </>
+  )
+}
+
+// ---------- Search bar navigasi dengan placeholder mengetik sendiri ----------
+const SEARCH_HINTS = [
+  'Cari Kawasaki W175…',
+  'Cari motor retro…',
+  'Cari motor di bawah 20 juta…',
+]
+function NavSearch({ value, onChange }) {
+  // placeholder animasi typewriter: mengetik lalu menghapus, bergilir.
+  // prefers-reduced-motion → tampilkan satu placeholder statis (tanpa animasi).
+  const [ph, setPh] = useState(() => (prefersReduced() ? SEARCH_HINTS[0] : ''))
+  useEffect(() => {
+    if (prefersReduced()) return
+    let hintI = 0, chI = 0, deleting = false, timer
+    const tick = () => {
+      const full = SEARCH_HINTS[hintI]
+      if (!deleting) {
+        chI++
+        setPh(full.slice(0, chI))
+        if (chI >= full.length) { deleting = true; timer = setTimeout(tick, 1500); return }
+        timer = setTimeout(tick, 55)
+      } else {
+        chI--
+        setPh(full.slice(0, chI))
+        if (chI <= 0) { deleting = false; hintI = (hintI + 1) % SEARCH_HINTS.length; timer = setTimeout(tick, 260); return }
+        timer = setTimeout(tick, 28)
+      }
+    }
+    timer = setTimeout(tick, 650)
+    return () => clearTimeout(timer)
+  }, [])
+  return (
+    <div className="nav-search">
+      <svg className="si" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
+      </svg>
+      <input type="search" value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder={ph || 'Cari unit…'} aria-label="Cari unit di etalase" />
+    </div>
   )
 }
 
@@ -2204,7 +2436,56 @@ function parseHash() {
   const unit = h.match(/^#\/unit\/(.+)$/)
   if (unit) return { name: 'unit', slug: decodeURIComponent(unit[1]) }
   if (h === '#/admin') return { name: 'admin' }
+  if (h === '#/kebijakan') return { name: 'kebijakan' }
   return { name: 'home' }
+}
+
+// ---------- Halaman kebijakan / FAQ (route #/kebijakan) ----------
+const POLICY = [
+  {
+    q: 'DP & Booking',
+    body: [
+      'DP sebesar Rp500.000 mengunci unit selama 3 hari untuk proses pelunasan dan serah terima. Selama masa ini, unit tidak ditawarkan ke pembeli lain. Jika dalam 3 hari pelunasan belum dilakukan tanpa konfirmasi lebih lanjut dari Motorell, unit dapat ditawarkan kembali ke pembeli lain.',
+      'DP akan dikembalikan secara penuh (100%) apabila kondisi unit yang diterima tidak sesuai dengan deskripsi dan catatan kurasi yang tercantum di halaman unit. Pengajuan refund dapat dilakukan dengan menghubungi tim Motorell melalui WhatsApp maksimal 1x24 jam setelah serah terima.',
+    ],
+  },
+  {
+    q: 'Syarat & Ketentuan',
+    body: [
+      'Harga yang tercantum adalah harga unit dalam kondisi sebagaimana dideskripsikan pada halaman masing-masing unit, belum termasuk biaya balik nama, pajak tahunan yang belum dibayarkan (jika ada), dan biaya pengiriman di luar area yang disepakati.',
+      'Paket perlindungan (Avantgard/Spectre/Cullinan) berlaku sejak tanggal serah terima unit dan mencakup layanan sebagaimana dijelaskan pada masing-masing paket.',
+    ],
+  },
+  {
+    q: 'Kebijakan Privasi',
+    body: [
+      'Motorell menghargai privasi Anda. Data yang Anda berikan — termasuk nama, nomor telepon, dan alamat email — hanya digunakan untuk keperluan proses transaksi, konfirmasi booking, dan komunikasi terkait unit yang Anda minati.',
+      'Dengan mendaftar atau melakukan booking, Anda memberikan persetujuan bagi Motorell untuk sesekali mengirimkan informasi promosi, penawaran unit baru, atau program menarik lainnya melalui email atau WhatsApp. Kami membatasi frekuensi komunikasi ini agar tetap relevan dan tidak mengganggu, dan Anda dapat berhenti berlangganan kapan pun dengan menghubungi tim kami.',
+      'Motorell tidak membagikan data pribadi Anda kepada pihak ketiga mana pun di luar kebutuhan operasional internal, kecuali diwajibkan oleh hukum yang berlaku.',
+    ],
+  },
+]
+
+function KebijakanView({ nav }) {
+  return (
+    <section className="policy">
+      <div className="container">
+        <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
+        <p className="kicker">Kebijakan &amp; ketentuan</p>
+        <h1>Transparan, hitam di atas putih.</h1>
+        <p className="lead">Semua aturan main soal DP, transaksi, dan data pribadimu kami tulis terbuka
+          di sini. Ada pertanyaan lain? Hubungi tim Motorell lewat WhatsApp.</p>
+        {POLICY.map((s, i) => (
+          <details className="policy-item" key={s.q} open={i === 0}>
+            <summary>{s.q}<span className="pm">+</span></summary>
+            <div className="policy-body">
+              {s.body.map((p, j) => <p key={j}>{p}</p>)}
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 export default function App() {
@@ -2220,6 +2501,7 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState('')
   const toastRef = useRef(null)
   const [waHandoff, setWaHandoff] = useState(false)
+  const [query, setQuery] = useState('')
 
   const toast = useCallback((msg) => {
     setToastMsg(msg)
@@ -2239,6 +2521,18 @@ export default function App() {
     const onScroll = () => setScrolled(window.scrollY > 24)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // Tugas 13a: suara klik "berat" untuk tombol utama. Delegasi satu listener
+  // di document — memutar thunk saat tombol primer (accent/dark) diklik. Karena
+  // hanya dipicu klik (user gesture), autoplay policy aman tanpa toggle wajib.
+  useEffect(() => {
+    const onClick = (e) => {
+      const btn = e.target.closest('.btn-accent, .btn-dark')
+      if (btn && !btn.disabled) playThunk()
+    }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
   }, [])
 
   useEffect(() => {
@@ -2342,6 +2636,11 @@ export default function App() {
           <a className="logo" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>
             MOTORELL<i>●</i><small>MARKET</small>
           </a>
+          <NavSearch value={query} onChange={(v) => {
+            setQuery(v)
+            // kalau mengetik dari halaman lain, bawa ke etalase supaya hasil terlihat
+            if (v && route.name !== 'home') nav('#/')
+          }} />
           <div className="nav-actions">
             {isStaff && route.name !== 'admin' && (
               <button className="btn btn-quiet btn-sm" onClick={() => nav('#/admin')}>Panel admin</button>)}
@@ -2358,7 +2657,9 @@ export default function App() {
       </header>
 
       <main>
-        {route.name === 'home' && <HomeView listings={listings} nav={nav} />}
+        {route.name === 'home' && <HomeView listings={listings} nav={nav} query={query} />}
+
+        {route.name === 'kebijakan' && <KebijakanView nav={nav} />}
 
         {route.name === 'unit' && (current
           ? <DetailView listing={current} nav={nav} onBook={requestBooking} />
@@ -2386,14 +2687,14 @@ export default function App() {
             <div className="foot-links">
               <a href="#etalase" onClick={() => nav('#/')}>Etalase</a>
               <a href="#kurasi" onClick={() => nav('#/')}>Standar kurasi</a>
-              <a href="#/">Kebijakan refund DP</a>
-              <a href="#/">Syarat &amp; ketentuan</a>
-              <a href="#/">Kebijakan privasi</a>
+              <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>Kebijakan refund DP</a>
+              <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>Syarat &amp; ketentuan</a>
+              <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>Kebijakan privasi</a>
             </div>
           </div>
           <div className="foot-base">
             <span>© {new Date().getFullYear()} MOTORELL — INDONESIA</span>
-            <span>JUAL BELI MOTOR TANPA WAS-WAS</span>
+            <span>JUAL BELI MOTOR TERKURASI</span>
           </div>
         </div>
       </footer>
