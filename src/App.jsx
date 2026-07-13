@@ -48,6 +48,12 @@ const STATUS_LABEL = {
   draft: 'Draft', published: 'Tayang', booked: 'Di-booking', sold: 'Terjual', delisted: 'Arsip',
 }
 
+const GRADE_DESC = {
+  S: 'Istimewa, seperti baru — minus nyaris tidak ada.',
+  A: 'Siap pakai, kondisi terawat sesuai umur.',
+  B: 'Minus ringan tercatat jujur di halaman detail.',
+}
+
 // ---------- Util ----------
 async function compressImage(file, maxW = 1600, quality = 0.82) {
   try {
@@ -258,6 +264,11 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .spec-rail b{color:var(--ink);font-size:clamp(19px,5vw,29px);font-weight:750;
   letter-spacing:-.02em;line-height:1;font-family:var(--font);white-space:nowrap}
+.spec-radial-row{display:flex;align-items:center;gap:9px}
+.radial-stat{flex:none;transform:rotate(-90deg)}
+.radial-stat-track{fill:none;stroke:var(--line-2)}
+.radial-stat-fill{fill:none;stroke:var(--accent);stroke-linecap:round;
+  transition:stroke-dashoffset 1.5s cubic-bezier(.16,1,.3,1) .1s}
 
 /* ---------- section ---------- */
 .section{padding:clamp(76px,11vw,132px) 0}
@@ -291,11 +302,16 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
   transform:translateX(-130%);transition:transform .65s ease}
 .card:hover .card-media::after{transform:translateX(130%)}
 .card-media .blp{position:absolute;inset:11% 8%;opacity:1}
+.card-reveal{position:absolute;inset:auto 0 0 0;z-index:2;
+  padding:16px 14px 13px;font-size:12.5px;line-height:1.45;font-weight:500;
+  color:#fff;background:linear-gradient(0deg,rgba(10,10,12,.82) 0%,rgba(10,10,12,0) 100%);
+  clip-path:inset(100% 0 0 0);transition:clip-path .45s cubic-bezier(.2,.8,.25,1)}
+.card:hover .card-reveal{clip-path:inset(0 0 0 0)}
 .badge{position:absolute;bottom:13px;left:13px;z-index:2;font-family:var(--mono);font-size:10.5px;
   font-weight:600;letter-spacing:.08em;padding:6px 11px;border-radius:999px;
   background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border:1px solid var(--line-2);
   color:var(--ink);transition:transform .25s ease;overflow:hidden}
-.card:hover .badge{transform:translateY(-2px)}
+.card:hover .badge{transform:translateY(-48px)}
 /* varian warna per grade: S emas, A diamond, B silver — teks gelap agar kontras */
 .badge.g-s{background:linear-gradient(135deg,#ffe975 0%,#ffd700 38%,#b8860b 100%);
   border-color:rgba(184,134,11,.55);color:#231a00;
@@ -580,6 +596,20 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   border-radius:999px;opacity:0;pointer-events:none;transition:.3s;max-width:88vw;
   text-align:center;box-shadow:0 12px 40px rgba(17,17,20,.24)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
+.portal-reveal{position:fixed;inset:0;z-index:65;pointer-events:none;overflow:hidden;
+  display:flex;align-items:center;justify-content:center}
+.portal-reveal-glow{width:300px;height:300px;border-radius:50%;
+  background:radial-gradient(closest-side, rgba(255,61,0,.4), rgba(255,61,0,0) 72%)}
+.wa-handoff{position:fixed;inset:0;z-index:150;display:flex;align-items:center;
+  justify-content:center;background:rgba(255,255,255,.82);backdrop-filter:blur(14px);
+  pointer-events:none}
+.wa-handoff-spinner{position:absolute;width:38px;height:38px;border-radius:50%;
+  border:3px solid var(--line-2);border-top-color:var(--accent);
+  animation:wa-spin .7s linear infinite}
+@keyframes wa-spin{to{transform:rotate(360deg)}}
+.wa-handoff-logo{font-weight:800;font-size:22px;letter-spacing:.01em;
+  display:flex;align-items:center;gap:8px;color:var(--ink)}
+.wa-handoff-logo i{font-style:normal;color:var(--accent);font-size:17px}
 .cfg{min-height:100svh;display:flex;align-items:center;justify-content:center;padding:24px}
 .cfg div{max-width:520px;border:1px solid var(--line);border-radius:14px;padding:32px;
   background:var(--panel);font-size:14.5px;line-height:1.65;color:var(--muted);box-shadow:var(--shadow)}
@@ -1162,6 +1192,30 @@ function AuthModal({ onClose, onDone, toast }) {
 }
 
 // ---------- Modal booking DP (QRIS) ----------
+// ---------- Transisi "handoff" ke WhatsApp: loading → logo, blur-to-focus ----------
+// (pola dari video referensi animasi: spinner memudar jadi logo brand dengan
+// latar belakang blur, dipakai sebagai momen serah-terima ke WhatsApp CS)
+function WaHandoff({ show }) {
+  return (
+    <AnimatePresence>
+      {show && (
+        <motion.div className="wa-handoff" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }} transition={{ duration: 0.3 }} aria-hidden="true">
+          <motion.span className="wa-handoff-spinner"
+            initial={{ opacity: 1, scale: 1 }} animate={{ opacity: 0, scale: 0.7 }}
+            transition={{ delay: 0.45, duration: 0.35 }} />
+          <motion.div className="wa-handoff-logo"
+            initial={{ opacity: 0, scale: 0.92, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            transition={{ delay: 0.5, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
+            MOTORELL<i>●</i>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 function BookingModal({ listing, warranty, onClose, toast }) {
   const [step, setStep] = useState('confirm') // confirm -> qr -> paid
   const [busy, setBusy] = useState(false)
@@ -1750,6 +1804,33 @@ function Gallery({ photos, title }) {
   )
 }
 
+// ---------- Cincin radial yang mengisi penuh saat masuk viewport ----------
+// (dipakai untuk "175 titik inspeksi" — ganti angka statis jadi progress ring,
+// terinspirasi radial-fill di video referensi animasi)
+function RadialStat({ size = 32 }) {
+  const ref = useRef(null)
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (prefersReduced()) { setOn(true); return }
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setOn(true); io.disconnect() }
+    }, { threshold: 0.5 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  const stroke = 3, r = (size - stroke * 2) / 2, c = 2 * Math.PI * r
+  return (
+    <svg ref={ref} className="radial-stat" width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+      role="img" aria-label="175 dari 175 titik inspeksi selesai">
+      <circle className="radial-stat-track" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} />
+      <circle className="radial-stat-fill" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke}
+        style={{ strokeDasharray: c, strokeDashoffset: on ? 0 : c }} />
+    </svg>
+  )
+}
+
 // ---------- Reveal: fade + slide-up halus saat elemen masuk viewport ----------
 function Reveal({ children, className = '' }) {
   const ref = useRef(null)
@@ -1948,6 +2029,13 @@ function Card({ l, nav, index = 0 }) {
         <div className="card-media">
           {photos[0] ? <FadeImg src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
           <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>
+          {/* panel disingkap saat hover — pakai foto yang sama (bukan foto ke-2)
+              supaya etalase tetap ringan; wipe clip-path meniru "object reveal" dari
+              video referensi desain. Isinya info BARU (bukan duplikat tahun/km/harga
+              yang sudah ada di card-body di bawahnya) */}
+          <div className="card-reveal">
+            {GRADE_DESC[l.grade] || 'Unit sudah lolos kurasi 175 titik'}
+          </div>
         </div>
         <div className="card-body">
           <h3>{l.title}</h3>
@@ -1980,8 +2068,33 @@ function HomeView({ listings, nav }) {
     setHint3d(false)
   }, [])
 
+  // Transisi "portal" saat pindah dari hero ke etalase — cincin cahaya
+  // membesar & memudar sambil halaman scroll, terinspirasi portal-frame
+  // reveal di video referensi desain.
+  const [portal, setPortal] = useState(false)
+  const goEtalase = useCallback((e) => {
+    e.preventDefault()
+    const target = document.getElementById('etalase')
+    if (prefersReduced()) { target?.scrollIntoView(); return }
+    setPortal(true)
+    setTimeout(() => target?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 140)
+    setTimeout(() => setPortal(false), 900)
+  }, [])
+
   return (
     <>
+      <AnimatePresence>
+        {portal && (
+          <motion.div className="portal-reveal" aria-hidden="true"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}>
+            <motion.span className="portal-reveal-glow"
+              initial={{ scale: 0.3, opacity: 0 }}
+              animate={{ scale: [0.3, 1, 2.6], opacity: [0, 0.85, 0] }}
+              transition={{ duration: 0.9, ease: 'easeOut', times: [0, 0.35, 1] }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
       <section className="hero">
         <div className="hero-grid-lines" aria-hidden="true" />
         <div className="hero-3d">
@@ -1996,7 +2109,7 @@ function HomeView({ listings, nav }) {
               Motorell(lengkap dengan catatan jujur tentang kondisinya)</p>
             {minPrice && <p className="from">Unit tersedia mulai <b>{rupiah(minPrice)}</b></p>}
             <div className="hero-cta">
-              <a className="btn btn-dark" href="#etalase">Lihat semua unit</a>
+              <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
               <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
             </div>
             {hint3d && (
@@ -2011,7 +2124,9 @@ function HomeView({ listings, nav }) {
           </div>
           <div className="spec-rail">
             <span>Unit tayang<b>{listings.length} unit</b></span>
-            <span>Inspeksi mekanik<b>175 titik</b></span>
+            <span>Inspeksi mekanik
+              <span className="spec-radial-row"><RadialStat size={30} /><b>175 titik</b></span>
+            </span>
             <span>Garansi mesin<b>s.d. 180 hari</b></span>
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
           </div>
@@ -2103,6 +2218,7 @@ export default function App() {
   const [scrolled, setScrolled] = useState(false)
   const [toastMsg, setToastMsg] = useState('')
   const toastRef = useRef(null)
+  const [waHandoff, setWaHandoff] = useState(false)
 
   const toast = useCallback((msg) => {
     setToastMsg(msg)
@@ -2180,7 +2296,15 @@ export default function App() {
   }, [session, pending, listings])
 
   const requestBooking = useCallback((listing, warranty) => {
-    if (PAYMENT_MODE === 'whatsapp') { openWhatsAppCS(listing, toast); return }
+    if (PAYMENT_MODE === 'whatsapp') {
+      // window.open harus tetap sinkron di dalam gesture klik (supaya tidak
+      // diblokir popup blocker) — overlay handoff cuma lapisan visual di
+      // atasnya, tidak menunda pembukaan tab WhatsApp yang sesungguhnya.
+      openWhatsAppCS(listing, toast)
+      setWaHandoff(true)
+      setTimeout(() => setWaHandoff(false), 1100)
+      return
+    }
     if (!session) {
       setPending({ slug: listing.slug, wcode: warranty.code })
       setAuthOpen(true)
@@ -2276,6 +2400,7 @@ export default function App() {
       {authOpen && <AuthModal toast={toast} onClose={() => setAuthOpen(false)} onDone={() => setAuthOpen(false)} />}
       {booking && <BookingModal listing={booking.listing} warranty={booking.warranty}
         toast={toast} onClose={() => setBooking(null)} />}
+      <WaHandoff show={waHandoff} />
 
       <div className={'toast' + (toastMsg ? ' show' : '')} role="status">{toastMsg}</div>
     </>
