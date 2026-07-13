@@ -190,8 +190,8 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
    Basis mobile dulu (tinggi otomatis, padding atas secukupnya untuk lolos
    dari nav fixed); baru di layar besar hero dikunci ke tinggi viewport dan
    padding atas ditambah — lihat @media(min-width:1021px) di bagian bawah. */
-.hero{position:relative;min-height:0;display:flex;align-items:center;
-  padding:128px 0 44px;border-bottom:1px solid var(--line);overflow:hidden;
+.hero{position:relative;min-height:0;display:flex;align-items:flex-end;
+  padding:128px 0 56px;border-bottom:1px solid var(--line);overflow:hidden;
   background:
     radial-gradient(1200px 640px at 80% 34%, #fafaf9, transparent 62%),
     linear-gradient(180deg,#ffffff 0%,#fbfbfa 100%)}
@@ -258,17 +258,12 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
 /* strip spesifikasi tipis ala lembar spek — label mono kecil di atas,
    angka besar di bawah, dipisah whitespace (bukan kotak-kotak card) */
-.spec-rail{display:grid;grid-template-columns:repeat(2,1fr);gap:26px 20px;
-  margin-top:56px;padding-top:24px;border-top:1px solid var(--line-2);max-width:100%}
+.spec-rail{display:grid;grid-template-columns:1fr;gap:22px;
+  margin-top:32px;padding-top:24px;border-top:1px solid var(--line-2);max-width:100%}
 .spec-rail span{display:flex;flex-direction:column;gap:9px;font-family:var(--mono);
   font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .spec-rail b{color:var(--ink);font-size:clamp(19px,5vw,29px);font-weight:750;
   letter-spacing:-.02em;line-height:1;font-family:var(--font);white-space:nowrap}
-.spec-radial-row{display:flex;align-items:center;gap:9px}
-.radial-stat{flex:none;transform:rotate(-90deg)}
-.radial-stat-track{fill:none;stroke:var(--line-2)}
-.radial-stat-fill{fill:none;stroke:var(--accent);stroke-linecap:round;
-  transition:stroke-dashoffset 1.5s cubic-bezier(.16,1,.3,1) .1s}
 
 /* ---------- section ---------- */
 .section{padding:clamp(76px,11vw,132px) 0}
@@ -631,7 +626,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 }
 @media(min-width:681px){
   .grid{grid-template-columns:repeat(2,1fr)}
-  .spec-rail{grid-template-columns:repeat(4,1fr)}
+  .spec-rail{grid-template-columns:repeat(3,1fr)}
   .sec-head{flex-direction:row;align-items:flex-end}
   .f-grid{grid-template-columns:1fr 1fr}
   .specs{grid-template-columns:repeat(4,1fr)}
@@ -1804,33 +1799,6 @@ function Gallery({ photos, title }) {
   )
 }
 
-// ---------- Cincin radial yang mengisi penuh saat masuk viewport ----------
-// (dipakai untuk "175 titik inspeksi" — ganti angka statis jadi progress ring,
-// terinspirasi radial-fill di video referensi animasi)
-function RadialStat({ size = 32 }) {
-  const ref = useRef(null)
-  const [on, setOn] = useState(false)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    if (prefersReduced()) { setOn(true); return }
-    const io = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { setOn(true); io.disconnect() }
-    }, { threshold: 0.5 })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [])
-  const stroke = 3, r = (size - stroke * 2) / 2, c = 2 * Math.PI * r
-  return (
-    <svg ref={ref} className="radial-stat" width={size} height={size} viewBox={`0 0 ${size} ${size}`}
-      role="img" aria-label="175 dari 175 titik inspeksi selesai">
-      <circle className="radial-stat-track" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} />
-      <circle className="radial-stat-fill" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke}
-        style={{ strokeDasharray: c, strokeDashoffset: on ? 0 : c }} />
-    </svg>
-  )
-}
-
 // ---------- Reveal: fade + slide-up halus saat elemen masuk viewport ----------
 function Reveal({ children, className = '' }) {
   const ref = useRef(null)
@@ -2124,9 +2092,6 @@ function HomeView({ listings, nav }) {
           </div>
           <div className="spec-rail">
             <span>Unit tayang<b>{listings.length} unit</b></span>
-            <span>Inspeksi mekanik
-              <span className="spec-radial-row"><RadialStat size={30} /><b>175 titik</b></span>
-            </span>
             <span>Garansi mesin<b>s.d. 180 hari</b></span>
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
           </div>
