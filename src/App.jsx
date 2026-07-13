@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, animate, useScroll, useTransform } from 'framer-motion'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
 import * as THREE from 'three'
@@ -219,24 +219,6 @@ input,select,textarea{font-family:inherit;color:var(--ink)}
 .bike3d-hint svg{width:16px;height:16px;color:var(--accent)}
 @keyframes hint-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .bike3d-fallback-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-/* foto unit asli yang "berubah" jadi render 3D saat hero dimuat */
-.bike3d-photo{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none;
-  clip-path:inset(0 0 0 0%);
-  transition:clip-path 1.2s cubic-bezier(.65,0,.35,1), opacity .7s ease .5s}
-.bike3d-photo img{width:100%;height:100%;object-fit:cover;object-position:center 40%;
-  transform:scale(1.1);animation:bike3d-kenburns 2.6s cubic-bezier(.25,.4,.3,1) forwards}
-.bike3d-photo.is-revealed{clip-path:inset(0 0 0 100%);opacity:0}
-.bike3d-photo::after{content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(100deg,transparent 55%,rgba(255,255,255,.65) 63%,transparent 72%);
-  transform:translateX(-140%);animation:bike3d-sheen 1.3s .35s ease-out forwards}
-@keyframes bike3d-kenburns{from{transform:scale(1.14)}to{transform:scale(1.03)}}
-@keyframes bike3d-sheen{to{transform:translateX(140%)}}
-@media(prefers-reduced-motion:reduce){
-  .bike3d-photo{transition:opacity .4s ease}
-  .bike3d-photo.is-revealed{clip-path:inset(0 0 0 0%)}
-  .bike3d-photo img{animation:none;transform:none}
-  .bike3d-photo::after{display:none}
-}
 .hero-fade{position:absolute;inset:0;z-index:2;pointer-events:none;
   background:linear-gradient(0deg, rgba(255,255,255,.97) 0%, rgba(255,255,255,.55) 46%, rgba(255,255,255,.1) 100%)}
 /* pointer-events:none supaya drag di atas motor tembus ke canvas 3D di bawah;
@@ -692,18 +674,10 @@ function Blueprint() {
 function Bike3D({ introPhoto, onInteract }) {
   const mountRef = useRef(null)
   const [failed, setFailed] = useState(false)
-  const [revealed, setRevealed] = useState(!introPhoto)
   // ref supaya closure event handler di dalam effect selalu memanggil
   // callback terbaru tanpa perlu re-mount scene
   const interactRef = useRef(onInteract)
   interactRef.current = onInteract
-
-  useEffect(() => {
-    if (!introPhoto) return
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const t = setTimeout(() => setRevealed(true), reduced ? 60 : 1050)
-    return () => clearTimeout(t)
-  }, [introPhoto])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -978,7 +952,11 @@ function Bike3D({ introPhoto, onInteract }) {
     // ---- interaksi: 1 jari = putar (X) + tilt (Y), 2 jari = pinch zoom,
     //      double-tap = reset kamera. Dilepas → momentum, lalu auto-spin. ----
     const ROT_DEFAULT = -0.6
-    let rotY = ROT_DEFAULT, targetY = ROT_DEFAULT, lastX = 0, lastY = 0
+    // sudut awal intro sengaja lebih dramatis (3/4 lebih menyamping) daripada
+    // ROT_DEFAULT murni, yang kalau dilihat dari diam saja cenderung tampak
+    // hampir dari depan lurus — ketahuan pas foto pembuka lama dihapus
+    const INTRO_HOLD_ROT = ROT_DEFAULT + 0.55
+    let rotY = INTRO_HOLD_ROT, targetY = INTRO_HOLD_ROT, lastX = 0, lastY = 0
     let velY = 0 // kecepatan sudut terakhir, dipakai sebagai inertia saat dilepas
     let lastTapAt = 0, lastPinchDist = 0
     const pointers = new Map()
@@ -990,6 +968,7 @@ function Bike3D({ introPhoto, onInteract }) {
       return Math.hypot(a.x - b.x, a.y - b.y) || 1
     }
     const onDown = (e) => {
+      introControls?.stop()
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
       try { mount.setPointerCapture(e.pointerId) } catch { /* pointer sudah lepas */ }
       if (pointers.size === 1) {
@@ -1035,6 +1014,47 @@ function Bike3D({ introPhoto, onInteract }) {
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onUp)
 
+    // ---- intro sinematik: hold sejenak di framing hero, lalu kamera
+    //      menyapu (arc) sambil mendekat (push-in) dengan percepatan
+    //      progresif — meniru pola referensi (hold → ease-in, TANPA
+    //      ease-out, seolah "dipotong" saat masih bergerak cepat).
+    //      Begitu selesai, sisa kecepatan diserahkan ke sistem momentum
+    //      yang sudah ada supaya nyambung mulus ke auto-spin, bukan
+    //      berhenti mendadak. Kode asli (bukan video), jadi tetap ringan
+    //      dan interaktif — drag/pinch user langsung menghentikan intro. ----
+    let introControls = null
+    let introRaf1 = 0, introRaf2 = 0
+    if (!reduced) {
+      const INTRO_ZOOM = 0.78 // seberapa dekat kamera mendorong masuk
+      // Setup scene (PMREM, puluhan mesh) + overhead awal halaman bisa
+      // menyita waktu nyata sebelum browser sempat render frame pertama.
+      // animate() mengukur progres dari WAKTU ASLI, bukan jumlah frame —
+      // kalau jamnya mulai sebelum browser sempat "bernapas", separuh
+      // durasi sudah "kebobolan" begitu render pertama tampil, dan intro
+      // kelihatan langsung selesai/snap. Tunda mulainya 2 frame supaya
+      // jamnya baru jalan setelah render benar-benar berjalan mulus.
+      introRaf1 = requestAnimationFrame(() => {
+        introRaf2 = requestAnimationFrame(() => {
+          introControls = animate(0, 1, {
+            duration: 2.3,
+            ease: 'circIn', // datar di awal (hold), lalu berakselerasi tajam
+            onUpdate: (p) => {
+              // dari sudut hold dramatis → mendarat pas di ROT_DEFAULT (baseline
+              // yang framing kameranya sudah di-tuning untuk komposisi hero)
+              targetY = INTRO_HOLD_ROT + (ROT_DEFAULT - INTRO_HOLD_ROT) * p
+              targetZoom = 1 + (INTRO_ZOOM - 1) * p
+            },
+            onComplete: () => {
+              // motor masih "bergerak" saat intro berakhir — momentum meluruh
+              // alami lewat loop render, bukan snap balik ke posisi awal
+              velY = -0.012
+              targetZoom = 1
+            },
+          })
+        })
+      })
+    }
+
     // ---- ukuran mengikuti kontainer ----
     const resize = () => {
       const w = mount.clientWidth || 1, h = mount.clientHeight || 1
@@ -1073,6 +1093,9 @@ function Bike3D({ introPhoto, onInteract }) {
 
     return () => {
       cancelAnimationFrame(raf)
+      cancelAnimationFrame(introRaf1)
+      cancelAnimationFrame(introRaf2)
+      introControls?.stop()
       ro.disconnect()
       mount.removeEventListener('pointerdown', onDown)
       mount.removeEventListener('pointermove', onMove)
@@ -1098,15 +1121,8 @@ function Bike3D({ introPhoto, onInteract }) {
       : <Blueprint />
   }
   return (
-    <>
-      <div ref={mountRef} className="bike3d" role="img"
-        aria-label="Model 3D motor Motorell — seret untuk memutar, cubit untuk zoom" />
-      {introPhoto && (
-        <div className={'bike3d-photo' + (revealed ? ' is-revealed' : '')} aria-hidden="true">
-          <img src={introPhoto} alt="" />
-        </div>
-      )}
-    </>
+    <div ref={mountRef} className="bike3d" role="img"
+      aria-label="Model 3D motor Motorell — seret untuk memutar, cubit untuk zoom" />
   )
 }
 
@@ -1799,6 +1815,25 @@ function Gallery({ photos, title }) {
   )
 }
 
+// ---------- Tilt 3D + parallax yang terikat posisi scroll (bukan cuma
+// muncul sekali) — dipakai di foto feature block supaya transisi scroll
+// terasa punya kedalaman/berkelas, bukan cuma fade datar. Kode asli
+// (Framer Motion useScroll/useTransform), ringan karena murni transform
+// CSS yang di-drive nilai scroll, tanpa re-render React tiap frame. ----
+function TiltMedia({ children, className = '' }) {
+  const ref = useRef(null)
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] })
+  const rotateX = useTransform(scrollYProgress, [0, 0.5, 1], [7, 0, -7])
+  const y = useTransform(scrollYProgress, [0, 1], [22, -22])
+  if (prefersReduced()) return <div ref={ref} className={className}>{children}</div>
+  return (
+    <motion.div ref={ref} className={className}
+      style={{ rotateX, y, transformPerspective: 1200 }}>
+      {children}
+    </motion.div>
+  )
+}
+
 // ---------- Reveal: fade + slide-up halus saat elemen masuk viewport ----------
 function Reveal({ children, className = '' }) {
   const ref = useRef(null)
@@ -2019,7 +2054,8 @@ function Card({ l, nav, index = 0 }) {
 function HomeView({ listings, nav }) {
   // listings sudah difilter hanya status 'published' oleh App.
   const minPrice = listings.length ? Math.min(...listings.map((l) => Number(l.price))) : null
-  // Unit asli terbaik (grade tertinggi yang punya foto) untuk pembuka animasi hero.
+  // Unit asli terbaik (grade tertinggi yang punya foto) — dipakai sebagai foto
+  // fallback kalau WebGL gagal render (bukan lagi bagian animasi pembuka).
   const introUnit =
     listings.find((l) => l.grade === 'S' && l.photos?.[0]) ||
     listings.find((l) => l.grade === 'A' && l.photos?.[0]) ||
@@ -2144,11 +2180,11 @@ function HomeView({ listings, nav }) {
             },
           ].map((f, i) => (
             <Reveal key={f.kicker} className={'feature' + (i % 2 ? ' flip' : '')}>
-              <div className="feature-media">
+              <TiltMedia className="feature-media">
                 {listings[i]?.photos?.[0]
                   ? <FadeImg src={listings[i].photos[0]} alt="" loading="lazy" />
                   : <Blueprint />}
-              </div>
+              </TiltMedia>
               <div className="feature-copy">
                 <p className="kicker">{f.kicker}</p>
                 <h3>{f.title}</h3>
