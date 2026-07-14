@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { MOD_CATEGORIES, CAT_FALLBACK } from './modParts';
 
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -9,6 +10,7 @@ function ModPartForm({ initial, onClose, onSaved, toast }) {
   const editing = Boolean(initial && initial.id);
   const [f, setF] = useState({
     name: initial?.name || '',
+    category: initial?.category || CAT_FALLBACK,
     price: initial?.price || '',
     x_pos: initial?.x_pos || 0,
     y_pos: initial?.y_pos || 0,
@@ -48,6 +50,7 @@ function ModPartForm({ initial, onClose, onSaved, toast }) {
     setBusy(true);
     const payload = {
       name: f.name.trim(),
+      category: f.category,
       price: Number(f.price),
       image_url: imageUrl,
       x_pos: Number(f.x_pos),
@@ -66,7 +69,13 @@ function ModPartForm({ initial, onClose, onSaved, toast }) {
       }
       onSaved();
     } catch (ex) {
-      setErr(ex.message || 'Gagal menyimpan part modifikasi');
+      // Kolom category baru ada setelah migrasi dijalankan. Tanpa pesan ini,
+      // admin cuma melihat error PostgREST mentah yang tidak menyebut solusinya.
+      const raw = ex.message || '';
+      setErr(/category/i.test(raw) && /column|schema cache/i.test(raw)
+        ? 'Kolom "category" belum ada di tabel mod_parts. Jalankan dulu migrasi '
+          + 'supabase/migrations/0001_mod_part_category.sql di SQL Editor Supabase.'
+        : (raw || 'Gagal menyimpan part modifikasi'));
     } finally {
       setBusy(false);
     }
@@ -88,6 +97,12 @@ function ModPartForm({ initial, onClose, onSaved, toast }) {
               <div className="field full">
                 <label htmlFor="mp-name">Nama Part</label>
                 <input id="mp-name" value={f.name} onChange={set('name')} placeholder="Stang Fatbar" required />
+              </div>
+              <div className="field full">
+                <label htmlFor="mp-cat">Kategori</label>
+                <select id="mp-cat" value={f.category} onChange={set('category')}>
+                  {MOD_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
               <div className="field full">
                 <label htmlFor="mp-price">Harga Part (Rp)</label>

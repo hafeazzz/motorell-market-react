@@ -5,13 +5,14 @@
 // Pembayaran: Edge Function create-dp-payment -> Midtrans QRIS
 // ============================================================
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { motion, AnimatePresence, animate, useScroll, useTransform } from 'framer-motion'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { motion, AnimatePresence, animate, useScroll, useTransform, useInView } from 'framer-motion'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
 import * as THREE from 'three'
 import ArchiveTab from './ArchiveTab';
 import ModPartPanel from './ModPartPanel';
+import { MOD_CATEGORIES, catOf } from './modParts';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 // ---------- Konfigurasi ----------
@@ -190,6 +191,95 @@ function FadeImg({ className = '', ...props }) {
   )
 }
 
+// ---------- Smart search ----------
+// Search bar bukan pajangan: teks bebas diurai jadi filter beneran (harga,
+// tahun, grade) lalu sisanya dicocokkan ke brand/model/judul/warna. Jadi
+// "xsr 2021 di bawah 30 juta" langsung menyaring, bukan cuma cocok-cocokan
+// string ke judul.
+function useDebounced(value, delay = 300) {
+  const [v, setV] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return v
+}
+
+// "20 juta" / "20jt" / "20 jt" → 20_000_000 ; "15000000" → 15_000_000
+function parseAmount(numStr, unit) {
+  const n = Number(String(numStr).replace(/[.,]/g, ''))
+  if (!Number.isFinite(n) || n <= 0) return null
+  return unit ? n * 1_000_000 : n
+}
+
+function parseQuery(raw) {
+  let s = String(raw || '').toLowerCase().trim()
+  const f = { text: '', priceMax: null, priceMin: null, year: null, grade: null }
+  if (!s) return f
+
+  // batas harga atas: "di bawah 20 juta", "dibawah 20jt", "< 20 juta", "max 20jt"
+  s = s.replace(/(?:di\s?bawah|dibawah|kurang dari|max(?:imal)?|<=?)\s*(\d[\d.,]*)\s*(juta|jt)?/g,
+    (_, n, u) => { const v = parseAmount(n, u); if (v) f.priceMax = v; return ' ' })
+  // batas harga bawah: "di atas 20 juta", "min 20jt", "> 20 juta"
+  s = s.replace(/(?:di\s?atas|diatas|lebih dari|min(?:imal)?|>=?)\s*(\d[\d.,]*)\s*(juta|jt)?/g,
+    (_, n, u) => { const v = parseAmount(n, u); if (v) f.priceMin = v; return ' ' })
+  // grade: "grade a" / "grade-s"
+  s = s.replace(/grade[\s-]*([sab])\b/g, (_, g) => { f.grade = g.toUpperCase(); return ' ' })
+  // tahun: 4 digit yang masuk akal untuk motor
+  s = s.replace(/\b(19[89]\d|20[0-4]\d)\b/g, (_, y) => { f.year = Number(y); return ' ' })
+  // "20 juta" telanjang (tanpa kata di bawah/di atas) diperlakukan sebagai plafon —
+  // orang mengetik angka biasanya berarti "budget saya segini"
+  if (f.priceMax === null && f.priceMin === null) {
+    s = s.replace(/(\d[\d.,]*)\s*(juta|jt)\b/g,
+      (_, n, u) => { const v = parseAmount(n, u); if (v) f.priceMax = v; return ' ' })
+  }
+
+  f.text = s.replace(/\s+/g, ' ').trim()
+  return f
+}
+
+// Sebuah unit lolos kalau SEMUA filter yang terurai cocok (AND), dan teks
+// sisanya muncul di brand/model/judul/warna.
+function matchListing(l, f) {
+  if (!f) return true
+  if (f.grade && String(l.grade || '').toUpperCase() !== f.grade) return false
+  if (f.year && Number(l.year) !== f.year) return false
+  if (f.priceMax && Number(l.price) > f.priceMax) return false
+  if (f.priceMin && Number(l.price) < f.priceMin) return false
+  if (f.text) {
+    const hay = [l.brand, l.model, l.title, l.color].filter(Boolean).join(' ').toLowerCase()
+    // tiap kata harus ada — "xsr hitam" tidak cocok ke XSR merah
+    return f.text.split(' ').every((w) => hay.includes(w))
+  }
+  return true
+}
+
+const hasFilter = (f) =>
+  Boolean(f && (f.text || f.grade || f.year || f.priceMax || f.priceMin))
+
+// Ringkasan filter aktif untuk ditampilkan sebagai chip di dropdown
+function filterChips(f) {
+  const out = []
+  if (f.grade) out.push('Grade ' + f.grade)
+  if (f.year) out.push('Tahun ' + f.year)
+  if (f.priceMax) out.push('≤ ' + rupiah(f.priceMax))
+  if (f.priceMin) out.push('≥ ' + rupiah(f.priceMin))
+  return out
+}
+
+// Potong judul jadi bagian cocok / tidak cocok supaya bisa di-<mark>.
+// Perhatikan: split() dengan grup tangkap mempertahankan delimiter-nya, jadi
+// potongan yang cocok bisa dikenali cukup dengan membandingkan lowercase-nya
+// (jangan pakai re.test — regex /g menyimpan lastIndex dan hasilnya selang-seling).
+function highlight(text, words) {
+  const src = String(text || '')
+  const ws = (words || []).filter(Boolean)
+  if (!ws.length) return [{ t: src, on: false }]
+  const re = new RegExp('(' + ws.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'ig')
+  const lower = new Set(ws.map((w) => w.toLowerCase()))
+  return src.split(re).filter(Boolean).map((t) => ({ t, on: lower.has(t.toLowerCase()) }))
+}
+
 // ---------- Gaya (tema terang) ----------
 const CSS = `
 :root{
@@ -334,7 +424,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 
 /* ---------- grid unit ---------- */
 .grid{display:grid;grid-template-columns:1fr;gap:18px}
-.card-wrap{opacity:0;transform:translateY(24px);
+.card-wrap{opacity:0;transform:translateY(24px) scale(.96);
   transition:opacity .55s ease,transform .6s cubic-bezier(.2,.7,.25,1)}
 .card-wrap.shown{opacity:1;transform:none}
 .card{width:100%;height:100%;background:var(--panel);border:1px solid var(--line);
@@ -730,6 +820,62 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .feature.flip .feature-media-slide{transform:translateX(46px)}
 .feature.flip .feature-copy{transform:translateX(-46px)}
 .feature.shown .feature-media-slide,.feature.shown .feature-copy{opacity:1;transform:none}
+
+/* ---------- Smart search: dropdown saran ---------- */
+.ns-pop{position:absolute;top:calc(100% + 9px);left:0;right:0;z-index:80;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 18px 50px rgba(17,17,20,.16);overflow:hidden}
+.ns-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+.ns-count{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted)}
+.ns-chips{display:flex;gap:6px;flex-wrap:wrap}
+.ns-chip{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.05em;
+  padding:4px 9px;border-radius:999px;border:1px solid var(--line-2);color:var(--accent);
+  background:rgba(26,47,94,.06);white-space:nowrap}
+.ns-list{max-height:min(58vh,380px);overflow-y:auto}
+.ns-item{display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;
+  text-align:left;border-bottom:1px solid var(--line);transition:background .15s}
+.ns-item:last-child{border-bottom:none}
+.ns-item:hover,.ns-item.cur{background:var(--panel-2)}
+.ns-item img{width:52px;height:40px;border-radius:7px;object-fit:cover;flex:none;
+  border:1px solid var(--line)}
+.ns-thumb-empty{width:52px;height:40px;border-radius:7px;flex:none;background:var(--bg-3);
+  border:1px solid var(--line)}
+.ns-body{flex:1;min-width:0}
+.ns-body b{display:block;font-size:13.5px;font-weight:660;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.ns-body span{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.ns-body mark{background:rgba(26,47,94,.16);color:var(--accent);border-radius:3px;padding:0 1px}
+.ns-price{font-size:13px;font-weight:720;white-space:nowrap;flex:none}
+.ns-all{width:100%;padding:12px;font-size:12.5px;font-weight:600;color:var(--accent);
+  background:var(--panel-2);border-top:1px solid var(--line);transition:background .15s}
+.ns-all:hover{background:var(--bg-3)}
+.ns-none{padding:22px 14px;text-align:center;font-size:13.5px;color:var(--muted)}
+/* chip filter cepat — sekali klik langsung mengisi query */
+.ns-quick{display:flex;gap:6px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--line)}
+.ns-quick button{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.05em;
+  padding:6px 11px;border-radius:999px;border:1px solid var(--line-2);color:var(--muted);
+  transition:border-color .18s,color .18s}
+.ns-quick button:hover{border-color:var(--accent);color:var(--accent)}
+
+/* kartu hasil pencarian disorot sebentar supaya mata langsung tertuju ke sana */
+.card-wrap.match .card{border-color:var(--accent);
+  box-shadow:0 0 0 1.5px var(--accent),var(--shadow)}
+
+/* ---------- Part modifikasi: tab kategori di halaman detail ---------- */
+.mp-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;
+  margin-bottom:14px}
+.mp-tabs button{padding:9px 12px;font-size:12px;font-weight:600;color:var(--muted);
+  position:relative;white-space:nowrap;flex:none;transition:color .2s;text-transform:uppercase;
+  font-family:var(--mono);letter-spacing:.06em}
+.mp-tabs button:hover{color:var(--ink)}
+.mp-tabs button.on{color:var(--ink)}
+.mp-tabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:var(--accent)}
+.mp-tabs .n{opacity:.55;margin-left:5px}
+.w-opt img{width:34px;height:26px;border-radius:5px;object-fit:cover;flex:none;
+  border:1px solid var(--line)}
 
 /* ============================================================
    MOBILE-FIRST: basis di atas dirancang untuk 320–428px. Dari sini,
@@ -2027,7 +2173,7 @@ function Gallery({ photos, title, selectedModParts = [] }) {
       {/* Render selected mod parts only when not in lightbox and on the main image */}
       {!inLightbox && selectedModParts.map(part => (
         <img
-          key={part.mod_part_id}
+          key={part.id}
           src={part.image_url}
           alt={part.name}
           style={{
@@ -2126,6 +2272,44 @@ function Reveal({ children, className = '', style }) {
   )
 }
 
+// ---------- Fade-in bertahap saat masuk viewport (Framer Motion) ----------
+// Reveal (di atas) memakai kelas CSS dan dipertahankan karena animasi .feature
+// bergantung padanya. FadeIn di bawah ini untuk elemen yang perlu muncul
+// BERURUTAN (heading → subjudul → daftar), yang lebih enak diatur lewat
+// stagger Framer Motion ketimbang menghitung transition-delay manual.
+const fadeParent = {
+  hidden: {},
+  shown: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } },
+}
+const fadeChild = {
+  hidden: { opacity: 0, y: 20 },
+  shown: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.2, 0.7, 0.25, 1] } },
+}
+
+// Bungkus sekelompok elemen; anak-anaknya (FadeIn.Item) muncul bergiliran.
+function FadeIn({ children, className = '', style, amount = 0.25, once = true }) {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once, amount })
+  const reduced = prefersReduced()
+  return (
+    <motion.div
+      ref={ref}
+      className={className}
+      style={style}
+      variants={fadeParent}
+      initial={reduced ? 'shown' : 'hidden'}
+      animate={reduced || inView ? 'shown' : 'hidden'}>
+      {children}
+    </motion.div>
+  )
+}
+
+// Satu langkah dalam antrean stagger induknya.
+function FadeItem({ children, className = '', style, as = 'div' }) {
+  const M = motion[as] || motion.div
+  return <M className={className} style={style} variants={fadeChild}>{children}</M>
+}
+
 // ---------- Tab detail teknis unit (fade transition antar konten) ----------
 const DETAIL_TABS = [
   { id: 'unit', label: 'Tentang unit' },
@@ -2176,8 +2360,22 @@ function DetailView({ listing, nav, onBook }) {
   const [wcode, setWcode] = useState('standard')
   const [selectedModPartIds, setSelectedModPartIds] = useState([]);
   const photos = Array.isArray(listing.photos) ? listing.photos : []
+  // listing.mod_parts adalah baris mod_parts itu sendiri (lihat loadListings),
+  // jadi kuncinya `id` — BUKAN `mod_part_id` (kolom itu ada di tabel junction).
+  // Versi sebelumnya memakai mod_part_id yang selalu undefined, sehingga semua
+  // part berbagi kunci yang sama: mencentang satu part mencentang semuanya.
   const availableModParts = listing.mod_parts || [];
-  const selectedModParts = availableModParts.filter(part => selectedModPartIds.includes(part.mod_part_id));
+  const selectedModParts = availableModParts.filter((part) => selectedModPartIds.includes(part.id));
+
+  // Kategori hanya ditampilkan yang benar-benar punya part, dengan urutan tetap.
+  const catsPresent = MOD_CATEGORIES.filter((c) => availableModParts.some((p) => catOf(p) === c));
+  const [mcat, setMcat] = useState(null);
+  const activeCat = mcat && catsPresent.includes(mcat) ? mcat : catsPresent[0];
+  const partsInCat = availableModParts.filter((p) => catOf(p) === activeCat);
+
+  const toggleModPart = (id) =>
+    setSelectedModPartIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   // Tugas 7: unit grade B hanya boleh paket Avantgard
   const avail = warrantiesForGrade(listing.grade)
   const warranty = avail.find((w) => w.code === wcode) || avail[0]
@@ -2236,25 +2434,43 @@ function DetailView({ listing, nav, onBook }) {
 
             {availableModParts.length > 0 && (
               <>
-                <p className="w-title" style={{ marginTop: '20px' }}>Pilih part modifikasi</p>
+                <p className="w-title" style={{ marginTop: '20px' }}>
+                  Pilih part modifikasi
+                  {selectedModParts.length > 0 && ' · ' + selectedModParts.length + ' dipilih'}
+                </p>
+
+                {/* Tab kategori hanya muncul kalau part-nya memang lebih dari
+                    satu kategori — untuk satu kategori, tab cuma jadi hiasan. */}
+                {catsPresent.length > 1 && (
+                  <div className="mp-tabs" role="tablist" aria-label="Kategori part">
+                    {catsPresent.map((c) => {
+                      const n = availableModParts.filter((p) => catOf(p) === c).length
+                      const sel = availableModParts
+                        .filter((p) => catOf(p) === c && selectedModPartIds.includes(p.id)).length
+                      return (
+                        <button key={c} type="button" role="tab" aria-selected={activeCat === c}
+                          className={activeCat === c ? 'on' : ''} onClick={() => setMcat(c)}>
+                          {c}<span className="n">{sel ? sel + '/' + n : n}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
                 <div className="w-opts">
-                  {availableModParts.map((part) => (
-                    <label key={part.mod_part_id} className={'w-opt' + (selectedModPartIds.includes(part.mod_part_id) ? ' on' : '')}>
+                  {partsInCat.map((part) => (
+                    <label key={part.id}
+                      className={'w-opt' + (selectedModPartIds.includes(part.id) ? ' on' : '')}>
                       <input
                         type="checkbox"
-                        checked={selectedModPartIds.includes(part.mod_part_id)}
-                        onChange={() => {
-                          setSelectedModPartIds(prev =>
-                            prev.includes(part.mod_part_id)
-                              ? prev.filter(id => id !== part.mod_part_id)
-                              : [...prev, part.mod_part_id]
-                          );
-                        }}
+                        checked={selectedModPartIds.includes(part.id)}
+                        onChange={() => toggleModPart(part.id)}
                         style={{ display: 'none' }}
                       />
                       <span className="w-dot" />
+                      {part.image_url && <img src={part.image_url} alt="" loading="lazy" />}
                       <span className="w-body"><b>{part.name}</b></span>
-                      <span className="w-price">{rupiah(part.price)}</span>
+                      <span className="w-price">+{rupiah(part.price)}</span>
                     </label>
                   ))}
                 </div>
@@ -2265,8 +2481,9 @@ function DetailView({ listing, nav, onBook }) {
               <div className="row"><span>Harga unit</span><b>{rupiah(listing.price)}</b></div>
               <div className="row"><span>{warranty.name}<small>dibayar saat pelunasan</small></span><b>{warranty.price ? rupiah(warranty.price) : 'Termasuk'}</b></div>
               {selectedModParts.map(part => (
-                <div className="row" key={part.mod_part_id}>
-                  <span>{part.name}</span><b>{rupiah(part.price)}</b>
+                <div className="row" key={part.id}>
+                  <span>{part.name}<small>{catOf(part)} · part modifikasi</small></span>
+                  <b>+{rupiah(part.price)}</b>
                 </div>
               ))}
               <div className="row hl"><span>Total Harga</span><b>{rupiah(totalPrice)}</b></div>
@@ -2307,7 +2524,7 @@ function DetailView({ listing, nav, onBook }) {
 }
 
 // ---------- Kartu & beranda ----------
-function Card({ l, nav, index = 0 }) {
+function Card({ l, nav, index = 0, highlight = false }) {
   const photos = Array.isArray(l.photos) ? l.photos : []
   const wrapRef = useRef(null)
   const cardRef = useRef(null)
@@ -2348,7 +2565,8 @@ function Card({ l, nav, index = 0 }) {
   }
 
   return (
-    <div ref={wrapRef} className={'card-wrap' + (shown ? ' shown' : '')}
+    <div ref={wrapRef}
+      className={'card-wrap' + (shown ? ' shown' : '') + (highlight ? ' match' : '')}
       style={{ transitionDelay: shown ? (index % 3) * 70 + 'ms' : '0ms' }}>
       <button ref={cardRef} className="card" onClick={() => nav('#/unit/' + l.slug)}
         onPointerMove={onMove} onPointerLeave={onLeave}>
@@ -2374,14 +2592,14 @@ function Card({ l, nav, index = 0 }) {
   )
 }
 
-function HomeView({ listings, nav, query = '', loading = false, error = '' }) {
+function HomeView({ listings, nav, query = '', filters = null, searchActive = false,
+  loading = false, error = '' }) {
   // listings sudah difilter hanya status 'published' oleh App.
-  // Tugas 4: filter etalase client-side dari kata kunci search bar navigasi
-  // (brand/model/title). Section fitur & foto intro tetap pakai listings penuh.
-  const q = query.trim().toLowerCase()
-  const shown = q
-    ? listings.filter((l) =>
-        ((l.brand || '') + ' ' + (l.model || '') + ' ' + (l.title || '')).toLowerCase().includes(q))
+  // Filter etalase memakai parser yang sama dengan dropdown navbar (harga,
+  // tahun, grade, teks) — jadi yang terlihat di grid persis yang dijanjikan
+  // dropdown. Section fitur & foto intro tetap pakai listings penuh.
+  const shown = searchActive
+    ? listings.filter((l) => matchListing(l, filters))
     : listings
   // Unit asli terbaik (grade tertinggi yang punya foto) — dipakai sebagai foto
   // fallback kalau WebGL gagal render (bukan lagi bagian animasi pembuka).
@@ -2486,7 +2704,8 @@ function HomeView({ listings, nav, query = '', loading = false, error = '' }) {
                 <div className="empty">Etalase sedang kosong — unit baru sedang dalam proses kurasi.</div>)}
               {!loading && !error && listings.length > 0 && shown.length === 0 && (
                 <div className="empty">Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</div>)}
-              {!loading && !error && shown.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
+              {!loading && !error && shown.map((l, i) => (
+                <Card key={l.id} l={l} nav={nav} index={i} highlight={searchActive} />))}
             </div>
           </div>
         </section>
@@ -2495,14 +2714,17 @@ function HomeView({ listings, nav, query = '', loading = false, error = '' }) {
       <Reveal> {/* Wrapped the #kurasi section */}
         <section className="section" id="kurasi">
           <div className="container">
-            <div className="sec-head" style={{ marginBottom: 'clamp(48px,7vw,84px)' }}>
-              <div>
+            {/* judul → subjudul muncul berurutan, bukan serempak */}
+            <FadeIn className="sec-head" style={{ marginBottom: 'clamp(48px,7vw,84px)' }}>
+              <FadeItem>
                 <p className="kicker">Kenapa Motorell</p>
                 <h2>Beli motor,<br />anti was-was.</h2>
-              </div>
-              <p className="aside">Kami saring dulu, baru tayang. Yang sampai ke etalase hanya unit yang
-                lolos pemeriksaan dan layak kamu bawa pulang.</p>
-            </div>
+              </FadeItem>
+              <FadeItem as="p" className="aside">
+                Kami saring dulu, baru tayang. Yang sampai ke etalase hanya unit yang
+                lolos pemeriksaan dan layak kamu bawa pulang.
+              </FadeItem>
+            </FadeIn>
             {[
               {
                 kicker: 'Kurasi jujur',
@@ -2537,19 +2759,18 @@ function HomeView({ listings, nav, query = '', loading = false, error = '' }) {
             ))}
 
             {/* Tugas 8: kartu penjelasan grade */}
-            <div className="grade-head">
-              <p className="kicker">Sistem grade</p>
-              <h3>Tiga grade, satu standar jujur.</h3>
-            </div>
-            <div className="grade-cards">
-              {GRADE_DEF.map((gd, i) => (
-                <Reveal key={gd.g} className="grade-card"
-                  style={{ transitionDelay: (i * 80) + 'ms' }}>
+            <FadeIn className="grade-head">
+              <FadeItem as="p" className="kicker">Sistem grade</FadeItem>
+              <FadeItem as="h3">Tiga grade, satu standar jujur.</FadeItem>
+            </FadeIn>
+            <FadeIn className="grade-cards">
+              {GRADE_DEF.map((gd) => (
+                <FadeItem key={gd.g} className="grade-card">
                   <span className={'badge g-' + gd.g.toLowerCase()}>GRADE {gd.g}</span>
                   <p>{gd.text}</p>
-                </Reveal>
+                </FadeItem>
               ))}
-            </div>
+            </FadeIn>
           </div>
         </section>
       </Reveal>
@@ -2563,10 +2784,22 @@ const SEARCH_HINTS = [
   'Cari motor retro…',
   'Cari motor di bawah 20 juta…',
 ]
-function NavSearch({ value, onChange, onSubmit }) { // Added onSubmit prop
+// Filter cepat sekali-klik — mengisi search bar dengan kalimat yang memang
+// dimengerti parser-nya, jadi chip dan ketikan manual jalannya sama persis.
+const QUICK_FILTERS = ['Grade S', 'Grade A', 'Di bawah 20 juta', 'Di bawah 30 juta']
+
+// Search bar navbar: mengetik langsung menyaring etalase (lihat App), dan
+// dropdown ini menawarkan lompatan LANGSUNG ke unit — tidak perlu scroll dan
+// mencari sendiri di grid.
+function NavSearch({ value, onChange, onSubmit, results = [], total = 0, filters = [],
+  words = [], onPick, onQuick }) {
+  const [ph, setPh] = useState(() => (prefersReduced() ? SEARCH_HINTS[0] : ''))
+  const [open, setOpen] = useState(false)
+  const [cur, setCur] = useState(-1)
+  const boxRef = useRef(null)
+
   // placeholder animasi typewriter: mengetik lalu menghapus, bergilir.
   // prefers-reduced-motion → tampilkan satu placeholder statis (tanpa animasi).
-  const [ph, setPh] = useState(() => (prefersReduced() ? SEARCH_HINTS[0] : ''))
   useEffect(() => {
     if (prefersReduced()) return
     let hintI = 0, chI = 0, deleting = false, timer
@@ -2588,26 +2821,121 @@ function NavSearch({ value, onChange, onSubmit }) { // Added onSubmit prop
     return () => clearTimeout(timer)
   }, [])
 
+  // klik di luar menutup dropdown
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => {
+      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [open])
+
+  // hasil berubah → reset sorotan keyboard supaya tidak menunjuk baris basi
+  useEffect(() => { setCur(-1) }, [value])
+
+  const show = open && value.trim().length > 0
+
+  const onKeyDown = (e) => {
+    if (!show) return
+    if (e.key === 'Escape') { setOpen(false); return }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); setCur((i) => Math.min(i + 1, results.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault(); setCur((i) => Math.max(i - 1, -1))
+    } else if (e.key === 'Enter' && cur >= 0 && results[cur]) {
+      // Enter di atas saran = buka unitnya langsung
+      e.preventDefault()
+      setOpen(false)
+      onPick(results[cur])
+    }
+  }
+
   return (
-    <form className="nav-search" onSubmit={onSubmit}> {/* Added form and onSubmit */}
-      <svg className="si" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
-      </svg>
-      <input type="search" value={value} onChange={(e) => onChange(e.target.value)}
-        placeholder={ph || 'Cari unit…'} aria-label="Cari unit di etalase" />
-    </form>
+    <div className="nav-search" ref={boxRef}>
+      <form onSubmit={(e) => { setOpen(false); onSubmit(e) }} role="search">
+        <svg className="si" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
+        </svg>
+        <input type="search" value={value}
+          onChange={(e) => { onChange(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          placeholder={ph || 'Cari unit…'}
+          aria-label="Cari unit di etalase"
+          aria-expanded={show}
+          aria-controls="ns-pop" />
+      </form>
+
+      {show && (
+        <div className="ns-pop" id="ns-pop" role="listbox">
+          <div className="ns-meta">
+            <span className="ns-count">{total} unit cocok</span>
+            {filters.length > 0 && (
+              <span className="ns-chips">
+                {filters.map((c) => <span className="ns-chip" key={c}>{c}</span>)}
+              </span>
+            )}
+          </div>
+
+          {results.length === 0 ? (
+            <p className="ns-none">Tidak ada unit yang cocok. Coba kata kunci lain.</p>
+          ) : (
+            <div className="ns-list">
+              {results.map((l, i) => (
+                <button type="button" key={l.id} role="option" aria-selected={i === cur}
+                  className={'ns-item' + (i === cur ? ' cur' : '')}
+                  onMouseEnter={() => setCur(i)}
+                  onClick={() => { setOpen(false); onPick(l) }}>
+                  {l.photos?.[0]
+                    ? <img src={l.photos[0]} alt="" loading="lazy" />
+                    : <span className="ns-thumb-empty" />}
+                  <span className="ns-body">
+                    <b>
+                      {highlight(l.title, words).map((p, k) =>
+                        p.on ? <mark key={k}>{p.t}</mark> : <span key={k}>{p.t}</span>)}
+                    </b>
+                    <span>{l.year} · GRADE {l.grade}{l.color ? ' · ' + l.color.toUpperCase() : ''}</span>
+                  </span>
+                  <span className="ns-price">{rupiah(l.price)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {total > results.length && (
+            <button type="button" className="ns-all"
+              onClick={(e) => { setOpen(false); onSubmit(e) }}>
+              Lihat semua {total} hasil →
+            </button>
+          )}
+
+          <div className="ns-quick">
+            {QUICK_FILTERS.map((qf) => (
+              <button type="button" key={qf} onClick={() => { onQuick(qf); setOpen(true) }}>{qf}</button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
 // ---------- Root ----------
+// Hash membawa query pencarian juga: "#/?q=xsr%20di%20bawah%2030%20juta".
+// Dengan begitu hasil pencarian bisa di-share/di-bookmark, dan tombol
+// back/forward browser mengembalikan pencarian sebelumnya.
 function parseHash() {
-  const h = window.location.hash || '#/'
-  const unit = h.match(/^#\/unit\/(.+)$/)
-  if (unit) return { name: 'unit', slug: decodeURIComponent(unit[1]) }
-  if (h === '#/admin') return { name: 'admin' }
-  if (h === '#/kebijakan') return { name: 'kebijakan' }
-  return { name: 'home' }
+  const raw = window.location.hash || '#/'
+  const qIdx = raw.indexOf('?')
+  const path = qIdx === -1 ? raw : raw.slice(0, qIdx)
+  const q = qIdx === -1 ? '' : (new URLSearchParams(raw.slice(qIdx + 1)).get('q') || '')
+  const unit = path.match(/^#\/unit\/(.+)$/)
+  if (unit) return { name: 'unit', slug: decodeURIComponent(unit[1]), q }
+  if (path === '#/admin') return { name: 'admin', q }
+  if (path === '#/kebijakan') return { name: 'kebijakan', q }
+  return { name: 'home', q }
 }
 
 // ---------- Halaman kebijakan / FAQ (route #/kebijakan) ----------
@@ -2685,6 +3013,12 @@ export default function App() {
 
   const nav = useCallback((hash) => { window.location.hash = hash }, [])
 
+  const scrollToEtalase = useCallback(() => {
+    const target = document.getElementById('etalase')
+    if (!target) return
+    target.scrollIntoView(prefersReduced() ? undefined : { behavior: 'smooth', block: 'start' })
+  }, [])
+
   // Submit dari search bar di navbar: bawa ke etalase dan gulirkan ke sana.
   // Hero punya versi sendiri (dengan animasi portal) — yang ini sengaja polos
   // karena dipanggil dari navbar yang bisa aktif di halaman mana pun.
@@ -2692,12 +3026,49 @@ export default function App() {
     e?.preventDefault()
     if (route.name !== 'home') nav('#/')
     // kalau rute baru berpindah, #etalase belum ada di DOM pada tick ini
-    setTimeout(() => {
-      const target = document.getElementById('etalase')
-      if (!target) return
-      target.scrollIntoView(prefersReduced() ? undefined : { behavior: 'smooth', block: 'start' })
-    }, route.name === 'home' ? 0 : 80)
-  }, [route.name, nav])
+    setTimeout(scrollToEtalase, route.name === 'home' ? 0 : 80)
+  }, [route.name, nav, scrollToEtalase])
+
+  // ---- Smart search ----
+  // query = apa yang sedang diketik (responsif), dQuery = versi yang sudah
+  // diam 300ms — hanya yang terakhir ini dipakai untuk memfilter, menulis URL,
+  // dan auto-scroll, supaya tidak ada kerja berat per ketukan tombol.
+  const dQuery = useDebounced(query, 300)
+  const filters = useMemo(() => parseQuery(dQuery), [dQuery])
+  const active = hasFilter(filters)
+  const results = useMemo(
+    () => (active ? listings.filter((l) => matchListing(l, filters)) : []),
+    [active, listings, filters])
+
+  // Hash diperbarui tanpa menambah entri history per ketukan (replaceState tidak
+  // memicu hashchange) — link tetap bisa di-share, tapi tombol back tidak
+  // terjebak melangkahi 20 huruf yang barusan diketik.
+  useEffect(() => {
+    if (route.name !== 'home') return
+    const want = dQuery.trim() ? '#/?q=' + encodeURIComponent(dQuery.trim()) : '#/'
+    if (window.location.hash !== want && (window.location.hash || '#/') !== want) {
+      window.history.replaceState(null, '', want)
+    }
+  }, [dQuery, route.name])
+
+  // Pencarian dari URL (link yang di-share / tombol back) masuk balik ke input.
+  useEffect(() => {
+    setQuery((prev) => (route.q !== prev ? route.q : prev))
+  }, [route.q])
+
+  // "Search bukan pajangan": begitu ada hasil, halaman langsung meluncur ke
+  // etalase. Hanya dipicu saat pencarian BARU dimulai (kosong → ada isi), bukan
+  // tiap huruf — kalau tidak, halaman akan menyentak terus sambil user mengetik.
+  const searching = useRef(false)
+  useEffect(() => {
+    if (route.name !== 'home') return
+    if (active && results.length > 0 && !searching.current) {
+      searching.current = true
+      scrollToEtalase()
+    } else if (!active) {
+      searching.current = false
+    }
+  }, [active, results.length, route.name, scrollToEtalase])
 
   useEffect(() => {
     const onHash = () => { setRoute(parseHash()); window.scrollTo(0, 0) }
@@ -2853,11 +3224,20 @@ export default function App() {
           <a className="logo" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>
             MOTORELL<i>●</i><small>MARKET</small>
           </a>
-          <NavSearch value={query} onChange={(v) => {
-            setQuery(v)
-            // kalau mengetik dari halaman lain, bawa ke etalase supaya hasil terlihat
-            if (v && route.name !== 'home') nav('#/')
-          }} onSubmit={goEtalase} />
+          <NavSearch
+            value={query}
+            onChange={(v) => {
+              setQuery(v)
+              // kalau mengetik dari halaman lain, bawa ke etalase supaya hasil terlihat
+              if (v && route.name !== 'home') nav('#/')
+            }}
+            onSubmit={goEtalase}
+            results={results.slice(0, 5)}
+            total={results.length}
+            filters={filterChips(filters)}
+            words={filters.text ? filters.text.split(' ') : []}
+            onPick={(l) => { setQuery(''); nav('#/unit/' + l.slug) }}
+            onQuick={(text) => { setQuery(text); if (route.name !== 'home') nav('#/') }} />
           <div className="nav-actions">
             {isStaff && route.name !== 'admin' && (
               <button className="btn btn-quiet btn-sm" onClick={() => nav('#/admin')}>Panel admin</button>)}
@@ -2875,7 +3255,8 @@ export default function App() {
 
       <main>
         {route.name === 'home' && (
-          <HomeView listings={listings} nav={nav} query={query}
+          <HomeView listings={listings} nav={nav}
+            query={dQuery} filters={filters} searchActive={active}
             loading={listLoading} error={listError} />)}
 
         {route.name === 'kebijakan' && <KebijakanView nav={nav} />}

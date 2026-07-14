@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import ModPartForm from './ModPartForm';
+import { catOf } from './modParts';
 
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -12,6 +13,7 @@ function ModPartPanel({ toast }) {
   const [modParts, setModParts] = useState(null);
   const [form, setForm] = useState(null); // null | {} (new) | mod_part (edit)
   const [err, setErr] = useState('');
+  const [busyId, setBusyId] = useState(null);
 
   const loadModParts = useCallback(async () => {
     if (!supabase) return;
@@ -28,6 +30,24 @@ function ModPartPanel({ toast }) {
   useEffect(() => {
     loadModParts();
   }, [loadModParts]);
+
+  // Hapus part. Baris di motor_mod_parts yang menunjuk part ini dibersihkan
+  // dulu — kalau FK-nya tanpa ON DELETE CASCADE, delete langsung akan ditolak.
+  const removePart = async (part) => {
+    if (!confirm('Hapus part "' + part.name + '"? Part ini juga dilepas dari semua unit.')) return;
+    setBusyId(part.id);
+    try {
+      await supabase.from('motor_mod_parts').delete().eq('mod_part_id', part.id);
+      const { error } = await supabase.from('mod_parts').delete().eq('id', part.id);
+      if (error) throw error;
+      toast('Part "' + part.name + '" dihapus');
+      loadModParts();
+    } catch (ex) {
+      toast('Gagal menghapus part: ' + (ex.message || 'coba lagi'));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <>
@@ -50,11 +70,15 @@ function ModPartPanel({ toast }) {
               </div>
               <div className="a-info">
                 <b>{part.name}</b>
-                <span>Harga: {rupiah(part.price)}</span>
-                <span>Posisi: ({part.x_pos}, {part.y_pos})</span>
+                <span>{catOf(part)} · {rupiah(part.price)}</span>
+                <span>Posisi overlay: ({part.x_pos}, {part.y_pos})</span>
               </div>
               <div className="a-actions">
                 <button className="btn btn-ghost btn-sm" onClick={() => setForm(part)}>Edit</button>
+                <button className="btn btn-ghost btn-sm" disabled={busyId === part.id}
+                  onClick={() => removePart(part)}>
+                  {busyId === part.id ? 'Menghapus…' : 'Hapus'}
+                </button>
               </div>
             </div>
           ))}
