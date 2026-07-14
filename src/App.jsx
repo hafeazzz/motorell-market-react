@@ -19,6 +19,17 @@ const SUPA_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const supabase = SUPA_URL && SUPA_KEY ? createClient(SUPA_URL, SUPA_KEY) : null
 
+// Status koneksi dilog sekali saat modul dimuat — cukup untuk memastikan env
+// var terbaca tanpa membanjiri console tiap render.
+if (!supabase) {
+  console.error(
+    '[SUPABASE] Env var belum lengkap — app akan menampilkan layar konfigurasi.',
+    { VITE_SUPABASE_URL: Boolean(SUPA_URL), VITE_SUPABASE_ANON_KEY: Boolean(SUPA_KEY) },
+  )
+} else {
+  console.info('[SUPABASE] Client siap →', SUPA_URL)
+}
+
 // DP dikunci flat Rp500.000 untuk semua unit (bukan persentase).
 // Nilai ini juga divalidasi ulang di Edge Function create-dp-payment.
 const DP_FIXED = 500000
@@ -2363,7 +2374,7 @@ function Card({ l, nav, index = 0 }) {
   )
 }
 
-function HomeView({ listings, nav, query = '' }) {
+function HomeView({ listings, nav, query = '', loading = false, error = '' }) {
   // listings sudah difilter hanya status 'published' oleh App.
   // Tugas 4: filter etalase client-side dari kata kunci search bar navigasi
   // (brand/model/title). Section fitur & foto intro tetap pakai listings penuh.
@@ -2463,11 +2474,19 @@ function HomeView({ listings, nav, query = '' }) {
                 dan mengunci unit dengan DP — book melalui Contact Kami.</p>
             </div>
             <div className="grid">
-              {listings.length === 0 && (
+              {loading && (
+                <div className="empty">Memuat etalase…</div>)}
+              {!loading && error && (
+                <div className="empty">
+                  Gagal memuat etalase — {error}.<br />
+                  <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+                    onClick={() => window.location.reload()}>Coba lagi</button>
+                </div>)}
+              {!loading && !error && listings.length === 0 && (
                 <div className="empty">Etalase sedang kosong — unit baru sedang dalam proses kurasi.</div>)}
-              {listings.length > 0 && shown.length === 0 && (
+              {!loading && !error && listings.length > 0 && shown.length === 0 && (
                 <div className="empty">Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</div>)}
-              {shown.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
+              {!loading && !error && shown.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
             </div>
           </div>
         </section>
@@ -2653,6 +2672,10 @@ export default function App() {
   const toastRef = useRef(null)
   const [waHandoff, setWaHandoff] = useState(false)
   const [query, setQuery] = useState('')
+  // Etalase punya tiga keadaan berbeda yang dulu terlihat sama (grid kosong):
+  // sedang memuat, gagal memuat, dan benar-benar kosong.
+  const [listLoading, setListLoading] = useState(true)
+  const [listError, setListError] = useState('')
 
   const toast = useCallback((msg) => {
     setToastMsg(msg)
@@ -2661,6 +2684,20 @@ export default function App() {
   }, [])
 
   const nav = useCallback((hash) => { window.location.hash = hash }, [])
+
+  // Submit dari search bar di navbar: bawa ke etalase dan gulirkan ke sana.
+  // Hero punya versi sendiri (dengan animasi portal) — yang ini sengaja polos
+  // karena dipanggil dari navbar yang bisa aktif di halaman mana pun.
+  const goEtalase = useCallback((e) => {
+    e?.preventDefault()
+    if (route.name !== 'home') nav('#/')
+    // kalau rute baru berpindah, #etalase belum ada di DOM pada tick ini
+    setTimeout(() => {
+      const target = document.getElementById('etalase')
+      if (!target) return
+      target.scrollIntoView(prefersReduced() ? undefined : { behavior: 'smooth', block: 'start' })
+    }, route.name === 'home' ? 0 : 80)
+  }, [route.name, nav])
 
   useEffect(() => {
     const onHash = () => { setRoute(parseHash()); window.scrollTo(0, 0) }
@@ -2707,15 +2744,39 @@ export default function App() {
   // mengembalikannya ke 'published' sehingga muncul lagi.
   const loadListings = useCallback(async () => {
     if (!supabase) return
-    const { data, error } = await supabase.from('listings')
-      .select('*, mod_parts_relation:motor_mod_parts(mod_part_id, mod_parts(*))')
-      .eq('status', 'published')
-      .order('published_at', { ascending: false })
-    if (!error) {
-      setListings(data.map(l => ({
+    // Saat jaringan mati, klien Supabase mencoba ulang request tanpa henti dan
+    // promise-nya TIDAK PERNAH settle — try/catch saja tidak menolong, etalase
+    // akan terkunci di "memuat" selamanya. abortSignal memberi batas waktu tegas.
+    const ctrl = new AbortController()
+    const killer = setTimeout(() => ctrl.abort(), 12000)
+    try {
+      const { data, error } = await supabase.from('listings')
+        .select('*, mod_parts_relation:motor_mod_parts(mod_part_id, mod_parts(*))')
+        .eq('status', 'published')
+        .order('published_at', { ascending: false })
+        .abortSignal(ctrl.signal)
+      // Dulu error di sini ditelan diam-diam sehingga etalase gagal-muat
+      // tampak persis seperti etalase kosong.
+      if (error) throw new Error(error.message)
+      setListings((data || []).map((l) => ({
         ...l,
-        mod_parts: l.mod_parts_relation.map(mpr => mpr.mod_parts)
-      })) || [])
+        mod_parts: (l.mod_parts_relation || []).map((mpr) => mpr.mod_parts).filter(Boolean),
+      })))
+      setListError('')
+    } catch (e) {
+      // Jaringan mati membuat fetch REJECT (bukan mengembalikan {error}), jadi
+      // tanpa catch di sini promise-nya menggantung dan etalase terkunci di
+      // status "memuat" selamanya.
+      // Kegagalan jaringan datang sebagai "TypeError: Failed to fetch" — tidak
+      // ada artinya buat pembeli motor, jadi diterjemahkan ke bahasa manusia.
+      const raw = e.message || ''
+      const offline = ctrl.signal.aborted || /failed to fetch|networkerror|load failed/i.test(raw)
+      console.error('[SUPABASE] Gagal memuat listings:', raw || '(tanpa pesan)')
+      setListError(offline ? 'koneksi ke server bermasalah' : raw)
+    } finally {
+      // finally: apa pun hasilnya, spinner harus berhenti.
+      clearTimeout(killer)
+      setListLoading(false)
     }
   }, [])
 
@@ -2768,6 +2829,7 @@ export default function App() {
   if (!supabase) {
     return (
       <div className="cfg">
+        <style>{CSS}</style>
         <div>
           <b>Konfigurasi belum lengkap.</b><br /><br />
           Isi environment variable <code>VITE_SUPABASE_URL</code> dan{' '}
@@ -2784,6 +2846,8 @@ export default function App() {
 
   return (
     <>
+      <style>{CSS}</style>
+
       <header className={'nav' + (scrolled ? ' scrolled' : '')}>
         <div className="container nav-in">
           <a className="logo" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>
@@ -2810,7 +2874,9 @@ export default function App() {
       </header>
 
       <main>
-        {route.name === 'home' && <HomeView listings={listings} nav={nav} query={query} />}
+        {route.name === 'home' && (
+          <HomeView listings={listings} nav={nav} query={query}
+            loading={listLoading} error={listError} />)}
 
         {route.name === 'kebijakan' && <KebijakanView nav={nav} />}
 
