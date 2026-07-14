@@ -396,9 +396,15 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-cta{pointer-events:none}
 .hero-cta .btn{pointer-events:auto}
 .hero-copy{max-width:100%}
-.hero-copy h1{font-size:clamp(46px,6.4vw,86px);font-weight:750;line-height:.97;
-  letter-spacing:-.03em;margin:22px 0 22px}
-.hero-copy h1 em{font-style:normal;color:var(--accent)}
+/* Ukuran diturunkan dari clamp(46px,6.4vw,86px): di ukuran lama "anti was-was."
+   pecah di tanda hubung jadi "ANTI WAS-" / "WAS." — baris yatim yang jelek. */
+.hero-copy h1{font-size:clamp(34px,5.2vw,64px);font-weight:750;line-height:1.06;
+  letter-spacing:-.02em;margin:22px 0 22px}
+/* nowrap di SEMUA ukuran: "anti was-was." tidak boleh pecah di tanda hubung
+   (yang menyisakan baris yatim "WAS."). Ukuran minimum clamp sengaja 34px
+   supaya frasa ini tetap muat utuh bahkan di layar 320px. nowrap dipasang di
+   <em>, bukan di h1 — h1 memuat dua kalimat dan akan meluber kalau dikunci. */
+.hero-copy h1 em{font-style:normal;color:var(--accent);white-space:nowrap}
 .hero-copy p{font-size:16.5px;line-height:1.62;color:var(--muted);max-width:440px;margin-bottom:26px}
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
@@ -738,7 +744,16 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .foot-links{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 .foot-links a:hover{color:var(--accent)}
 .foot-base{margin-top:28px;font-family:var(--mono);font-size:11px;color:var(--dim);
-  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end}
+/* baris kanan: tagline + "Powered by" di bawahnya. Aksen memakai navy brand
+   (--accent), bukan hijau — hijau tabrakan dengan palet showroom di sini. */
+.foot-brand{display:flex;flex-direction:column;gap:5px;text-align:right}
+.foot-brand small{font-size:10.5px;letter-spacing:.06em;color:var(--dim);text-transform:none}
+.foot-brand b{color:var(--accent);font-weight:700}
+@media(max-width:560px){
+  .foot-base{flex-direction:column;align-items:flex-start;gap:14px}
+  .foot-brand{text-align:left}
+}
 .toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,16px);z-index:120;
   background:var(--ink);color:#fff;font-size:13.5px;font-weight:500;padding:12px 20px;
   border-radius:999px;opacity:0;pointer-events:none;transition:.3s;max-width:88vw;
@@ -971,7 +986,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
     linear-gradient(90deg, rgba(255,255,255,.99) 0%, rgba(255,255,255,.82) 30%, rgba(255,255,255,0) 56%),
     linear-gradient(0deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,0) 24%)}
   .hero-3d{opacity:1}
-  .hero-copy{max-width:580px}
+  .hero-copy{max-width:640px}
   .spec-rail{max-width:900px}
 }
 /* layar sempit: sembunyikan label "MARKET" di logo supaya search bar & tombol
@@ -2165,8 +2180,11 @@ function Reveal({ children, className = '', style }) {
     const el = ref.current
     if (!el) return
     if (prefersReduced()) { setShown(true); return }
+    // Dulu observer di-disconnect setelah kena sekali → animasi cuma jalan di
+    // kunjungan pertama. Sekarang kelasnya mengikuti isIntersecting, jadi blok
+    // ini memudar-masuk lagi tiap kali digulung balik ke layar.
     const io = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { setShown(true); io.disconnect() }
+      setShown(entry.isIntersecting)
     }, { threshold: 0.16 })
     io.observe(el)
     return () => io.disconnect()
@@ -2183,19 +2201,35 @@ function Reveal({ children, className = '', style }) {
 // bergantung padanya. FadeIn di bawah ini untuk elemen yang perlu muncul
 // BERURUTAN (heading → subjudul → daftar), yang lebih enak diatur lewat
 // stagger Framer Motion ketimbang menghitung transition-delay manual.
+// once:false — animasi diputar ULANG tiap kali elemen masuk viewport, bukan
+// sekali seumur halaman. Saat elemen keluar layar ia kembali ke 'hidden',
+// jadi menggulung naik-turun memutar animasinya lagi.
 const fadeParent = {
   hidden: {},
   shown: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } },
 }
-const fadeChild = {
-  hidden: { opacity: 0, y: 20 },
-  shown: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.2, 0.7, 0.25, 1] } },
+
+// Arah masuk: 'up' (dari bawah), 'down', 'left' (meluncur dari kanan),
+// 'right' (dari kiri).
+const OFFSET = {
+  up: { y: 24, x: 0 },
+  down: { y: -24, x: 0 },
+  left: { x: 32, y: 0 },
+  right: { x: -32, y: 0 },
 }
 
-// Bungkus sekelompok elemen; anak-anaknya (FadeIn.Item) muncul bergiliran.
-function FadeIn({ children, className = '', style, amount = 0.25, once = true }) {
+const childVariants = (dir) => ({
+  hidden: { opacity: 0, ...(OFFSET[dir] || OFFSET.up) },
+  shown: { opacity: 1, x: 0, y: 0, transition: { duration: 0.45, ease: [0.2, 0.7, 0.25, 1] } },
+})
+
+// Bungkus sekelompok elemen; anak-anaknya (FadeItem) muncul bergiliran, dan
+// mengulang tiap kali blok ini masuk viewport lagi.
+function FadeIn({ children, className = '', style, amount = 0.25 }) {
   const ref = useRef(null)
-  const inView = useInView(ref, { once, amount })
+  // margin bawah negatif: animasi mulai sedikit SEBELUM elemen benar-benar
+  // sampai, jadi tidak terlihat "telat" saat menggulung cepat.
+  const inView = useInView(ref, { once: false, amount, margin: '0px 0px -80px 0px' })
   const reduced = prefersReduced()
   return (
     <motion.div
@@ -2211,9 +2245,13 @@ function FadeIn({ children, className = '', style, amount = 0.25, once = true })
 }
 
 // Satu langkah dalam antrean stagger induknya.
-function FadeItem({ children, className = '', style, as = 'div' }) {
+function FadeItem({ children, className = '', style, as = 'div', direction = 'up' }) {
   const M = motion[as] || motion.div
-  return <M className={className} style={style} variants={fadeChild}>{children}</M>
+  return (
+    <M className={className} style={style} variants={childVariants(direction)}>
+      {children}
+    </M>
+  )
 }
 
 // ---------- Tab detail teknis unit (fade transition antar konten) ----------
@@ -2437,16 +2475,15 @@ function Card({ l, nav, index = 0, highlight = false }) {
   const [shown, setShown] = useState(false)
   const reduced = useRef(false)
 
-  // muncul berurutan saat kartu masuk layar
+  // Muncul berurutan saat kartu masuk layar — dan mengulang tiap kali kartu
+  // masuk lagi (observer tidak lagi di-disconnect setelah kena sekali).
   useEffect(() => {
     reduced.current = prefersReduced()
     const el = wrapRef.current
     if (!el) return
     if (reduced.current) { setShown(true); return }
     const io = new IntersectionObserver((entries) => {
-      for (const en of entries) {
-        if (en.isIntersecting) { setShown(true); io.disconnect() }
-      }
+      for (const en of entries) setShown(en.isIntersecting)
     }, { threshold: 0.15 })
     io.observe(el)
     return () => io.disconnect()
@@ -2626,7 +2663,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <p className="kicker">Kenapa Motorell</p>
                 <h2>Beli motor,<br />anti was-was.</h2>
               </FadeItem>
-              <FadeItem as="p" className="aside">
+              <FadeItem as="p" className="aside" direction="left">
                 Kami saring dulu, baru tayang. Yang sampai ke etalase hanya unit yang
                 lolos pemeriksaan dan layak kamu bawa pulang.
               </FadeItem>
@@ -3200,7 +3237,10 @@ export default function App() {
           </div>
           <div className="foot-base">
             <span>© {new Date().getFullYear()} MOTORELL — INDONESIA</span>
-            <span>JUAL BELI MOTOR TERKURASI</span>
+            <span className="foot-brand">
+              JUAL BELI MOTOR TERKURASI
+              <small>Powered by <b>Motorell Garage</b></small>
+            </span>
           </div>
         </div>
       </footer>
