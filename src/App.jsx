@@ -12,6 +12,8 @@ import QRCode from 'qrcode'
 import * as THREE from 'three'
 import ArchiveTab from './ArchiveTab';
 import ModPartPanel from './ModPartPanel';
+import MotorCarousel from './MotorCarousel';
+import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
@@ -821,6 +823,52 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .feature.flip .feature-copy{transform:translateX(-46px)}
 .feature.shown .feature-media-slide,.feature.shown .feature-copy{opacity:1;transform:none}
 
+/* ---------- MotorCarousel: putar 360° dari foto asli unit ---------- */
+.mc{cursor:grab;touch-action:none;overflow:hidden;outline:none}
+.mc:active{cursor:grabbing}
+.mc.zoomed{cursor:move}
+.mc:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.mc-stage{position:absolute;inset:0;will-change:transform}
+.mc-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
+  user-select:none;-webkit-user-drag:none}
+.mc-part{position:absolute;transform:translate(-50%,-50%);z-index:10;
+  pointer-events:none;max-width:20%;max-height:20%;object-fit:contain}
+.mc-skeleton{position:absolute;inset:0;z-index:12;pointer-events:none;
+  background:linear-gradient(100deg,var(--bg-2) 30%,var(--bg-3) 50%,var(--bg-2) 70%);
+  background-size:220% 100%;animation:mc-shimmer 1.1s linear infinite}
+@keyframes mc-shimmer{to{background-position:-220% 0}}
+.mc-nophoto{position:absolute;left:0;right:0;bottom:16px;text-align:center;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim)}
+.mc-angle{position:absolute;top:12px;left:12px;z-index:13;font-family:var(--mono);
+  font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--ink);
+  background:rgba(255,255,255,.9);border:1px solid var(--line);padding:4px 10px;
+  border-radius:999px;pointer-events:none}
+.mc-reset{position:absolute;top:12px;right:12px;z-index:13;font-family:var(--mono);
+  font-size:10.5px;font-weight:600;letter-spacing:.05em;color:var(--accent);
+  background:rgba(255,255,255,.92);border:1px solid var(--line-2);padding:5px 11px;
+  border-radius:999px}
+.mc-reset:hover{border-color:var(--accent)}
+.mc-dots{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:13;
+  display:flex;gap:6px;padding:6px 9px;border-radius:999px;
+  background:rgba(255,255,255,.86);backdrop-filter:blur(6px);border:1px solid var(--line)}
+.mc-dots button{width:7px;height:7px;border-radius:50%;background:var(--line-2);
+  transition:background .2s,transform .2s}
+.mc-dots button:hover{background:var(--dim)}
+.mc-dots button.on{background:var(--accent);transform:scale(1.35)}
+.mc-hint{position:absolute;left:50%;bottom:38px;transform:translateX(-50%);z-index:12;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap;pointer-events:none;opacity:0;
+  transition:opacity .25s}
+.mc:hover .mc-hint,.mc:focus-visible .mc-hint{opacity:1}
+.mc .g-arrow{opacity:0;transition:opacity .22s,border-color .2s,color .2s}
+.mc:hover .g-arrow,.mc:focus-within .g-arrow{opacity:1}
+/* di layar sentuh panah selalu terlihat — tidak ada hover di sana */
+@media(pointer:coarse){
+  .mc .g-arrow{opacity:1}
+  .mc-hint{opacity:1}
+}
+
 /* ---------- Smart search: dropdown saran ---------- */
 .ns-pop{position:absolute;top:calc(100% + 9px);left:0;right:0;z-index:80;
   background:var(--panel);border:1px solid var(--line);border-radius:14px;
@@ -938,25 +986,6 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .card-media::after{display:none}
 }
 `
-
-// ---------- Blueprint motor (fallback saat unit belum ada foto) ----------
-function Blueprint() {
-  return (
-    <svg className="blp" viewBox="0 0 300 170" fill="none" stroke="#c3c3bf"
-      strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="62" cy="122" r="34" /><circle cx="62" cy="122" r="10" />
-      <circle cx="238" cy="122" r="34" /><circle cx="238" cy="122" r="10" />
-      <path d="M62 122 L110 120 L96 70" />
-      <path d="M238 122 L206 62 L196 54" />
-      <path d="M110 120 L150 118 L196 54" />
-      <path d="M96 70 L104 60 H150 L172 74 L150 118" />
-      <path d="M150 62 q22 -16 44 -8" />
-      <path d="M86 60 L104 60" /><path d="M86 52 v16" />
-      <path d="M118 122 h64" strokeDasharray="3 8" />
-      <path d="M206 62 l16 -10" />
-    </svg>
-  )
-}
 
 // ---------- Motor 3D interaktif (hero) ----------
 // Dibuka dengan foto asli salah satu unit di etalase, lalu "menyingkap"
@@ -2109,129 +2138,6 @@ function AdminPanel({ profile, toast, nav }) {
   )
 }
 
-// ---------- Galeri foto swipeable (detail unit) ----------
-// Swipe/drag horizontal (touch & mouse) via gesture framer-motion,
-// panah kiri-kanan untuk desktop, thumbnail strip + counter sebagai
-// indikator posisi, dan klik foto untuk lightbox fullscreen.
-const slideFx = {
-  enter: (d) => ({ x: d > 0 ? '55%' : '-55%', opacity: 0 }),
-  center: { x: 0, opacity: 1 },
-  exit: (d) => ({ x: d > 0 ? '-55%' : '55%', opacity: 0 }),
-}
-const slideSpring = { x: { type: 'spring', stiffness: 340, damping: 34 }, opacity: { duration: 0.22 } }
-
-function Gallery({ photos, title, selectedModParts = [] }) {
-  const [[idx, dir], setPos] = useState([0, 0])
-  const [zoom, setZoom] = useState(false)
-  const wasDragged = useRef(false)
-  const many = photos.length > 1
-  const galleryRef = useRef(null);
-
-  const go = useCallback((to) => {
-    setPos(([cur]) => {
-      const n = Math.max(0, Math.min(photos.length - 1, to))
-      return n === cur ? [cur, 0] : [n, n > cur ? 1 : -1]
-    })
-  }, [photos.length])
-
-  useEffect(() => { setPos([0, 0]); setZoom(false) }, [photos])
-
-  useEffect(() => {
-    if (!zoom) return
-    const onKey = (e) => {
-      if (e.key === 'Escape') setZoom(false)
-      if (e.key === 'ArrowRight') go(idx + 1)
-      if (e.key === 'ArrowLeft') go(idx - 1)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [zoom, idx, go])
-
-  const onDragEnd = (e, info) => {
-    if (info.offset.x < -70 || info.velocity.x < -500) go(idx + 1)
-    else if (info.offset.x > 70 || info.velocity.x > 500) go(idx - 1)
-    setTimeout(() => { wasDragged.current = false }, 120)
-  }
-
-  if (!photos.length) return <div className="gallery-main"><Blueprint /></div>
-
-  const frame = (inLightbox) => (
-    <>
-      <AnimatePresence initial={false} custom={dir} mode="popLayout">
-        <motion.img key={idx} src={photos[idx]}
-          alt={title + ' — foto ' + (idx + 1) + ' dari ' + photos.length}
-          custom={dir} variants={slideFx} initial="enter" animate="center" exit="exit"
-          transition={slideSpring}
-          drag={many ? 'x' : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.55}
-          onDragStart={() => { wasDragged.current = true }}
-          onDragEnd={onDragEnd}
-          onTap={() => { if (!wasDragged.current && !inLightbox) setZoom(true) }}
-          draggable={false}
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }} // Ensure main image fits
-        />
-      </AnimatePresence>
-      {/* Render selected mod parts only when not in lightbox and on the main image */}
-      {!inLightbox && selectedModParts.map(part => (
-        <img
-          key={part.id}
-          src={part.image_url}
-          alt={part.name}
-          style={{
-            position: 'absolute',
-            left: `${part.x_pos}px`,
-            top: `${part.y_pos}px`,
-            // Adjust to center the part image based on its own dimensions
-            transform: 'translate(-50%, -50%)',
-            zIndex: 10,
-            pointerEvents: 'none', // Allow clicks to pass through to the bike image
-            // Make part images responsive relative to the gallery-main container
-            maxWidth: '20%', // Example: 20% of parent width, adjust as needed
-            maxHeight: '20%', // Example: 20% of parent height, adjust as needed
-            objectFit: 'contain',
-          }}
-        />
-      ))}
-      {many && (
-        <>
-          <button type="button" className="g-arrow prev" onClick={() => go(idx - 1)}
-            disabled={idx === 0} aria-label="Foto sebelumnya">←</button>
-          <button type="button" className="g-arrow next" onClick={() => go(idx + 1)}
-            disabled={idx === photos.length - 1} aria-label="Foto berikutnya">→</button>
-          <span className="g-count">{idx + 1} / {photos.length}</span>
-        </>
-      )}
-    </>
-  )
-
-  return (
-    <>
-      <div ref={galleryRef} className="gallery-main has-photo" style={{ position: 'relative' }} role="group" aria-label={'Galeri foto ' + title}>
-        {frame(false)}
-      </div>
-      {many && (
-        <div className="thumbs">
-          {photos.map((url, i) => (
-            <button key={url} type="button" className={i === idx ? 'on' : ''} onClick={() => go(i)}
-              aria-label={'Foto ' + (i + 1)}>
-              <img src={url} alt="" loading="lazy" />
-            </button>
-          ))}
-        </div>
-      )}
-      <AnimatePresence>
-        {zoom && (
-          <motion.div className="lightbox" role="dialog" aria-modal="true" aria-label={'Foto ' + title}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onMouseDown={(e) => { if (e.target === e.currentTarget) setZoom(false) }}>
-            {frame(true)}
-            <button type="button" className="lb-close" onClick={() => setZoom(false)} aria-label="Tutup">✕</button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  )
-}
-
 // ---------- Tilt 3D + parallax yang terikat posisi scroll (bukan cuma
 // muncul sekali) — dipakai di foto feature block supaya transisi scroll
 // terasa punya kedalaman/berkelas, bukan cuma fade datar. Kode asli
@@ -2390,7 +2296,7 @@ function DetailView({ listing, nav, onBook }) {
         <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
         <div className="detail-grid">
           <div>
-            <Gallery photos={photos} title={listing.title} selectedModParts={selectedModParts} />
+            <MotorCarousel photos={photos} title={listing.title} selectedModParts={selectedModParts} />
             <DetailTabs listing={listing} />
             <div className="unit-terms">
               <h4>Ketentuan unit ini</h4>
