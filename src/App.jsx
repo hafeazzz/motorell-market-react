@@ -955,7 +955,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 }
 @media(min-width:681px){
   .grid{grid-template-columns:repeat(2,1fr)}
-  .spec-rail{grid-template-columns:repeat(3,1fr)}
+  .spec-rail{grid-template-columns:repeat(4,1fr)}
   .sec-head{flex-direction:row;align-items:flex-end}
   .f-grid{grid-template-columns:1fr 1fr}
   .specs{grid-template-columns:repeat(4,1fr)}
@@ -2616,9 +2616,10 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             )}
           </div>
           <div className="spec-rail">
-            <span>Unit diinspeksi<b>50 unit+</b></span>
+            <span>Unit lolos<b>50+ titik inspeksi</b></span>
             <span>Garansi mesin<b>s.d. 37 hari</b></span>
             <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
+            <span>Terjual<b>100+ unit</b></span>
           </div>
         </div>
       </section>
