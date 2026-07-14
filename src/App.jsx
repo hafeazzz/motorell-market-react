@@ -10,6 +10,8 @@ import { motion, AnimatePresence, animate, useScroll, useTransform } from 'frame
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
 import * as THREE from 'three'
+import ArchiveTab from './ArchiveTab';
+import ModPartPanel from './ModPartPanel';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 // ---------- Konfigurasi ----------
@@ -928,10 +930,10 @@ function Bike3D({ introPhoto, onInteract }) {
       new THREE.MeshPhysicalMaterial({ color, roughness: 0.4, metalness: 0.5, envMapIntensity: 1.15, ...o })
     const M = {
       tire: mat('#17171b', { roughness: 0.93, metalness: 0.04, envMapIntensity: 0.3 }),
-      rim: physical('#c9c9cf', { metalness: 0.92, roughness: 0.16, clearcoat: 0.5, clearcoatRoughness: 0.2 }),
+      rim: physical('#c9c9cf', { metalness: 0.95, roughness: 0.1, clearcoat: 0.6, clearcoatRoughness: 0.1 }),
       frame: mat('#1b1b21', { metalness: 0.55, roughness: 0.4 }),
-      chrome: physical('#e4e4e8', { metalness: 0.97, roughness: 0.06, clearcoat: 0.8, clearcoatRoughness: 0.08, envMapIntensity: 1.5 }),
-      tank: physical('#1a2f5e', { metalness: 0.55, roughness: 0.22, clearcoat: 0.9, clearcoatRoughness: 0.1, envMapIntensity: 1.3 }),
+      chrome: physical('#e4e4e8', { metalness: 0.97, roughness: 0.05, clearcoat: 0.9, clearcoatRoughness: 0.05, envMapIntensity: 1.5 }),
+      tank: physical('#1a2f5e', { metalness: 0.55, roughness: 0.18, clearcoat: 1.0, clearcoatRoughness: 0.08, envMapIntensity: 1.5 }),
       dark: mat('#101014', { roughness: 0.85, metalness: 0.1, envMapIntensity: 0.5 }),
       engine: mat('#2d2d34', { metalness: 0.75, roughness: 0.32 }),
     }
@@ -1115,6 +1117,10 @@ function Bike3D({ introPhoto, onInteract }) {
     const dragging = () => pointers.size > 0
     const autoSpin = !reduced
 
+    // New state for suspension effect
+    let suspensionOffset = 0;
+    let targetSuspensionOffset = 0;
+
     const pinchDist = () => {
       const [a, b] = [...pointers.values()]
       return Math.hypot(a.x - b.x, a.y - b.y) || 1
@@ -1129,9 +1135,13 @@ function Bike3D({ introPhoto, onInteract }) {
         // yang membuat transisinya halus, bukan snap)
         const now = performance.now()
         if (now - lastTapAt < 320) {
-          targetY = ROT_DEFAULT; targetElev = 0; targetZoom = 1
+          targetY = ROT_DEFAULT; targetElev = 0; targetZoom = 1;
+          targetSuspensionOffset = 0; // Reset suspension
           lastTapAt = 0
-        } else lastTapAt = now
+        } else {
+          lastTapAt = now
+          targetSuspensionOffset = -0.01; // Apply suspension compression on first touch
+        }
       } else if (pointers.size === 2) {
         lastPinchDist = pinchDist()
       }
@@ -1156,10 +1166,10 @@ function Bike3D({ introPhoto, onInteract }) {
     const onUp = (e) => {
       pointers.delete(e.pointerId)
       if (pointers.size === 1) {
-        // dari pinch turun ke 1 jari: re-anchor supaya tidak lompat
         const p = [...pointers.values()][0]
         lastX = p.x; lastY = p.y
       }
+      targetSuspensionOffset = 0; // Release suspension
     }
     mount.addEventListener('pointerdown', onDown)
     mount.addEventListener('pointermove', onMove)
@@ -1233,10 +1243,17 @@ function Bike3D({ introPhoto, onInteract }) {
       rotY += (targetY - rotY) * 0.08
       elev += (targetElev - elev) * 0.1
       zoom += (targetZoom - zoom) * 0.1
-      bike.rotation.y = rotY
+      suspensionOffset += (targetSuspensionOffset - suspensionOffset) * 0.1; // Smooth suspension change
+
+      bike.rotation.y = rotY;
+      // Dynamically adjust key light position based on bike rotation for shadow
+      const lightRotateAmount = (rotY - ROT_DEFAULT) * 0.1; // Small adjustment
+      key.position.set(3.4 * Math.cos(lightRotateAmount) + 3.2 * Math.sin(lightRotateAmount), 5.6, 3.2 * Math.cos(lightRotateAmount) - 3.4 * Math.sin(lightRotateAmount));
+
+
       updateCamera()
       if (!reduced) {
-        bike.position.y = 0.02 + Math.sin(t * 1.3) * 0.018
+        bike.position.y = 0.02 + Math.sin(t * 1.3) * 0.018 + suspensionOffset; // Apply suspension offset
         for (const w of wheels) w.rotation.z -= 0.045
       }
       renderer.render(scene, camera)
@@ -1514,6 +1531,8 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     status: initial?.status || 'published',
   })
   const [photos, setPhotos] = useState(Array.isArray(initial?.photos) ? initial.photos : [])
+  const [selectedModParts, setSelectedModParts] = useState([]);
+  const [allModParts, setAllModParts] = useState([]);
   const [upMsg, setUpMsg] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -1522,6 +1541,27 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     (slugify((f.brand || 'unit') + ' ' + (f.model || '') + ' ' + f.year) + '-' + Math.random().toString(36).slice(2, 6)))
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+
+  useEffect(() => {
+    async function loadModPartsData() {
+      const { data: allParts, error: allPartsError } = await supabase.from('mod_parts').select('*');
+      if (allPartsError) {
+        toast('Error loading modification parts: ' + allPartsError.message);
+        return;
+      }
+      setAllModParts(allParts || []);
+
+      if (editing && initial?.id) {
+        const { data: motorParts, error: motorPartsError } = await supabase.from('motor_mod_parts').select('mod_part_id').eq('motor_id', initial.id);
+        if (motorPartsError) {
+          toast('Error loading motor modification parts: ' + motorPartsError.message);
+          return;
+        }
+        setSelectedModParts(motorParts.map(mp => mp.mod_part_id));
+      }
+    }
+    loadModPartsData();
+  }, [editing, initial?.id, toast]);
 
   async function handleFiles(picked) {
     const files = Array.from(picked || []).filter((x) => x.type.startsWith('image/'))
@@ -1574,16 +1614,9 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     setErr('')
     if (!f.brand || !f.model || !f.price) { setErr('Merek, model, dan harga wajib diisi.'); return }
     setBusy(true)
-    const payload = {
-      brand: f.brand.trim(), model: f.model.trim(),
-      // Tugas 9a: title cukup "Brand Model" (tahun sudah tampil terpisah di specs)
-      title: (f.brand + ' ' + f.model).replace(/\s+/g, ' ').trim(),
-      year: Number(f.year), mileage_km: Number(f.mileage_km) || 0,
-      color: f.color.trim() || null, price: Number(f.price),
-      grade: f.grade, description: f.description.trim() || null,
-      known_issues: f.known_issues.trim() || null,
-      photos, status: f.status,
-    }
+    let listingId = initial?.id;
+
+    // Save/Update main listing
     try {
       if (editing) {
         if (f.status === 'published' && !initial.published_at) payload.published_at = new Date().toISOString()
@@ -1593,14 +1626,38 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
       } else {
         payload.slug = slugRef.current
         if (f.status === 'published') payload.published_at = new Date().toISOString()
-        const { error } = await supabase.from('listings').insert(payload)
+        const { data, error } = await supabase.from('listings').insert(payload).select('id').single()
         if (error) throw error
+        listingId = data.id;
         toast(f.status === 'published' ? 'Unit tayang di etalase' : 'Unit disimpan sebagai draft')
       }
-      onSaved()
     } catch (ex) {
-      setErr(ex.message || 'Gagal menyimpan unit')
-    } finally { setBusy(false) }
+      setErr(ex.message || 'Gagal menyimpan unit');
+      setBusy(false);
+      return;
+    }
+
+    // Save modification parts
+    try {
+      // First, delete existing relationships
+      await supabase.from('motor_mod_parts').delete().eq('motor_id', listingId);
+
+      // Then, insert new relationships
+      const modPartInserts = selectedModParts.map(partId => ({
+        motor_id: listingId,
+        mod_part_id: partId
+      }));
+      if (modPartInserts.length > 0) {
+        const { error } = await supabase.from('motor_mod_parts').insert(modPartInserts);
+        if (error) throw error;
+      }
+    } catch (ex) {
+      setErr(ex.message || 'Gagal menyimpan part modifikasi motor');
+      setBusy(false);
+      return;
+    }
+
+    onSaved();
   }
 
   return (
@@ -1643,6 +1700,27 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
               <div className="field full"><label htmlFor="u-issues">Catatan kurasi / minus (jujur)</label>
                 <textarea id="u-issues" value={f.known_issues} onChange={set('known_issues')}
                   placeholder="Contoh: baret halus di sayap kiri, ban belakang 70%…" /></div>
+              <div className="field full">
+                <label>Part Modifikasi</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginBottom: '15px' }}>
+                  {allModParts.map(part => (
+                    <label key={part.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedModParts.includes(part.id)}
+                        onChange={() => {
+                          setSelectedModParts(prev =>
+                            prev.includes(part.id)
+                              ? prev.filter(id => id !== part.id)
+                              : [...prev, part.id]
+                          );
+                        }}
+                      />
+                      {part.name} ({rupiah(part.price)})
+                    </label>
+                  ))}
+                </div>
+              </div>
               <div className="field full">
                 <label>Foto unit — {photos.length}/{MAX_PHOTOS} (otomatis dikompres sebelum diunggah)</label>
                 <div className="photo-strip"
@@ -1773,6 +1851,7 @@ function AdminPanel({ profile, toast, nav }) {
   const [view, setView] = useState('units') // units | staff
   const [rows, setRows] = useState(null)
   const [form, setForm] = useState(null) // null | {} (baru) | listing (edit)
+  const [modPartForm, setModPartForm] = useState(null); // null | {} (baru) | mod_part (edit)
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('listings')
@@ -1811,10 +1890,16 @@ function AdminPanel({ profile, toast, nav }) {
           <div className="a-tabs">
             <button type="button" className={view === 'units' ? 'on' : ''} onClick={() => setView('units')}>Etalase</button>
             <button type="button" className={view === 'staff' ? 'on' : ''} onClick={() => setView('staff')}>Staf</button>
+            <button type="button" className={view === 'archive' ? 'on' : ''} onClick={() => setView('archive')}>Arsip</button>
+            <button type="button" className={view === 'mod_parts' ? 'on' : ''} onClick={() => setView('mod_parts')}>Part Modifikasi</button>
           </div>
         )}
 
         {view === 'staff' && canManageStaff && <StaffPanel profile={profile} toast={toast} />}
+
+        {view === 'archive' && <ArchiveTab />}
+
+        {view === 'mod_parts' && canManageStaff && <ModPartPanel toast={toast} />}
 
         {view === 'units' && (
           <>
@@ -1878,13 +1963,12 @@ const slideFx = {
 }
 const slideSpring = { x: { type: 'spring', stiffness: 340, damping: 34 }, opacity: { duration: 0.22 } }
 
-function Gallery({ photos, title }) {
+function Gallery({ photos, title, selectedModParts = [] }) {
   const [[idx, dir], setPos] = useState([0, 0])
   const [zoom, setZoom] = useState(false)
-  // onTap framer-motion tetap menyala setelah drag — tandai supaya
-  // swipe tidak ikut membuka lightbox.
   const wasDragged = useRef(false)
   const many = photos.length > 1
+  const galleryRef = useRef(null);
 
   const go = useCallback((to) => {
     setPos(([cur]) => {
@@ -1925,8 +2009,31 @@ function Gallery({ photos, title }) {
           onDragStart={() => { wasDragged.current = true }}
           onDragEnd={onDragEnd}
           onTap={() => { if (!wasDragged.current && !inLightbox) setZoom(true) }}
-          draggable={false} />
+          draggable={false}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }} // Ensure main image fits
+        />
       </AnimatePresence>
+      {/* Render selected mod parts only when not in lightbox and on the main image */}
+      {!inLightbox && selectedModParts.map(part => (
+        <img
+          key={part.mod_part_id}
+          src={part.image_url}
+          alt={part.name}
+          style={{
+            position: 'absolute',
+            left: `${part.x_pos}px`,
+            top: `${part.y_pos}px`,
+            // Adjust to center the part image based on its own dimensions
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10,
+            pointerEvents: 'none', // Allow clicks to pass through to the bike image
+            // Make part images responsive relative to the gallery-main container
+            maxWidth: '20%', // Example: 20% of parent width, adjust as needed
+            maxHeight: '20%', // Example: 20% of parent height, adjust as needed
+            objectFit: 'contain',
+          }}
+        />
+      ))}
       {many && (
         <>
           <button type="button" className="g-arrow prev" onClick={() => go(idx - 1)}
@@ -1941,7 +2048,7 @@ function Gallery({ photos, title }) {
 
   return (
     <>
-      <div className="gallery-main has-photo" role="group" aria-label={'Galeri foto ' + title}>
+      <div ref={galleryRef} className="gallery-main has-photo" style={{ position: 'relative' }} role="group" aria-label={'Galeri foto ' + title}>
         {frame(false)}
       </div>
       {many && (
@@ -2056,11 +2163,17 @@ function DetailTabs({ listing }) {
 // ---------- Halaman detail unit ----------
 function DetailView({ listing, nav, onBook }) {
   const [wcode, setWcode] = useState('standard')
+  const [selectedModPartIds, setSelectedModPartIds] = useState([]);
   const photos = Array.isArray(listing.photos) ? listing.photos : []
+  const availableModParts = listing.mod_parts || [];
+  const selectedModParts = availableModParts.filter(part => selectedModPartIds.includes(part.mod_part_id));
   // Tugas 7: unit grade B hanya boleh paket Avantgard
   const avail = warrantiesForGrade(listing.grade)
   const warranty = avail.find((w) => w.code === wcode) || avail[0]
   const canBook = listing.status === 'published'
+
+  const totalModPartsPrice = selectedModParts.reduce((sum, part) => sum + Number(part.price), 0);
+  const totalPrice = Number(listing.price) + totalModPartsPrice;
 
   return (
     <section className="detail">
@@ -2068,7 +2181,7 @@ function DetailView({ listing, nav, onBook }) {
         <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
         <div className="detail-grid">
           <div>
-            <Gallery photos={photos} title={listing.title} />
+            <Gallery photos={photos} title={listing.title} selectedModParts={selectedModParts} />
             <DetailTabs listing={listing} />
             <div className="unit-terms">
               <h4>Ketentuan unit ini</h4>
@@ -2110,9 +2223,42 @@ function DetailView({ listing, nav, onBook }) {
               ))}
             </div>
 
+            {availableModParts.length > 0 && (
+              <>
+                <p className="w-title" style={{ marginTop: '20px' }}>Pilih part modifikasi</p>
+                <div className="w-opts">
+                  {availableModParts.map((part) => (
+                    <label key={part.mod_part_id} className={'w-opt' + (selectedModPartIds.includes(part.mod_part_id) ? ' on' : '')}>
+                      <input
+                        type="checkbox"
+                        checked={selectedModPartIds.includes(part.mod_part_id)}
+                        onChange={() => {
+                          setSelectedModPartIds(prev =>
+                            prev.includes(part.mod_part_id)
+                              ? prev.filter(id => id !== part.mod_part_id)
+                              : [...prev, part.mod_part_id]
+                          );
+                        }}
+                        style={{ display: 'none' }}
+                      />
+                      <span className="w-dot" />
+                      <span className="w-body"><b>{part.name}</b></span>
+                      <span className="w-price">{rupiah(part.price)}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
             <div className="rows">
               <div className="row"><span>Harga unit</span><b>{rupiah(listing.price)}</b></div>
               <div className="row"><span>{warranty.name}<small>dibayar saat pelunasan</small></span><b>{warranty.price ? rupiah(warranty.price) : 'Termasuk'}</b></div>
+              {selectedModParts.map(part => (
+                <div className="row" key={part.mod_part_id}>
+                  <span>{part.name}</span><b>{rupiah(part.price)}</b>
+                </div>
+              ))}
+              <div className="row hl"><span>Total Harga</span><b>{rupiah(totalPrice)}</b></div>
               <div className="row hl"><span>DP kunci unit<small>Book melalui Contact Kami</small></span><b>{rupiah(DP_FIXED)}</b></div>
             </div>
 
@@ -2305,85 +2451,89 @@ function HomeView({ listings, nav, query = '' }) {
         </div>
       </section>
 
-      <section className="section" id="etalase">
-        <div className="container">
-          <div className="sec-head">
-            <div>
-              <p className="kicker">Galeri</p>
-              <h2>Galeri Motorell.</h2>
-            </div>
-            <p className="aside">Klik unit untuk melihat foto, catatan kurasi, memilih paket perlindungan,
-              dan mengunci unit dengan DP — book melalui Contact Kami.</p>
-          </div>
-          <div className="grid">
-            {listings.length === 0 && (
-              <div className="empty">Etalase sedang kosong — unit baru sedang dalam proses kurasi.</div>)}
-            {listings.length > 0 && shown.length === 0 && (
-              <div className="empty">Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</div>)}
-            {shown.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
-          </div>
-        </div>
-      </section>
-
-      <section className="section" id="kurasi">
-        <div className="container">
-          <div className="sec-head" style={{ marginBottom: 'clamp(48px,7vw,84px)' }}>
-            <div>
-              <p className="kicker">Kenapa Motorell</p>
-              <h2>Beli motor,<br />anti was-was.</h2>
-            </div>
-            <p className="aside">Kami saring dulu, baru tayang. Yang sampai ke etalase hanya unit yang
-              lolos pemeriksaan dan layak kamu bawa pulang.</p>
-          </div>
-          {[
-            {
-              kicker: 'Kurasi jujur',
-              title: 'Minus pun ditulis apa adanya.',
-              text: 'Setiap unit diperiksa mekanik sebelum boleh tayang — mesin, rangka, kelistrikan, dokumen, sampai uji jalan. Catatan kurasinya kamu baca sendiri di halaman unit, bukan disembunyikan.',
-            },
-            {
-              kicker: 'Perlindungan',
-              title: 'Garansi mesin sampai 37 hari.',
-              text: 'Tiga paket perlindungan bisa dipilih saat booking — dari 7 hari standar sampai 37 hari plus servis & tune up. Semua tertulis, bukan janji lisan.',
-            },
-            {
-              kicker: 'Booking aman',
-              title: 'DP ' + rupiah(DP_FIXED) + ', unit langsung terkunci.',
-              text: 'Begitu DP masuk, unit hilang dari etalase dan aman dari serobotan. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi. Sudah diinspeksi sejumlah 50+ titik dan layak kamu bawa pulang.',
-            },
-          ].map((f, i) => (
-            <Reveal key={f.kicker} className={'feature' + (i % 2 ? ' flip' : '')}>
-              <div className="feature-media-slide">
-                <TiltMedia className="feature-media">
-                  {listings[i]?.photos?.[0]
-                    ? <FadeImg src={listings[i].photos[0]} alt="" loading="lazy" />
-                    : <Blueprint />}
-                </TiltMedia>
+      <Reveal> {/* Wrapped the #etalase section */}
+        <section className="section" id="etalase">
+          <div className="container">
+            <div className="sec-head">
+              <div>
+                <p className="kicker">Galeri</p>
+                <h2>Galeri Motorell.</h2>
               </div>
-              <div className="feature-copy">
-                <p className="kicker">{f.kicker}</p>
-                <h3>{f.title}</h3>
-                <p>{f.text}</p>
-              </div>
-            </Reveal>
-          ))}
-
-          {/* Tugas 8: kartu penjelasan grade */}
-          <div className="grade-head">
-            <p className="kicker">Sistem grade</p>
-            <h3>Tiga grade, satu standar jujur.</h3>
+              <p className="aside">Klik unit untuk melihat foto, catatan kurasi, memilih paket perlindungan,
+                dan mengunci unit dengan DP — book melalui Contact Kami.</p>
+            </div>
+            <div className="grid">
+              {listings.length === 0 && (
+                <div className="empty">Etalase sedang kosong — unit baru sedang dalam proses kurasi.</div>)}
+              {listings.length > 0 && shown.length === 0 && (
+                <div className="empty">Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</div>)}
+              {shown.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
+            </div>
           </div>
-          <div className="grade-cards">
-            {GRADE_DEF.map((gd, i) => (
-              <Reveal key={gd.g} className="grade-card"
-                style={{ transitionDelay: (i * 80) + 'ms' }}>
-                <span className={'badge g-' + gd.g.toLowerCase()}>GRADE {gd.g}</span>
-                <p>{gd.text}</p>
+        </section>
+      </Reveal>
+
+      <Reveal> {/* Wrapped the #kurasi section */}
+        <section className="section" id="kurasi">
+          <div className="container">
+            <div className="sec-head" style={{ marginBottom: 'clamp(48px,7vw,84px)' }}>
+              <div>
+                <p className="kicker">Kenapa Motorell</p>
+                <h2>Beli motor,<br />anti was-was.</h2>
+              </div>
+              <p className="aside">Kami saring dulu, baru tayang. Yang sampai ke etalase hanya unit yang
+                lolos pemeriksaan dan layak kamu bawa pulang.</p>
+            </div>
+            {[
+              {
+                kicker: 'Kurasi jujur',
+                title: 'Minus pun ditulis apa adanya.',
+                text: 'Setiap unit diperiksa mekanik sebelum boleh tayang — mesin, rangka, kelistrikan, dokumen, sampai uji jalan. Catatan kurasinya kamu baca sendiri di halaman unit, bukan disembunyikan.',
+              },
+              {
+                kicker: 'Perlindungan',
+                title: 'Garansi mesin sampai 37 hari.',
+                text: 'Tiga paket perlindungan bisa dipilih saat booking — dari 7 hari standar sampai 37 hari plus servis & tune up. Semua tertulis, bukan janji lisan.',
+              },
+              {
+                kicker: 'Booking aman',
+                title: 'DP ' + rupiah(DP_FIXED) + ', unit langsung terkunci.',
+                text: 'Begitu DP masuk, unit hilang dari etalase dan aman dari serobotan. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi. Sudah diinspeksi sejumlah 50+ titik dan layak kamu bawa pulang.',
+              },
+            ].map((f, i) => (
+              <Reveal key={f.kicker} className={'feature' + (i % 2 ? ' flip' : '')}>
+                <div className="feature-media-slide">
+                  <TiltMedia className="feature-media">
+                    {listings[i]?.photos?.[0]
+                      ? <FadeImg src={listings[i].photos[0]} alt="" loading="lazy" />
+                      : <Blueprint />}
+                  </TiltMedia>
+                </div>
+                <div className="feature-copy">
+                  <p className="kicker">{f.kicker}</p>
+                  <h3>{f.title}</h3>
+                  <p>{f.text}</p>
+                </div>
               </Reveal>
             ))}
+
+            {/* Tugas 8: kartu penjelasan grade */}
+            <div className="grade-head">
+              <p className="kicker">Sistem grade</p>
+              <h3>Tiga grade, satu standar jujur.</h3>
+            </div>
+            <div className="grade-cards">
+              {GRADE_DEF.map((gd, i) => (
+                <Reveal key={gd.g} className="grade-card"
+                  style={{ transitionDelay: (i * 80) + 'ms' }}>
+                  <span className={'badge g-' + gd.g.toLowerCase()}>GRADE {gd.g}</span>
+                  <p>{gd.text}</p>
+                </Reveal>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </Reveal>
     </>
   )
 }
@@ -2394,7 +2544,7 @@ const SEARCH_HINTS = [
   'Cari motor retro…',
   'Cari motor di bawah 20 juta…',
 ]
-function NavSearch({ value, onChange }) {
+function NavSearch({ value, onChange, onSubmit }) { // Added onSubmit prop
   // placeholder animasi typewriter: mengetik lalu menghapus, bergilir.
   // prefers-reduced-motion → tampilkan satu placeholder statis (tanpa animasi).
   const [ph, setPh] = useState(() => (prefersReduced() ? SEARCH_HINTS[0] : ''))
@@ -2418,15 +2568,16 @@ function NavSearch({ value, onChange }) {
     timer = setTimeout(tick, 650)
     return () => clearTimeout(timer)
   }, [])
+
   return (
-    <div className="nav-search">
+    <form className="nav-search" onSubmit={onSubmit}> {/* Added form and onSubmit */}
       <svg className="si" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
       </svg>
       <input type="search" value={value} onChange={(e) => onChange(e.target.value)}
         placeholder={ph || 'Cari unit…'} aria-label="Cari unit di etalase" />
-    </div>
+    </form>
   )
 }
 
@@ -2557,10 +2708,15 @@ export default function App() {
   const loadListings = useCallback(async () => {
     if (!supabase) return
     const { data, error } = await supabase.from('listings')
-      .select('*')
+      .select('*, mod_parts_relation:motor_mod_parts(mod_part_id, mod_parts(*))')
       .eq('status', 'published')
       .order('published_at', { ascending: false })
-    if (!error) setListings(data || [])
+    if (!error) {
+      setListings(data.map(l => ({
+        ...l,
+        mod_parts: l.mod_parts_relation.map(mpr => mpr.mod_parts)
+      })) || [])
+    }
   }, [])
 
   useEffect(() => {
@@ -2612,7 +2768,6 @@ export default function App() {
   if (!supabase) {
     return (
       <div className="cfg">
-        <style>{CSS}</style>
         <div>
           <b>Konfigurasi belum lengkap.</b><br /><br />
           Isi environment variable <code>VITE_SUPABASE_URL</code> dan{' '}
@@ -2629,8 +2784,6 @@ export default function App() {
 
   return (
     <>
-      <style>{CSS}</style>
-
       <header className={'nav' + (scrolled ? ' scrolled' : '')}>
         <div className="container nav-in">
           <a className="logo" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>
@@ -2640,7 +2793,7 @@ export default function App() {
             setQuery(v)
             // kalau mengetik dari halaman lain, bawa ke etalase supaya hasil terlihat
             if (v && route.name !== 'home') nav('#/')
-          }} />
+          }} onSubmit={goEtalase} />
           <div className="nav-actions">
             {isStaff && route.name !== 'admin' && (
               <button className="btn btn-quiet btn-sm" onClick={() => nav('#/admin')}>Panel admin</button>)}
