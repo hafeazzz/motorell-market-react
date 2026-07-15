@@ -62,6 +62,15 @@ const warrantiesForGrade = (grade) =>
 const PAYMENT_MODE = 'whatsapp' // 'whatsapp' | 'qris'
 const CS_WHATSAPP_NUMBER = '6285180643531'
 
+// ---------- Lokasi showroom ----------
+// Alamat & titik peta diambil dari link Google Maps resmi Motorell Garage.
+// MAPS_EMBED memakai output=embed (tanpa perlu API key) supaya peta ASLI-nya
+// tampil langsung di halaman; MAPS_LINK membuka Maps penuh untuk rute.
+const MAPS_ADDRESS = 'Hb. 2 JI No.2, RT.007/RW.016, Uwung Jaya, Cibodas, Kota Tangerang, Banten 15138'
+const MAPS_LINK = 'https://maps.app.goo.gl/W8rsqGtkCVjdy3Ug7?g_st=iw'
+const MAPS_EMBED = 'https://maps.google.com/maps?q=' +
+  encodeURIComponent('Motorell Garage, ' + MAPS_ADDRESS) + '&z=16&output=embed'
+
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n) || 0))
 const fmt = (n) => new Intl.NumberFormat('id-ID').format(Number(n) || 0)
 const slugify = (s) =>
@@ -381,6 +390,8 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .logo small{font-family:var(--mono);font-weight:500;font-size:10px;
   letter-spacing:.22em;color:var(--dim)}
 .nav-actions{display:flex;align-items:center;gap:10px}
+.nav-loc{display:inline-flex;align-items:center;gap:6px}
+.nav-loc-ic{width:15px;height:15px;color:var(--accent)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
   font-weight:600;font-size:14.5px;padding:12px 24px;border-radius:999px;
   transition:transform .15s,background .18s,color .18s,border-color .18s,opacity .18s}
@@ -873,25 +884,19 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
    sempit dan susah dibaca di mobile */
 .about-story p{font-size:16px;line-height:1.8;color:#33363c;max-width:68ch}
 
-/* ---------- section "Temukan Kami" (lokasi + orbit 2D + Google Maps) ---------- */
+/* ---------- section "Temukan Kami" (peta Google Maps asli, dibingkai bulat) ---------- */
 .lokasi-grid{display:grid;grid-template-columns:1fr;gap:44px;align-items:center;margin-top:16px}
-.lokasi-visual{position:relative;width:260px;height:260px;margin:0 auto}
-/* cincin orbit tipis di belakang emoji */
-.lokasi-visual::before{content:"";position:absolute;inset:16px;border-radius:50%;
-  border:1.5px dashed var(--line-2)}
-.lokasi-orbit{position:absolute;inset:0}
-.orbit-el{position:absolute;top:50%;left:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
-  display:flex;align-items:center;justify-content:center;font-size:25px;
-  animation:orbit 9s linear infinite;will-change:transform}
-.orbit-el.o2{animation-duration:11s;animation-direction:reverse}
-.orbit-el.o3{animation-duration:14s}
-@keyframes orbit{
-  from{transform:rotate(0deg) translateX(112px) rotate(0deg)}
-  to{transform:rotate(360deg) translateX(112px) rotate(-360deg)}
-}
-.lokasi-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  text-align:center;font-weight:800;font-size:17px;letter-spacing:.02em;color:var(--accent);
-  line-height:1.16}
+/* lingkaran peta: iframe Google Maps di dalam frame bulat, seluruhnya jadi
+   satu tautan ke Maps. */
+.lokasi-map{position:relative;display:block;width:min(300px,80vw);aspect-ratio:1/1;
+  margin:0 auto;border-radius:50%;overflow:hidden;background:var(--bg-3);
+  box-shadow:0 14px 44px rgba(17,17,20,.18);cursor:pointer}
+.lokasi-map iframe{position:absolute;inset:0;width:100%;height:100%;border:0;
+  pointer-events:none} /* non-interaktif: gulir tembus ke halaman, klik ke <a> */
+/* cincin tipis di tepi supaya batas lingkaran tegas di atas peta */
+.lokasi-map-ring{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  box-shadow:inset 0 0 0 6px var(--panel),inset 0 0 0 7px var(--line-2)}
+.lokasi-map:hover{box-shadow:0 16px 50px rgba(26,47,94,.28)}
 .lokasi-info{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);
   border-radius:16px;padding:26px 24px;box-shadow:var(--shadow)}
 .lokasi-info h3{font-size:20px;font-weight:720;letter-spacing:-.01em;margin-bottom:8px}
@@ -900,17 +905,10 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .lokasi-facts li{display:flex;flex-direction:column;gap:3px}
 .lokasi-facts span{font-family:var(--mono);font-size:10px;letter-spacing:.1em;
   text-transform:uppercase;color:var(--dim)}
-.lokasi-facts b{font-size:14.5px;font-weight:600}
+.lokasi-facts b{font-size:14px;font-weight:600;line-height:1.45}
 .lokasi-facts a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 @media(min-width:768px){
   .lokasi-grid{grid-template-columns:1fr 1fr;gap:56px}
-}
-@media(prefers-reduced-motion:reduce){
-  /* tanpa animasi, sebar tiga emoji ke posisi statis biar tidak menumpuk */
-  .orbit-el{animation:none}
-  .orbit-el.o1{transform:translateX(112px)}
-  .orbit-el.o2{transform:rotate(120deg) translateX(112px) rotate(-120deg)}
-  .orbit-el.o3{transform:rotate(240deg) translateX(112px) rotate(-240deg)}
 }
 
 /* ---------- Tugas 9b: ketentuan unit di halaman detail ---------- */
@@ -1118,6 +1116,9 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 @media(max-width:560px){
   .logo small{display:none}
   .nav-search{margin:0 10px}
+  /* layar sempit: tombol Lokasi jadi ikon saja supaya navbar tidak sesak */
+  .nav-loc-label{display:none}
+  .nav-loc{gap:0;padding-left:11px;padding-right:11px}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -2754,10 +2755,10 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             )}
           </div>
           <div className="spec-rail">
-            <span>Unit lolos<b>50+ titik inspeksi</b></span>
-            <span>Garansi mesin<b>s.d. 37 hari</b></span>
-            <span>Kunci unit<b>DP {rupiah(DP_FIXED)}</b></span>
-            <span>Terjual<b>100+ unit</b></span>
+            <span>Unit lolos inspeksi<b>50+ titik</b></span>
+            <span>Garansi mesin s.d.<b>37 hari</b></span>
+            <span>Kunci unit<b>{rupiah(DP_FIXED)}</b></span>
+            <span>Unit Terjual<b>100+</b></span>
           </div>
         </div>
       </section>
@@ -2788,6 +2789,46 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <div className="empty">Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</div>)}
               {!loading && !error && shown.map((l, i) => (
                 <Card key={l.id} l={l} nav={nav} index={i} highlight={searchActive} />))}
+            </div>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section className="section grey lokasi" id="lokasi">
+          <div className="container">
+            <div className="sec-head">
+              <div>
+                <p className="kicker">Kunjungi kami</p>
+                <h2>Temukan Motorell.</h2>
+              </div>
+              <p className="aside">Mampir langsung ke showroom untuk lihat dan cek kondisi motor
+                pilihanmu sendiri. Klik peta untuk buka rute di Google Maps.</p>
+            </div>
+            <div className="lokasi-grid">
+              {/* Peta ASLI Google Maps, dibingkai lingkaran. iframe dibuat
+                  non-interaktif (pointer-events:none) supaya gulir di atasnya
+                  tetap men-scroll halaman; seluruh lingkaran jadi satu tautan
+                  ke Maps penuh. */}
+              <a className="lokasi-map" href={MAPS_LINK} target="_blank" rel="noopener noreferrer"
+                aria-label="Buka lokasi Motorell Garage di Google Maps">
+                <iframe src={MAPS_EMBED} title="Peta lokasi Motorell Garage"
+                  loading="lazy" tabIndex={-1} referrerPolicy="no-referrer-when-downgrade" />
+                <span className="lokasi-map-ring" aria-hidden="true" />
+              </a>
+              <div className="lokasi-info">
+                <h3>Mampir ke showroom kami</h3>
+                <p>Koleksi motor terkurasi Motorell bisa kamu lihat dan cek langsung di tempat.</p>
+                <ul className="lokasi-facts">
+                  <li><span>Alamat</span><b>{MAPS_ADDRESS}</b></li>
+                  <li><span>Jam buka</span><b>Senin–Minggu · 09.00–18.00 WIB</b></li>
+                  <li><span>Kontak</span><b>
+                    <a href={'https://wa.me/' + CS_WHATSAPP_NUMBER} target="_blank" rel="noopener noreferrer">WhatsApp kami</a>
+                  </b></li>
+                </ul>
+                <a className="btn btn-accent" href={MAPS_LINK}
+                  target="_blank" rel="noopener noreferrer">Buka di Google Maps</a>
+              </div>
             </div>
           </div>
         </section>
@@ -2855,43 +2896,6 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         </section>
       </Reveal>
 
-      <Reveal>
-        <section className="section lokasi" id="lokasi">
-          <div className="container">
-            <div className="sec-head">
-              <div>
-                <p className="kicker">Kunjungi kami</p>
-                <h2>Temukan Motorell.</h2>
-              </div>
-              <p className="aside">Mampir langsung ke showroom untuk lihat dan cek kondisi motor
-                pilihanmu sendiri. Titik lokasi persis dan rutenya ada di Google Maps.</p>
-            </div>
-            <div className="lokasi-grid">
-              <div className="lokasi-visual" aria-hidden="true">
-                <div className="lokasi-orbit">
-                  <span className="orbit-el o1">📍</span>
-                  <span className="orbit-el o2">🏍️</span>
-                  <span className="orbit-el o3">🛵</span>
-                </div>
-                <div className="lokasi-center">MOTORELL<br />GARAGE</div>
-              </div>
-              <div className="lokasi-info">
-                <h3>Mampir ke showroom kami</h3>
-                <p>Koleksi motor terkurasi Motorell bisa kamu lihat dan cek langsung di tempat.</p>
-                <ul className="lokasi-facts">
-                  <li><span>Lokasi</span><b>Titik &amp; rute lengkap di Google Maps</b></li>
-                  <li><span>Jam buka</span><b>Senin–Minggu · 09.00–18.00 WIB</b></li>
-                  <li><span>Kontak</span><b>
-                    <a href={'https://wa.me/' + CS_WHATSAPP_NUMBER} target="_blank" rel="noopener noreferrer">WhatsApp kami</a>
-                  </b></li>
-                </ul>
-                <a className="btn btn-accent" href="https://maps.app.goo.gl/W8rsqGtkCVjdy3Ug7?g_st=iw"
-                  target="_blank" rel="noopener noreferrer">Buka di Google Maps</a>
-              </div>
-            </div>
-          </div>
-        </section>
-      </Reveal>
     </>
   )
 }
@@ -3165,6 +3169,16 @@ export default function App() {
     setTimeout(scrollToEtalase, route.name === 'home' ? 0 : 80)
   }, [route.name, nav, scrollToEtalase])
 
+  // Pintasan navbar ke section lokasi (peta showroom).
+  const goLokasi = useCallback((e) => {
+    e?.preventDefault()
+    if (route.name !== 'home') nav('#/')
+    setTimeout(() => {
+      document.getElementById('lokasi')
+        ?.scrollIntoView(prefersReduced() ? undefined : { behavior: 'smooth', block: 'start' })
+    }, route.name === 'home' ? 0 : 80)
+  }, [route.name, nav])
+
   // ---- Smart search ----
   // query = apa yang sedang diketik (responsif), dQuery = versi yang sudah
   // diam 300ms — hanya yang terakhir ini dipakai untuk memfilter, menulis URL,
@@ -3377,6 +3391,14 @@ export default function App() {
           <div className="nav-actions">
             {isStaff && route.name !== 'admin' && (
               <button className="btn btn-quiet btn-sm" onClick={() => nav('#/admin')}>Panel admin</button>)}
+            <button className="btn btn-ghost btn-sm nav-loc" onClick={goLokasi} title="Lokasi showroom Motorell">
+              <svg className="nav-loc-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" />
+                <circle cx="12" cy="11" r="2.2" />
+              </svg>
+              <span className="nav-loc-label">Lokasi</span>
+            </button>
             {session ? (
               <button className="btn btn-ghost btn-sm"
                 onClick={async () => { await supabase.auth.signOut(); toast('Kamu sudah keluar'); if (route.name === 'admin') nav('#/') }}>
