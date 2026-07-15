@@ -797,12 +797,13 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .foot-socials-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--dim)}
-.social-links{display:flex;align-items:center;gap:14px}
-.social-link{font-weight:600;font-size:14px;color:var(--accent);
-  transition:color .2s,opacity .15s}
-.social-link:hover{color:var(--accent-ink);text-decoration:underline;text-underline-offset:3px}
+.social-links{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.social-link{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:14px;
+  color:var(--accent);transition:color .2s,opacity .15s}
+.social-link:hover{color:var(--accent-ink)}
+.social-link:hover .social-label{text-decoration:underline;text-underline-offset:3px}
 .social-link:active{opacity:.7}
-.social-divider{color:var(--line-2);font-size:12px;user-select:none}
+.social-icon{width:19px;height:19px;flex:none}
 .foot-base{margin-top:28px;font-family:var(--mono);font-size:11px;color:var(--dim);
   display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end}
 /* baris kanan: tagline + "Powered by" di bawahnya. Aksen memakai navy brand
@@ -3341,10 +3342,22 @@ export default function App() {
             <span className="foot-socials-label">Ikuti kami</span>
             <div className="social-links">
               <button type="button" className="social-link" onClick={() => openSocialApp('instagram')}
-                title="Follow Motorell di Instagram">Instagram</button>
-              <span className="social-divider" aria-hidden="true">•</span>
+                title="Follow Motorell di Instagram">
+                <svg className="social-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="2" y="2" width="20" height="20" rx="5.5" />
+                  <circle cx="12" cy="12" r="4.2" />
+                  <circle cx="17.6" cy="6.4" r="1.1" fill="currentColor" stroke="none" />
+                </svg>
+                <span className="social-label">Instagram</span>
+              </button>
               <button type="button" className="social-link" onClick={() => openSocialApp('tiktok')}
-                title="Follow Motorell di TikTok">TikTok</button>
+                title="Follow Motorell di TikTok">
+                <svg className="social-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M16.7 2h-3.02v13.02a2.42 2.42 0 1 1-2.08-2.4V9.5a5.53 5.53 0 1 0 5.09 5.5V8.5a6.94 6.94 0 0 0 4.06 1.3V6.76a3.9 3.9 0 0 1-2.72-1.1A3.9 3.9 0 0 1 16.7 2z" />
+                </svg>
+                <span className="social-label">TikTok</span>
+              </button>
             </div>
           </div>
           <div className="foot-base">
