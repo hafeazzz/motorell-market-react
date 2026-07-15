@@ -15,6 +15,7 @@ import ModPartPanel from './ModPartPanel';
 import MotorCarousel from './MotorCarousel';
 import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
+import { openSocialApp } from './utils/deepLink';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 // ---------- Konfigurasi ----------
@@ -109,6 +110,15 @@ const FEATURE_SECTIONS = [
     text: 'Begitu DP masuk, unit hilang dari etalase dan aman dari serobotan. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi. Sudah diinspeksi sejumlah 50+ titik dan layak kamu bawa pulang.',
     photoUrl: STORAGE_BASE + '/dp-unit.jpeg',
   },
+]
+
+// ---------- Cerita/Sejarah Motorell (section "Sejarah Motorell" di home) ----------
+// Catatan angka: "banyak pembeli" — bukan "ribuan" — supaya tidak bertabrakan
+// dengan klaim "Terjual 100+ unit" di spec-rail hero pada halaman yang sama.
+const ABOUT_STORY = [
+  'Motorell lahir dari passion sederhana: membuat pembelian motor bekas menjadi pengalaman yang transparan, aman, dan terpercaya. Kami percaya setiap motor punya cerita, dan setiap pembeli berhak tahu cerita lengkapnya.',
+  'Sejak 2023, Motorell telah membantu banyak pembeli menemukan motor impian mereka dengan jaminan kualitas yang terverifikasi. Kami tidak hanya menjual motor — kami membangun kepercayaan, satu unit pada satu waktu.',
+  'Di Motorell, anti was-was bukan hanya tagline. Ini adalah komitmen kami kepada Anda: transparansi penuh, tidak ada penipuan, dan kepuasan dijamin. Karena kami tahu, ketika Anda membeli motor bekas, Anda membeli cerita dan kepercayaan.',
 ]
 
 // ---------- Suara klik "berat" (Web Audio) untuk tombol utama ----------
@@ -776,9 +786,23 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* ---------- footer & toast ---------- */
 footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;background:var(--bg-2)}
 .foot{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.foot-logo{display:flex;flex-direction:column;gap:4px}
 .foot .logo{font-size:24px}
+.foot-est{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--dim)}
 .foot-links{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 .foot-links a:hover{color:var(--accent)}
+/* baris sosial: dipisah garis tipis atas-bawah, tombol memakai navy brand */
+.foot-socials{margin-top:26px;padding:20px 0;border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.foot-socials-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--dim)}
+.social-links{display:flex;align-items:center;gap:14px}
+.social-link{font-weight:600;font-size:14px;color:var(--accent);
+  transition:color .2s,opacity .15s}
+.social-link:hover{color:var(--accent-ink);text-decoration:underline;text-underline-offset:3px}
+.social-link:active{opacity:.7}
+.social-divider{color:var(--line-2);font-size:12px;user-select:none}
 .foot-base{margin-top:28px;font-family:var(--mono);font-size:11px;color:var(--dim);
   display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end}
 /* baris kanan: tagline + "Powered by" di bawahnya. Aksen memakai navy brand
@@ -832,6 +856,16 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   background:var(--panel);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px}
 .grade-card .badge{position:static;display:inline-flex;width:fit-content;font-size:11px}
 .grade-card p{font-size:14px;line-height:1.62;color:var(--muted)}
+
+/* ---------- section "Sejarah Motorell" ---------- */
+.section.about{background:var(--bg-2);border-block:1px solid var(--line)}
+.about-inner{max-width:760px}
+.about-inner h2{font-size:clamp(30px,4vw,50px);font-weight:740;letter-spacing:-.025em;
+  line-height:1.02;margin:13px 0 clamp(24px,3.5vw,38px)}
+.about-story{display:flex;flex-direction:column;gap:20px}
+/* rata kiri (bukan justify) — justify bikin "rivers" jarak antar-kata di kolom
+   sempit dan susah dibaca di mobile */
+.about-story p{font-size:16px;line-height:1.8;color:#33363c;max-width:68ch}
 
 /* ---------- Tugas 9b: ketentuan unit di halaman detail ---------- */
 .unit-terms{margin-top:36px;border:1px solid var(--line);border-radius:14px;
@@ -957,6 +991,18 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   padding:6px 11px;border-radius:999px;border:1px solid var(--line-2);color:var(--muted);
   transition:border-color .18s,color .18s}
 .ns-quick button:hover{border-color:var(--accent);color:var(--accent)}
+/* tombol bersihkan (✕) di dalam input, muncul saat ada teks */
+.nav-search .ns-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:var(--muted);transition:background .15s,color .15s}
+.nav-search .ns-clear:hover{background:var(--bg-2);color:var(--ink)}
+/* sembunyikan tombol clear bawaan WebKit supaya tidak dobel dengan ns-clear */
+.nav-search input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
+.nav-search input{padding-right:34px}
+/* panel tips saat input fokus tapi kosong */
+.ns-pop-tips{padding:0}
+.ns-tip{padding:13px 14px;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.ns-tip b{color:var(--ink);font-weight:600}
 
 /* kartu hasil pencarian disorot sebentar supaya mata langsung tertuju ke sana */
 .card-wrap.match .card{border-color:var(--accent);
@@ -2736,6 +2782,22 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
           </div>
         </section>
       </Reveal>
+
+      <Reveal>
+        <section className="section about" id="tentang">
+          <div className="container">
+            <FadeIn className="about-inner">
+              <FadeItem as="p" className="kicker">Cerita kami</FadeItem>
+              <FadeItem as="h2">Sejarah Motorell.</FadeItem>
+              <div className="about-story">
+                {ABOUT_STORY.map((para, i) => (
+                  <FadeItem key={i} as="p" direction="up">{para}</FadeItem>
+                ))}
+              </div>
+            </FadeIn>
+          </div>
+        </section>
+      </Reveal>
     </>
   )
 }
@@ -2796,11 +2858,13 @@ function NavSearch({ value, onChange, onSubmit, results = [], total = 0, filters
   // hasil berubah → reset sorotan keyboard supaya tidak menunjuk baris basi
   useEffect(() => { setCur(-1) }, [value])
 
-  const show = open && value.trim().length > 0
+  const hasValue = value.trim().length > 0
+  const showResults = open && hasValue
+  const showTips = open && !hasValue // fokus tapi kosong → tampilkan tips + filter cepat
 
   const onKeyDown = (e) => {
-    if (!show) return
     if (e.key === 'Escape') { setOpen(false); return }
+    if (!showResults) return
     if (e.key === 'ArrowDown') {
       e.preventDefault(); setCur((i) => Math.min(i + 1, results.length - 1))
     } else if (e.key === 'ArrowUp') {
@@ -2826,11 +2890,27 @@ function NavSearch({ value, onChange, onSubmit, results = [], total = 0, filters
           onKeyDown={onKeyDown}
           placeholder={ph || 'Cari unit…'}
           aria-label="Cari unit di etalase"
-          aria-expanded={show}
+          aria-expanded={showResults}
           aria-controls="ns-pop" />
+        {hasValue && (
+          <button type="button" className="ns-clear" aria-label="Bersihkan pencarian"
+            onClick={() => { onChange(''); setCur(-1) }}>✕</button>
+        )}
       </form>
 
-      {show && (
+      {showTips && (
+        <div className="ns-pop ns-pop-tips">
+          <p className="ns-tip">Cari pakai brand, model, harga, tahun, atau grade — misalnya
+            <b> “benelli di bawah 20 juta”</b> atau <b>“w175 2019”</b>.</p>
+          <div className="ns-quick">
+            {QUICK_FILTERS.map((qf) => (
+              <button type="button" key={qf} onClick={() => onQuick(qf)}>{qf}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showResults && (
         <div className="ns-pop" id="ns-pop" role="listbox">
           <div className="ns-meta">
             <span className="ns-count">{total} unit cocok</span>
@@ -3245,13 +3325,26 @@ export default function App() {
       <footer>
         <div className="container">
           <div className="foot">
-            <span className="logo">MOTORELL<i>●</i></span>
+            <div className="foot-logo">
+              <span className="logo">MOTORELL<i>●</i></span>
+              <span className="foot-est">Est. 2023</span>
+            </div>
             <div className="foot-links">
               <a href="#etalase" onClick={() => nav('#/')}>Etalase</a>
               <a href="#kurasi" onClick={() => nav('#/')}>Standar kurasi</a>
               <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>Kebijakan refund DP</a>
               <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>Syarat &amp; ketentuan</a>
               <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>Kebijakan privasi</a>
+            </div>
+          </div>
+          <div className="foot-socials">
+            <span className="foot-socials-label">Ikuti kami</span>
+            <div className="social-links">
+              <button type="button" className="social-link" onClick={() => openSocialApp('instagram')}
+                title="Follow Motorell di Instagram">Instagram</button>
+              <span className="social-divider" aria-hidden="true">•</span>
+              <button type="button" className="social-link" onClick={() => openSocialApp('tiktok')}
+                title="Follow Motorell di TikTok">TikTok</button>
             </div>
           </div>
           <div className="foot-base">
