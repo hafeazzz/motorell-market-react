@@ -1900,6 +1900,20 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     setBusy(true)
     let listingId = initial?.id;
 
+    // payload dari state form. Blok ini sempat hilang saat logika mod-parts
+    // ditambahkan ke save(), menyisakan referensi `payload` tanpa definisi →
+    // "payload is not defined" saat simpan/edit unit. title diturunkan dari
+    // brand + model + tahun; kolomnya cocok dengan tabel `listings`.
+    const payload = {
+      brand: f.brand.trim(), model: f.model.trim(),
+      title: (f.brand + ' ' + f.model + ' ' + f.year).replace(/\s+/g, ' ').trim(),
+      year: Number(f.year), mileage_km: Number(f.mileage_km) || 0,
+      color: f.color.trim() || null, price: Number(f.price),
+      grade: f.grade, description: f.description.trim() || null,
+      known_issues: f.known_issues.trim() || null,
+      photos, status: f.status,
+    }
+
     // Save/Update main listing
     try {
       if (editing) {
