@@ -84,6 +84,33 @@ const GRADE_DEF = [
   { g: 'B', text: 'Minus ringan tercatat jujur dan tetap layak untuk digunakan sehari-hari.' },
 ]
 
+// ---------- Section fitur "Kenapa Motorell" ----------
+// Foto tetap (bukan foto unit yang berganti-ganti) diunggah manual ke bucket
+// unit-photos/features/ di Supabase Storage — jadi tiap section punya foto
+// yang benar-benar menggambarkan isinya, bukan foto unit acak yang kebetulan
+// termuat lebih dulu.
+const STORAGE_BASE = 'https://kaaxeqbocgylrqwxuurc.supabase.co/storage/v1/object/public/unit-photos/features'
+const FEATURE_SECTIONS = [
+  {
+    kicker: 'Kurasi jujur',
+    title: 'Minus pun ditulis apa adanya.',
+    text: 'Setiap unit diperiksa mekanik sebelum boleh tayang — mesin, rangka, kelistrikan, dokumen, sampai uji jalan. Catatan kurasinya kamu baca sendiri di halaman unit, bukan disembunyikan.',
+    photoUrl: STORAGE_BASE + '/minus-pun.jpeg',
+  },
+  {
+    kicker: 'Perlindungan',
+    title: 'Garansi mesin sampai 37 hari.',
+    text: 'Tiga paket perlindungan bisa dipilih saat booking — dari 7 hari standar sampai 37 hari plus servis & tune up. Semua tertulis, bukan janji lisan.',
+    photoUrl: STORAGE_BASE + '/garansi-mesin.jpeg',
+  },
+  {
+    kicker: 'Booking aman',
+    title: 'DP ' + rupiah(DP_FIXED) + ', unit langsung terkunci.',
+    text: 'Begitu DP masuk, unit hilang dari etalase dan aman dari serobotan. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi. Sudah diinspeksi sejumlah 50+ titik dan layak kamu bawa pulang.',
+    photoUrl: STORAGE_BASE + '/dp-unit.jpeg',
+  },
+]
+
 // ---------- Suara klik "berat" (Web Audio) untuk tombol utama ----------
 // Sintesis nada pendek berkarakter "thud"/thunk — tanpa file audio eksternal.
 // AudioContext dibuat lazy pada klik pertama (di dalam user gesture) sehingga
@@ -191,6 +218,15 @@ function FadeImg({ className = '', ...props }) {
       className={[className, ok ? 'ok' : ''].filter(Boolean).join(' ')}
       onLoad={() => setOk(true)} />
   )
+}
+
+// Foto section fitur: photoUrl selalu berupa string (bukan hasil ?. yang bisa
+// falsy), jadi fallback ke Blueprint di sini dicek lewat error load — bukan
+// lewat "apakah src ada" seperti pola foto unit biasa.
+function FeatureMedia({ src, alt }) {
+  const [broken, setBroken] = useState(false)
+  if (broken) return <Blueprint />
+  return <FadeImg src={src} alt={alt} loading="lazy" onError={() => setBroken(true)} />
 }
 
 // ---------- Smart search ----------
@@ -2599,7 +2635,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
           <div className="hero-copy">
             <p className="kicker">Motorell Market — Showroom motor terkurasi</p>
             <h1>Lebih dari motor bekas.<br />Kualitas <em>anti was-was.</em></h1>
-            <p>Setiap motor telah diinspeksi, diverifikasi, dikurasi, dan siap
+            <p>Setiap motor telah dikurasi dan siap
               mengukir cerita perjalanan Anda.</p>
             <div className="hero-cta">
               <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
@@ -2669,29 +2705,11 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 lolos pemeriksaan dan layak kamu bawa pulang.
               </FadeItem>
             </FadeIn>
-            {[
-              {
-                kicker: 'Kurasi jujur',
-                title: 'Minus pun ditulis apa adanya.',
-                text: 'Setiap unit diperiksa mekanik sebelum boleh tayang — mesin, rangka, kelistrikan, dokumen, sampai uji jalan. Catatan kurasinya kamu baca sendiri di halaman unit, bukan disembunyikan.',
-              },
-              {
-                kicker: 'Perlindungan',
-                title: 'Garansi mesin sampai 37 hari.',
-                text: 'Tiga paket perlindungan bisa dipilih saat booking — dari 7 hari standar sampai 37 hari plus servis & tune up. Semua tertulis, bukan janji lisan.',
-              },
-              {
-                kicker: 'Booking aman',
-                title: 'DP ' + rupiah(DP_FIXED) + ', unit langsung terkunci.',
-                text: 'Begitu DP masuk, unit hilang dari etalase dan aman dari serobotan. DP kembali penuh bila kondisi unit tidak sesuai laporan kurasi. Sudah diinspeksi sejumlah 50+ titik dan layak kamu bawa pulang.',
-              },
-            ].map((f, i) => (
+            {FEATURE_SECTIONS.map((f, i) => (
               <Reveal key={f.kicker} className={'feature' + (i % 2 ? ' flip' : '')}>
                 <div className="feature-media-slide">
                   <TiltMedia className="feature-media">
-                    {listings[i]?.photos?.[0]
-                      ? <FadeImg src={listings[i].photos[0]} alt="" loading="lazy" />
-                      : <Blueprint />}
+                    <FeatureMedia src={f.photoUrl} alt={f.title} />
                   </TiltMedia>
                 </div>
                 <div className="feature-copy">
