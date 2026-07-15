@@ -488,7 +488,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
     translateY(var(--lift,0px));
   transition:transform .16s ease-out,box-shadow .25s,border-color .25s}
 .card:hover{--lift:-6px;box-shadow:var(--shadow);border-color:var(--line-2)}
-.card-media{aspect-ratio:1/1;position:relative;overflow:hidden;
+.card-media{aspect-ratio:3/4;position:relative;overflow:hidden;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%)}
 .card-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   opacity:0;transition:opacity .45s ease,transform .6s cubic-bezier(.2,.6,.25,1)}
@@ -583,7 +583,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* tombol besar di panel disembunyikan kalau sticky bar kembar sudah tampil,
    supaya tidak ada dua CTA identik terlihat berbarengan di layar sempit */
 .panel-cta.has-sticky-twin{display:none}
-.gallery-main{aspect-ratio:4/3;border-radius:14px;overflow:hidden;position:relative;
+.gallery-main{aspect-ratio:3/4;border-radius:14px;overflow:hidden;position:relative;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%);
   border:1px solid var(--line)}
 .gallery-main img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
