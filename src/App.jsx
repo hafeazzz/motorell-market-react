@@ -488,7 +488,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
     translateY(var(--lift,0px));
   transition:transform .16s ease-out,box-shadow .25s,border-color .25s}
 .card:hover{--lift:-6px;box-shadow:var(--shadow);border-color:var(--line-2)}
-.card-media{aspect-ratio:3/4;position:relative;overflow:hidden;
+.card-media{aspect-ratio:1/1;position:relative;overflow:hidden;
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%)}
 .card-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   opacity:0;transition:opacity .45s ease,transform .6s cubic-bezier(.2,.6,.25,1)}
@@ -602,8 +602,13 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   border:1px solid var(--line);padding:4px 11px;border-radius:999px;pointer-events:none}
 .lightbox{position:fixed;inset:0;z-index:140;background:rgba(13,13,16,.93);overflow:hidden}
 .lightbox img{position:absolute;inset:0;margin:auto;max-width:92vw;max-height:84vh;
-  width:auto;height:auto;object-fit:contain;cursor:grab;touch-action:pan-y;user-select:none}
-.lightbox img:active{cursor:grabbing}
+  width:auto;height:auto;object-fit:contain;cursor:zoom-in;touch-action:none;user-select:none}
+.lightbox img.lb-zoomed{cursor:grab}
+.lightbox img.lb-zoomed:active{cursor:grabbing}
+.lb-hint{position:absolute;left:50%;bottom:48px;transform:translateX(-50%);z-index:4;
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:rgba(255,255,255,.6);white-space:nowrap;pointer-events:none;max-width:92vw;
+  overflow:hidden;text-overflow:ellipsis}
 .lightbox .g-arrow{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.3);color:#fff}
 .lightbox .g-arrow:hover:not(:disabled){border-color:#fff;color:#fff}
 .lightbox .g-arrow.prev{left:20px}
@@ -868,6 +873,46 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
    sempit dan susah dibaca di mobile */
 .about-story p{font-size:16px;line-height:1.8;color:#33363c;max-width:68ch}
 
+/* ---------- section "Temukan Kami" (lokasi + orbit 2D + Google Maps) ---------- */
+.lokasi-grid{display:grid;grid-template-columns:1fr;gap:44px;align-items:center;margin-top:16px}
+.lokasi-visual{position:relative;width:260px;height:260px;margin:0 auto}
+/* cincin orbit tipis di belakang emoji */
+.lokasi-visual::before{content:"";position:absolute;inset:16px;border-radius:50%;
+  border:1.5px dashed var(--line-2)}
+.lokasi-orbit{position:absolute;inset:0}
+.orbit-el{position:absolute;top:50%;left:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
+  display:flex;align-items:center;justify-content:center;font-size:25px;
+  animation:orbit 9s linear infinite;will-change:transform}
+.orbit-el.o2{animation-duration:11s;animation-direction:reverse}
+.orbit-el.o3{animation-duration:14s}
+@keyframes orbit{
+  from{transform:rotate(0deg) translateX(112px) rotate(0deg)}
+  to{transform:rotate(360deg) translateX(112px) rotate(-360deg)}
+}
+.lokasi-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  text-align:center;font-weight:800;font-size:17px;letter-spacing:.02em;color:var(--accent);
+  line-height:1.16}
+.lokasi-info{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:16px;padding:26px 24px;box-shadow:var(--shadow)}
+.lokasi-info h3{font-size:20px;font-weight:720;letter-spacing:-.01em;margin-bottom:8px}
+.lokasi-info > p{color:var(--muted);font-size:14.5px;line-height:1.62;margin-bottom:20px}
+.lokasi-facts{list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:22px}
+.lokasi-facts li{display:flex;flex-direction:column;gap:3px}
+.lokasi-facts span{font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--dim)}
+.lokasi-facts b{font-size:14.5px;font-weight:600}
+.lokasi-facts a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+@media(min-width:768px){
+  .lokasi-grid{grid-template-columns:1fr 1fr;gap:56px}
+}
+@media(prefers-reduced-motion:reduce){
+  /* tanpa animasi, sebar tiga emoji ke posisi statis biar tidak menumpuk */
+  .orbit-el{animation:none}
+  .orbit-el.o1{transform:translateX(112px)}
+  .orbit-el.o2{transform:rotate(120deg) translateX(112px) rotate(-120deg)}
+  .orbit-el.o3{transform:rotate(240deg) translateX(112px) rotate(-240deg)}
+}
+
 /* ---------- Tugas 9b: ketentuan unit di halaman detail ---------- */
 .unit-terms{margin-top:36px;border:1px solid var(--line);border-radius:14px;
   padding:20px 22px;background:var(--panel-2)}
@@ -910,11 +955,12 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .feature.shown .feature-media-slide,.feature.shown .feature-copy{opacity:1;transform:none}
 
 /* ---------- MotorCarousel: putar 360° dari foto asli unit ---------- */
-.mc{cursor:grab;touch-action:none;overflow:hidden;outline:none}
+/* touch-action:pan-y → seret horizontal memutar motor, geser vertikal tetap
+   men-scroll halaman (carousel tidak lagi menyandera scroll). */
+.mc{cursor:grab;touch-action:pan-y;overflow:hidden;outline:none}
 .mc:active{cursor:grabbing}
-.mc.zoomed{cursor:move}
 .mc:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-.mc-stage{position:absolute;inset:0;will-change:transform}
+.mc-stage{position:absolute;inset:0}
 .mc-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
   user-select:none;-webkit-user-drag:none}
 .mc-part{position:absolute;transform:translate(-50%,-50%);z-index:10;
@@ -930,11 +976,6 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--ink);
   background:rgba(255,255,255,.9);border:1px solid var(--line);padding:4px 10px;
   border-radius:999px;pointer-events:none}
-.mc-reset{position:absolute;top:12px;right:12px;z-index:13;font-family:var(--mono);
-  font-size:10.5px;font-weight:600;letter-spacing:.05em;color:var(--accent);
-  background:rgba(255,255,255,.92);border:1px solid var(--line-2);padding:5px 11px;
-  border-radius:999px}
-.mc-reset:hover{border-color:var(--accent)}
 .mc-dots{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:13;
   display:flex;gap:6px;padding:6px 9px;border-radius:999px;
   background:rgba(255,255,255,.86);backdrop-filter:blur(6px);border:1px solid var(--line)}
@@ -2813,6 +2854,44 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
           </div>
         </section>
       </Reveal>
+
+      <Reveal>
+        <section className="section lokasi" id="lokasi">
+          <div className="container">
+            <div className="sec-head">
+              <div>
+                <p className="kicker">Kunjungi kami</p>
+                <h2>Temukan Motorell.</h2>
+              </div>
+              <p className="aside">Mampir langsung ke showroom untuk lihat dan cek kondisi motor
+                pilihanmu sendiri. Titik lokasi persis dan rutenya ada di Google Maps.</p>
+            </div>
+            <div className="lokasi-grid">
+              <div className="lokasi-visual" aria-hidden="true">
+                <div className="lokasi-orbit">
+                  <span className="orbit-el o1">📍</span>
+                  <span className="orbit-el o2">🏍️</span>
+                  <span className="orbit-el o3">🛵</span>
+                </div>
+                <div className="lokasi-center">MOTORELL<br />GARAGE</div>
+              </div>
+              <div className="lokasi-info">
+                <h3>Mampir ke showroom kami</h3>
+                <p>Koleksi motor terkurasi Motorell bisa kamu lihat dan cek langsung di tempat.</p>
+                <ul className="lokasi-facts">
+                  <li><span>Lokasi</span><b>Titik &amp; rute lengkap di Google Maps</b></li>
+                  <li><span>Jam buka</span><b>Senin–Minggu · 09.00–18.00 WIB</b></li>
+                  <li><span>Kontak</span><b>
+                    <a href={'https://wa.me/' + CS_WHATSAPP_NUMBER} target="_blank" rel="noopener noreferrer">WhatsApp kami</a>
+                  </b></li>
+                </ul>
+                <a className="btn btn-accent" href="https://maps.app.goo.gl/W8rsqGtkCVjdy3Ug7?g_st=iw"
+                  target="_blank" rel="noopener noreferrer">Buka di Google Maps</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </Reveal>
     </>
   )
 }
@@ -3000,23 +3079,23 @@ const POLICY = [
   {
     q: 'DP & Booking',
     body: [
-      'DP sebesar Rp500.000 mengunci unit selama 3 hari untuk proses pelunasan dan serah terima. Selama masa ini, unit tidak ditawarkan ke pembeli lain. Jika dalam 3 hari pelunasan belum dilakukan tanpa konfirmasi lebih lanjut dari Motorell, unit dapat ditawarkan kembali ke pembeli lain.',
-      'DP akan dikembalikan secara penuh (100%) apabila kondisi unit yang diterima tidak sesuai dengan deskripsi dan catatan kurasi yang tercantum di halaman unit. Pengajuan refund dapat dilakukan dengan menghubungi tim Motorell melalui WhatsApp maksimal 1x24 jam setelah serah terima.',
+      'DP Rp500.000 mengunci motor selama 3 hari. Waktu ini buat pelunasan dan serah terima. Kalau lewat 3 hari tanpa konfirmasi dari kami, motor bisa ditawarkan lagi ke pembeli lain.',
+      'DP balik 100% kalau kondisi motor ternyata tidak sesuai deskripsi saat kamu terima. Tinggal ajukan lewat WhatsApp maksimal 24 jam setelah serah terima.',
     ],
   },
   {
     q: 'Syarat & Ketentuan',
     body: [
-      'Harga yang tercantum adalah harga unit dalam kondisi sebagaimana dideskripsikan pada halaman masing-masing unit, belum termasuk biaya balik nama, pajak tahunan yang belum dibayarkan (jika ada), dan biaya pengiriman di luar area yang disepakati.',
-      'Paket perlindungan (Avantgard/Spectre/Cullinan) berlaku sejak tanggal serah terima unit dan mencakup layanan sebagaimana dijelaskan pada masing-masing paket.',
+      'Harga di halaman unit adalah harga motor apa adanya sesuai deskripsi. Belum termasuk balik nama, pajak tahunan yang belum dibayar, dan ongkir ke luar area yang disepakati.',
+      'Paket perlindungan (Avantgard, Spectre, Cullinan) mulai berlaku sejak serah terima, sesuai cakupan tiap paket.',
     ],
   },
   {
     q: 'Kebijakan Privasi',
     body: [
-      'Motorell menghargai privasi Anda. Data yang Anda berikan — termasuk nama, nomor telepon, dan alamat email — hanya digunakan untuk keperluan proses transaksi, konfirmasi booking, dan komunikasi terkait unit yang Anda minati.',
-      'Dengan mendaftar atau melakukan booking, Anda memberikan persetujuan bagi Motorell untuk sesekali mengirimkan informasi promosi, penawaran unit baru, atau program menarik lainnya melalui email atau WhatsApp. Kami membatasi frekuensi komunikasi ini agar tetap relevan dan tidak mengganggu, dan Anda dapat berhenti berlangganan kapan pun dengan menghubungi tim kami.',
-      'Motorell tidak membagikan data pribadi Anda kepada pihak ketiga mana pun di luar kebutuhan operasional internal, kecuali diwajibkan oleh hukum yang berlaku.',
+      'Data kamu (nama, nomor HP, email) cuma kami pakai buat proses transaksi, konfirmasi booking, dan ngobrol soal motor yang kamu minati.',
+      'Sesekali kami kirim info motor baru atau promo lewat email atau WhatsApp. Kami jaga biar tetap relevan dan tidak spam, dan kamu bisa berhenti kapan saja tinggal bilang ke tim kami.',
+      'Data kamu tidak kami bagikan ke pihak ketiga, kecuali memang diwajibkan hukum.',
     ],
   },
 ]
@@ -3364,6 +3443,13 @@ export default function App() {
                   <circle cx="17.6" cy="6.4" r="1.1" fill="currentColor" stroke="none" />
                 </svg>
                 <span className="social-label">Instagram</span>
+              </button>
+              <button type="button" className="social-link" onClick={() => openSocialApp('youtube')}
+                title="Tonton Motorell di YouTube">
+                <svg className="social-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M23.5 6.9a3 3 0 0 0-2.1-2.1C19.5 4.3 12 4.3 12 4.3s-7.5 0-9.4.5A3 3 0 0 0 .5 6.9 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.1 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.1zM9.6 15.6V8.4l6.2 3.6z" />
+                </svg>
+                <span className="social-label">YouTube</span>
               </button>
               <button type="button" className="social-link" onClick={() => openSocialApp('tiktok')}
                 title="Follow Motorell di TikTok">

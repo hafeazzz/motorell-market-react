@@ -39,6 +39,12 @@ const SOCIAL = {
     scheme: null,
     web: 'https://www.tiktok.com/@motorellgarage',
   },
+  youtube: {
+    // YouTube membuka app-nya lewat Universal/App Link dari URL https biasa,
+    // jadi tidak perlu skema custom.
+    scheme: null,
+    web: 'https://youtube.com/@varrel.raditya?si=ZCDXy6tWNGfT491A',
+  },
 }
 
 const FALLBACK_MS = 1200
