@@ -122,12 +122,15 @@ const FEATURE_SECTIONS = [
 ]
 
 // ---------- Cerita/Sejarah Motorell (section "Sejarah Motorell" di home) ----------
-// Catatan angka: "banyak pembeli" — bukan "ribuan" — supaya tidak bertabrakan
-// dengan klaim "Terjual 100+ unit" di spec-rail hero pada halaman yang sama.
+// Tiap elemen = satu <p>. Kalimat penutup sengaja berdiri sendiri sebagai
+// paragraf terakhir (bukan disambung ke paragraf sebelumnya) supaya tetap
+// terbaca sebagai penutup, sesuai naskah aslinya.
 const ABOUT_STORY = [
-  'Motorell lahir dari passion sederhana: membuat pembelian motor bekas menjadi pengalaman yang transparan, aman, dan terpercaya. Kami percaya setiap motor punya cerita, dan setiap pembeli berhak tahu cerita lengkapnya.',
-  'Sejak 2023, Motorell telah membantu banyak pembeli menemukan motor impian mereka dengan jaminan kualitas yang terverifikasi. Kami tidak hanya menjual motor, kami membangun kepercayaan, satu unit pada satu waktu.',
-  'Di Motorell, anti was-was bukan hanya tagline. Ini adalah komitmen kami kepada Anda: transparansi penuh, tidak ada penipuan, dan kepuasan dijamin. Karena kami tahu, ketika Anda membeli motor bekas, Anda membeli cerita dan kepercayaan.',
+  'Motorell bukan lahir dari modal besar atau showroom mewah. Semua berawal pada tahun 2023, ketika pendirinya masih duduk di bangku Kelas 1 SMA. Berbekal ketertarikan pada dunia otomotif dan keinginan untuk membangun sesuatu sejak usia muda, perjalanan ini dimulai dari jual beli motor bekas secara sederhana.',
+  'Di setiap transaksi, ada satu prinsip yang selalu dijaga: kejujuran. Kami percaya motor bekas tidak seharusnya dijual dengan cerita yang disembunyikan. Riwayat kendaraan, kondisi mesin, hingga kekurangan yang ada harus disampaikan apa adanya. Dari situlah kepercayaan pelanggan mulai tumbuh, satu unit demi satu unit.',
+  'Seiring waktu, Motorell berkembang dari aktivitas jual beli kecil menjadi sebuah perusahaan yang memiliki standar inspeksi, dokumentasi, serta proses penjualan yang mengutamakan transparansi. Apa yang awalnya dikerjakan sendiri kini berkembang bersama sebuah tim dengan satu visi yang sama: menghadirkan pengalaman membeli motor bekas yang aman, jelas, dan dapat dipercaya.',
+  'Hari ini, meski perjalanan masih panjang, semangatnya tetap tidak berubah. Motorell dibangun bukan hanya untuk menjual motor, tetapi untuk membuktikan bahwa usia bukanlah batas untuk membangun bisnis yang profesional. Setiap motor yang kami jual bukan sekadar membawa kendaraan, melainkan tentang membawa kepercayaan yang telah kami bangun sejak langkah pertama di bangku SMA.',
+  'Karena bagi kami, reputasi selalu lebih berharga daripada satu kali penjualan.',
 ]
 
 // ---------- Suara klik "berat" (Web Audio) untuk tombol utama ----------
@@ -185,14 +188,29 @@ async function compressImage(file, maxW = 1600, quality = 0.82) {
   }
 }
 
-function buildWaMessage(listing) {
-  return 'Halo Motorell, saya mau tanya soal ' + listing.title + ' (' + rupiah(listing.price) + '). ' +
-    'Apakah masih tersedia?'
+// Pesan CS menyebut paket perlindungan yang SEDANG disorot di panel — CS jadi
+// tahu paket mana yang dimaksud tanpa harus bertanya balik.
+// Tidak ada state baru untuk ini: DetailView sudah memegang `warranty` (turunan
+// dari wcode, default avail[0] = Avantgard) dan sudah mengopernya ke onBook →
+// requestBooking. Sebelumnya nilai itu berhenti di situ dan tidak pernah
+// sampai ke pesannya.
+function buildWaMessage(listing, warranty) {
+  const url = window.location.origin + window.location.pathname + '#/unit/' + listing.slug
+  return 'Halo Motorell! Saya tertarik dengan unit ini:\n' +
+    // `title` sudah memuat tahun (kolomnya "brand + model + year"), jadi tahun
+    // tidak ditempel lagi di sini — lihat catatan yang sama di unitWaLink.
+    '🏍️ ' + listing.title + '\n' +
+    '💰 Harga: ' + rupiah(listing.price) + '\n' +
+    (warranty ? '🛡️ Dengan paket perlindungan ' + warranty.name + '\n' : '') +
+    '📍 Link: ' + url + '\n\n' +
+    'Apakah unit ini masih tersedia?'
 }
 
-function openWhatsAppCS(listing, toast) {
+function openWhatsAppCS(listing, toast, warranty) {
   toast('Kamu akan diarahkan ke WhatsApp CS kami untuk melanjutkan pembayaran')
-  const url = 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' + encodeURIComponent(buildWaMessage(listing))
+  console.info('[WA] Hubungi CS →', listing.title, '· paket:', warranty ? warranty.name : '(tidak dipilih)')
+  const url = 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' +
+    encodeURIComponent(buildWaMessage(listing, warranty))
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
@@ -836,6 +854,15 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   margin-bottom:28px;display:inline-flex;gap:8px}
 .back:hover{color:var(--accent)}
 .detail-grid{display:grid;grid-template-columns:1fr;gap:clamp(26px,3.5vw,56px);align-items:start}
+/* min-width:0 — WAJIB, bukan hiasan. Grid item punya min-width:auto secara
+   default, artinya ia MENOLAK menyusut di bawah lebar min-content isinya.
+   Baris tab (.dtabs) min-content-nya ~434px, jadi kolom "1fr" ini melar ke
+   434px di layar 375px dan menyeret seluruh dokumen ikut melebar (halaman unit
+   meluber 79px). Efek sampingnya: overflow-x:auto pada .dtabs tidak pernah
+   aktif karena lebarnya tidak pernah dibatasi. Dengan min-width:0 kolomnya
+   menyusut mengikuti layar dan tab-nya menggulung sendiri seperti yang
+   dimaksudkan sejak awal. */
+.detail-grid > *{min-width:0}
 /* CTA menempel di bawah layar HP (basis/default) — panel harga lengkap
    tetap ada di alur normal, sticky bar ini jalan pintas biar tak perlu
    scroll jauh. Disembunyikan lagi di layar besar lewat
@@ -3938,7 +3965,7 @@ export default function App() {
       // window.open harus tetap sinkron di dalam gesture klik (supaya tidak
       // diblokir popup blocker) — overlay handoff cuma lapisan visual di
       // atasnya, tidak menunda pembukaan tab WhatsApp yang sesungguhnya.
-      openWhatsAppCS(listing, toast)
+      openWhatsAppCS(listing, toast, warranty)
       setWaHandoff(true)
       setTimeout(() => setWaHandoff(false), 1100)
       return

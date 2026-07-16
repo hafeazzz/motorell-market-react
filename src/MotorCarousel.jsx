@@ -21,7 +21,14 @@ import Blueprint from './Blueprint'
 // ia jatuh ke blueprint + keterangan bahwa fotonya belum ada.
 // ============================================================
 
-const AUTO_MS = 800          // 1 frame / 800ms → 8 foto = 6,4 detik per putaran
+// 4 detik per frame: cukup lama untuk benar-benar MENGAMATI tiap sudut.
+// Konsekuensi yang disengaja: dengan 8 foto, satu putaran 360° penuh kini makan
+// ~32 detik (dulu 6,4 detik), jadi ini terbaca sebagai "pergantian sudut" yang
+// tenang, bukan lagi turntable yang berputar. Itulah yang diminta — dulu terlalu
+// cepat untuk sempat melihat detail motornya.
+// Catatan: auto-rotate memang hanya hidup di desktop — di perangkat sentuh dan
+// prefers-reduced-motion ia tidak pernah menyala (lihat coarse()/reduced()).
+const AUTO_MS = 4000
 const DRAG_PER_FRAME = 100   // 100px seret = maju 1 frame
 const ZOOM_MIN = 1
 const ZOOM_MAX = 2.5
