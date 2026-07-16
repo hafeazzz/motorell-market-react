@@ -5,7 +5,7 @@
 // Pembayaran: Edge Function create-dp-payment -> Midtrans QRIS
 // ============================================================
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { motion, AnimatePresence, animate, useScroll, useTransform, useInView } from 'framer-motion'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
@@ -126,7 +126,7 @@ const FEATURE_SECTIONS = [
 // dengan klaim "Terjual 100+ unit" di spec-rail hero pada halaman yang sama.
 const ABOUT_STORY = [
   'Motorell lahir dari passion sederhana: membuat pembelian motor bekas menjadi pengalaman yang transparan, aman, dan terpercaya. Kami percaya setiap motor punya cerita, dan setiap pembeli berhak tahu cerita lengkapnya.',
-  'Sejak 2023, Motorell telah membantu banyak pembeli menemukan motor impian mereka dengan jaminan kualitas yang terverifikasi. Kami tidak hanya menjual motor — kami membangun kepercayaan, satu unit pada satu waktu.',
+  'Sejak 2023, Motorell telah membantu banyak pembeli menemukan motor impian mereka dengan jaminan kualitas yang terverifikasi. Kami tidak hanya menjual motor, kami membangun kepercayaan, satu unit pada satu waktu.',
   'Di Motorell, anti was-was bukan hanya tagline. Ini adalah komitmen kami kepada Anda: transparansi penuh, tidak ada penipuan, dan kepuasan dijamin. Karena kami tahu, ketika Anda membeli motor bekas, Anda membeli cerita dan kepercayaan.',
 ]
 
@@ -324,6 +324,124 @@ function filterChips(f) {
   return out
 }
 
+// ---------- Panel filter & urutan ----------
+// Panel ini HIDUP BERDAMPINGAN dengan smart search di navbar: search bar
+// mengurai teks bebas jadi filter (parseQuery), panel memberi kontrol eksplisit.
+// Keduanya di-AND — unit harus lolos dua-duanya. Jadi mengetik "di bawah 30
+// juta" lalu mencentang Honda menyaring keduanya, bukan saling menimpa.
+//
+// "Kondisi" di UI = kolom `grade` di DB. Tidak ada kolom kondisi terpisah;
+// grade S/A/B sudah mewakili istimewa/bagus/standar (lihat GRADE_DESC).
+const GRADE_COND_LABEL = { S: 'Istimewa', A: 'Bagus', B: 'Standar' }
+
+// Urutan: "Terlaris" TIDAK ada di sini — tabel listings tidak menyimpan
+// views/interest sama sekali, jadi opsi itu cuma bisa jadi urutan bohongan.
+// Tambahkan kalau kolom penghitung tayangan sudah ada.
+const SORT_OPTIONS = [
+  { code: 'newest', label: 'Terbaru' },
+  { code: 'price_asc', label: 'Harga: Rendah ke Tinggi' },
+  { code: 'price_desc', label: 'Harga: Tinggi ke Rendah' },
+]
+
+const EMPTY_PANEL = { priceMin: null, priceMax: null, brands: [], year: null, grades: [] }
+
+const panelActive = (p) =>
+  Boolean(p && (p.priceMin || p.priceMax || p.brands.length || p.year || p.grades.length))
+
+function matchPanel(l, p) {
+  if (!p) return true
+  if (p.priceMin && Number(l.price) < p.priceMin) return false
+  if (p.priceMax && Number(l.price) > p.priceMax) return false
+  if (p.year && Number(l.year) !== Number(p.year)) return false
+  if (p.brands.length && !p.brands.includes(String(l.brand || '').trim())) return false
+  if (p.grades.length && !p.grades.includes(String(l.grade || '').toUpperCase())) return false
+  return true
+}
+
+// sort() memutasi array — listings berasal dari state, jadi selalu salin dulu.
+function sortListings(arr, sort) {
+  const out = [...arr]
+  if (sort === 'price_asc') return out.sort((a, b) => Number(a.price) - Number(b.price))
+  if (sort === 'price_desc') return out.sort((a, b) => Number(b.price) - Number(a.price))
+  // 'newest': published_at bisa null (unit lama), jatuh balik ke created_at.
+  return out.sort((a, b) =>
+    new Date(b.published_at || b.created_at || 0) - new Date(a.published_at || a.created_at || 0))
+}
+
+// Rentang harga & daftar merek diturunkan DARI DATA, bukan dikunci konstanta —
+// showroom ganti stok tiap minggu, angka hardcoded akan basi diam-diam.
+function facetsOf(listings) {
+  const prices = listings.map((l) => Number(l.price)).filter((n) => Number.isFinite(n) && n > 0)
+  const years = [...new Set(listings.map((l) => Number(l.year)).filter(Boolean))].sort((a, b) => b - a)
+  const brands = [...new Set(listings.map((l) => String(l.brand || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+  const grades = [...new Set(listings.map((l) => String(l.grade || '').toUpperCase()).filter(Boolean))]
+    .sort()
+  // Slider butuh rentang yang tidak nol-lebar walau etalase cuma berisi 1 unit.
+  const lo = prices.length ? Math.min(...prices) : 0
+  const hi = prices.length ? Math.max(...prices) : 100_000_000
+  return { brands, years, grades, priceLo: lo, priceHi: hi > lo ? hi : lo + 1_000_000 }
+}
+
+// ---------- Badge status unit ----------
+// Etalase memuat status 'published' + 'booked' (lihat loadListings). Unit
+// 'sold' sengaja TIDAK diambil — jadi badge "terjual" tidak dibuat di sini:
+// kartunya tidak akan pernah ada. Kalau nanti sold ikut ditampilkan, tambahkan
+// cabangnya di sini dan longgarkan query-nya bersamaan.
+const NEW_UNIT_DAYS = 3
+function statusBadge(l) {
+  if (l.status === 'booked') return { label: '🔥 Hampir Terjual', cls: 'st-booked' }
+  const created = l.created_at ? new Date(l.created_at) : null
+  if (created && !Number.isNaN(created.getTime())) {
+    const days = (Date.now() - created.getTime()) / 86_400_000
+    if (days < NEW_UNIT_DAYS) return { label: '🆕 Baru!', cls: 'st-new' }
+  }
+  return null
+}
+
+// ---------- WhatsApp cepat per unit ----------
+// Nomor diambil dari CS_WHATSAPP_NUMBER yang sudah dipakai flow booking —
+// satu sumber kebenaran, jangan tulis ulang nomornya di tempat lain.
+function unitWaLink(l) {
+  const url = window.location.origin + window.location.pathname + '#/unit/' + l.slug
+  // `title` SUDAH memuat tahun — kolomnya dibentuk "brand + model + year" di
+  // form admin. Menempelkan l.year lagi menghasilkan "XSR 155 2020 2020".
+  const msg = 'Halo Motorell! Saya tertarik dengan unit ini:\n' +
+    '🏍️ ' + l.title + '\n' +
+    '💰 Harga: ' + rupiah(l.price) + '\n' +
+    '📍 Link: ' + url + '\n\n' +
+    'Apakah unit ini masih tersedia?'
+  return 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' + encodeURIComponent(msg)
+}
+
+// ---------- Unit terakhir dilihat (localStorage) ----------
+const RECENT_KEY = 'recently_viewed'
+const RECENT_MAX = 6
+
+function readRecent() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')
+    return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string').slice(0, RECENT_MAX) : []
+  } catch {
+    // Isi rusak / mode privat — anggap belum ada riwayat, jangan lempar error.
+    return []
+  }
+}
+
+function pushRecent(id) {
+  if (!id) return []
+  try {
+    // Yang baru dilihat naik ke depan; duplikat dibuang supaya 6 slotnya berisi
+    // 6 unit BERBEDA, bukan unit yang sama enam kali.
+    const next = [String(id), ...readRecent().filter((x) => x !== String(id))].slice(0, RECENT_MAX)
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+    console.info('[RECENT] Riwayat unit diperbarui →', next.length + ' unit')
+    return next
+  } catch {
+    return readRecent()
+  }
+}
+
 // Potong judul jadi bagian cocok / tidak cocok supaya bisa di-<mark>.
 // Perhatikan: split() dengan grup tangkap mempertahankan delimiter-nya, jadi
 // potongan yang cocok bisa dikenali cukup dengan membandingkan lowercase-nya
@@ -492,7 +610,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .card-wrap{opacity:0;transform:translateY(24px) scale(.96);
   transition:opacity .55s ease,transform .6s cubic-bezier(.2,.7,.25,1)}
 .card-wrap.shown{opacity:1;transform:none}
-.card{width:100%;height:100%;background:var(--panel);border:1px solid var(--line);
+.card{position:relative;width:100%;height:100%;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;
   text-align:left;
   transform:perspective(950px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg))
@@ -513,8 +631,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   transform:translateX(-130%);transition:none}
 .card:hover .card-media::after{transform:translateX(130%);transition:transform .65s ease}
 .card-media .blp{position:absolute;inset:11% 8%;opacity:1}
+/* padding-bottom besar: tombol WhatsApp duduk permanen di pojok kanan bawah
+   media, jadi teks kurasi diangkat ke atasnya — bukan bersembunyi di baliknya. */
 .card-reveal{position:absolute;inset:auto 0 0 0;z-index:2;
-  padding:16px 14px 13px;font-size:12.5px;line-height:1.45;font-weight:500;
+  padding:16px 14px 56px;font-size:12.5px;line-height:1.45;font-weight:500;
   color:#fff;background:linear-gradient(0deg,rgba(10,10,12,.82) 0%,rgba(10,10,12,0) 100%);
   clip-path:inset(100% 0 0 0);transition:clip-path .45s cubic-bezier(.2,.8,.25,1)}
 .card:hover .card-reveal{clip-path:inset(0 0 0 0)}
@@ -553,6 +673,145 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .card:hover .card-go .aro{transform:translateX(5px)}
 .empty{border:1px dashed var(--line-2);border-radius:var(--radius);padding:60px 24px;
   text-align:center;color:var(--muted);font-size:15px;grid-column:1/-1;background:var(--panel)}
+
+/* ---------- kartu: area klik, badge status, tombol WhatsApp ----------
+   .card dulunya <button> yang membungkus SELURUH kartu. Tombol WhatsApp tidak
+   boleh bersarang di dalamnya (nested <button>/<a> = HTML tidak valid dan
+   browser menolak me-render-nya dengan benar), jadi kartu sekarang <div> dengan
+   .card-hit sebagai lapisan klik yang merentang penuh. Semua lapisan dekoratif
+   dimatikan pointer-events-nya supaya tidak mencuri klik dari .card-hit. */
+.card-hit{position:absolute;inset:0;z-index:3;border-radius:var(--radius)}
+.card-hit:focus-visible{outline-offset:-3px}
+.badge,.card-reveal,.card-status{pointer-events:none}
+.card-status{position:absolute;top:13px;left:13px;z-index:4;font-family:var(--mono);
+  font-size:10px;font-weight:700;letter-spacing:.07em;padding:6px 10px;border-radius:999px;
+  text-transform:uppercase;color:#fff;box-shadow:0 2px 8px rgba(17,17,20,.22)}
+.card-status.st-new{background:#c62828}
+.card-status.st-booked{background:#e07b1c}
+/* Tombol WA melayang di atas .card-hit — z-index harus lebih tinggi, kalau
+   tidak lapisan klik kartu menelan klik-nya dan malah membuka halaman unit.
+   Tombol ini sengaja TIDAK ikut terangkat saat kartu di-hover seperti .badge:
+   .badge bergerak karena ia cuma hiasan yang harus menyingkir dari panel
+   reveal, sedangkan ini SASARAN KLIK. Sasaran klik yang bergeser 48px persis
+   saat kursor mendekat akan kabur dari bawah jari/kursor penggunanya. */
+.card-wa{position:absolute;right:12px;bottom:12px;z-index:5;display:inline-flex;
+  align-items:center;gap:7px;padding:9px 14px;border-radius:999px;
+  background:#25D366;color:#fff;font-size:12.5px;font-weight:700;letter-spacing:.01em;
+  box-shadow:0 3px 12px rgba(37,211,102,.42);
+  transition:transform .18s ease,box-shadow .18s ease}
+.card-wa:hover{transform:scale(1.08);box-shadow:0 5px 18px rgba(37,211,102,.55)}
+.card-wa:active{transform:scale(.97)}
+.card-wa svg{width:15px;height:15px;fill:currentColor;flex:none}
+
+/* ---------- kepala etalase: hitungan + urutan + tombol filter ---------- */
+.et-layout{display:grid;grid-template-columns:1fr;gap:26px;align-items:start}
+/* Tanpa sidebar (memuat/gagal/kosong), grid memakai lebar penuh — kalau tidak,
+   kolom 230px milik sidebar tetap dipesan dan menyisakan lubang kosong.
+   Specificity 0,0,2,0 sengaja mengalahkan .et-layout di @media di bawah. */
+.et-layout.bare{grid-template-columns:1fr}
+/* Mobile-first: sidebar mati, filter dijangkau lewat tombol → drawer. */
+.et-side{display:none}
+.et-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;margin-bottom:18px}
+.et-count{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.et-count b{color:var(--ink);font-weight:700}
+.et-tools{display:flex;align-items:center;gap:10px}
+.et-sort{appearance:none;border:1px solid var(--line-2);background:var(--panel);
+  border-radius:999px;padding:10px 34px 10px 15px;font-size:13px;font-weight:600;
+  cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),
+  linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 17px) 50%,calc(100% - 12px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.et-filter-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line-2);
+  background:var(--panel);border-radius:999px;padding:10px 16px;font-size:13px;font-weight:600}
+.et-filter-btn .n{background:var(--accent);color:#fff;font-family:var(--mono);font-size:10px;
+  min-width:17px;height:17px;border-radius:999px;display:grid;place-items:center;padding:0 4px}
+
+/* ---------- panel filter ---------- */
+.fp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px 18px;display:flex;flex-direction:column;gap:22px}
+.fp-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.fp-head h4{font-size:12px;font-family:var(--mono);letter-spacing:.13em;color:var(--muted)}
+.fp-reset{font-size:12px;font-weight:600;color:var(--accent);text-decoration:underline;
+  text-underline-offset:3px}
+.fp-reset:disabled{color:var(--dim);text-decoration:none;cursor:not-allowed}
+.fp-grp{display:flex;flex-direction:column;gap:11px}
+.fp-grp > label{font-size:12px;font-family:var(--mono);letter-spacing:.1em;color:var(--muted);
+  text-transform:uppercase}
+.fp-opts{display:flex;flex-direction:column;gap:9px;max-height:190px;overflow-y:auto}
+.fp-opt{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;color:#33363c}
+.fp-opt input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex:none}
+.fp-sel{width:100%;border:1px solid var(--line-2);background:var(--panel);border-radius:8px;
+  padding:9px 11px;font-size:13.5px;cursor:pointer}
+.fp-price-val{font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:600}
+/* Dual slider: dua <input type=range> ditumpuk di jalur yang sama. Track-nya
+   dimatikan (pointer-events:none) supaya thumb kedua tetap bisa diraih walau
+   tumpang tindih — thumb-nya sendiri dihidupkan lagi. */
+.fp-range{position:relative;height:26px;margin-top:2px}
+.fp-range .track{position:absolute;top:11px;left:0;right:0;height:3px;border-radius:3px;
+  background:var(--bg-3)}
+.fp-range .fill{position:absolute;top:11px;height:3px;border-radius:3px;background:var(--accent)}
+.fp-range input[type=range]{position:absolute;top:0;left:0;width:100%;height:26px;margin:0;
+  appearance:none;background:none;pointer-events:none}
+.fp-range input[type=range]::-webkit-slider-thumb{appearance:none;pointer-events:auto;
+  width:16px;height:16px;border-radius:50%;background:var(--panel);border:2px solid var(--accent);
+  cursor:grab;box-shadow:0 1px 4px rgba(17,17,20,.25);margin-top:0}
+.fp-range input[type=range]::-moz-range-thumb{pointer-events:auto;width:14px;height:14px;
+  border-radius:50%;background:var(--panel);border:2px solid var(--accent);cursor:grab;
+  box-shadow:0 1px 4px rgba(17,17,20,.25)}
+.fp-range input[type=range]::-webkit-slider-runnable-track{height:26px;background:none}
+.fp-range input[type=range]::-moz-range-track{height:26px;background:none}
+
+/* Mobile: panel jadi drawer geser dari kiri. Di desktop drawer & backdrop
+   tidak pernah dipakai (lihat @media min-width:768px). */
+.fp-backdrop{position:fixed;inset:0;z-index:70;background:rgba(17,17,20,.42);
+  backdrop-filter:blur(2px)}
+.fp-drawer{position:fixed;inset:0 auto 0 0;z-index:71;width:min(86vw,330px);
+  background:var(--bg);border-right:1px solid var(--line);overflow-y:auto;
+  padding:calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom))}
+.fp-drawer .fp{border:none;padding:0;background:none}
+.fp-close{position:sticky;top:0;z-index:2;display:flex;justify-content:flex-end;
+  padding-bottom:10px;background:var(--bg)}
+.fp-close button{font-size:22px;line-height:1;color:var(--muted);padding:4px 8px}
+
+/* ---------- skeleton loading ---------- */
+/* Meniru struktur Card (media 1:1 + body + kaki) supaya grid tidak melompat
+   saat data asli datang. Animasi murni CSS — tanpa library. */
+.sk{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;display:flex;flex-direction:column}
+.sk-media{aspect-ratio:1/1}
+.sk-body{padding:19px 19px 17px;display:flex;flex-direction:column;gap:10px}
+.sk-foot{border-top:1px solid var(--line);padding:14px 19px}
+.sk-line{height:11px;border-radius:5px}
+.sk-media,.sk-line{background:linear-gradient(100deg,var(--bg-2) 30%,var(--bg-3) 50%,var(--bg-2) 70%);
+  background-size:220% 100%;animation:sk-shimmer 1.25s ease-in-out infinite}
+@keyframes sk-shimmer{0%{background-position:150% 0}100%{background-position:-50% 0}}
+
+/* ---------- terakhir dilihat ---------- */
+.recent{margin-bottom:clamp(34px,5vw,52px)}
+.recent-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  margin-bottom:16px}
+.recent-head h3{font-size:clamp(15px,2.2vw,18px);font-weight:700;letter-spacing:-.01em}
+.recent-clear{font-size:12px;font-weight:600;color:var(--muted);text-decoration:underline;
+  text-underline-offset:3px}
+/* Carousel scroll horizontal — snap supaya berhenti rapi di tiap kartu. */
+.recent-rail{display:flex;gap:13px;overflow-x:auto;scroll-snap-type:x mandatory;
+  padding-bottom:6px;scrollbar-width:thin}
+.recent-rail::-webkit-scrollbar{height:5px}
+.recent-rail::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:9px}
+.rcard{position:relative;flex:none;width:150px;scroll-snap-align:start;text-align:left;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  transition:border-color .2s,transform .2s}
+.rcard:hover{border-color:var(--line-2);transform:translateY(-3px)}
+.rcard-media{aspect-ratio:1/1;position:relative;background:var(--bg-3)}
+.rcard-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  opacity:0;transition:opacity .4s}
+.rcard-media img.ok{opacity:1}
+.rcard-media .blp{position:absolute;inset:11% 8%}
+.rcard-body{padding:10px 11px 12px;display:flex;flex-direction:column;gap:3px}
+.rcard-body b{font-size:12.5px;font-weight:650;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rcard-body span{font-size:12px;font-weight:700;color:var(--accent)}
 
 /* ---------- feature editorial (foto besar + teks berselang-seling) ---------- */
 .reveal{opacity:0;transform:translateY(28px);
@@ -1096,9 +1355,18 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .lb-close{width:42px;height:42px}
   .photo-strip .rm{width:22px;height:22px;font-size:11px}
   .thumbs button{width:78px;height:60px}
+  /* Desktop: panel filter jadi sidebar kiri yang ikut menggulung bersama grid.
+     Tombol "Filter" & drawer hanya untuk mobile — di sini keduanya mati total. */
+  .et-layout{grid-template-columns:230px 1fr}
+  .et-side{display:block}
+  .et-filter-btn{display:none}
+  .fp-backdrop,.fp-drawer{display:none}
+  .fp{position:sticky;top:88px}
+  .rcard{width:172px}
 }
 @media(min-width:1021px){
   .grid{grid-template-columns:repeat(3,1fr)}
+  .et-layout{grid-template-columns:260px 1fr}
   .feature{grid-template-columns:1fr 1fr;gap:clamp(44px,6vw,88px)}
   .feature.flip .feature-media-slide{order:2}
   .detail-grid{grid-template-columns:7fr 5fr}
@@ -2607,8 +2875,16 @@ function DetailView({ listing, nav, onBook }) {
 }
 
 // ---------- Kartu & beranda ----------
-function Card({ l, nav, index = 0, highlight = false }) {
+// Ikon WhatsApp resmi (glyph tunggal) — dipakai di tombol chat per unit.
+const WaIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.47-1.75-1.65-2.05-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.47 0 1.46 1.06 2.87 1.21 3.07.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.69.25-1.28.17-1.41-.07-.13-.27-.2-.57-.35zM12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.87 9.87 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.25-8.23a8.2 8.2 0 0 1 8.24 8.24c0 4.54-3.7 8.23-8.24 8.23z" />
+  </svg>
+)
+
+function CardBase({ l, nav, index = 0, highlight = false }) {
   const photos = Array.isArray(l.photos) ? l.photos : []
+  const badge = statusBadge(l)
   const wrapRef = useRef(null)
   const cardRef = useRef(null)
   const [shown, setShown] = useState(false)
@@ -2650,10 +2926,16 @@ function Card({ l, nav, index = 0, highlight = false }) {
     <div ref={wrapRef}
       className={'card-wrap' + (shown ? ' shown' : '') + (highlight ? ' match' : '')}
       style={{ transitionDelay: shown ? (index % 3) * 70 + 'ms' : '0ms' }}>
-      <button ref={cardRef} className="card" onClick={() => nav('#/unit/' + l.slug)}
+      {/* <div>, bukan <button>: tombol WhatsApp di bawah tidak boleh bersarang
+          di dalam tombol lain. .card-hit yang merentang penuh menggantikannya
+          sebagai area klik, dan tetap bisa di-Tab/Enter seperti tombol biasa. */}
+      <div ref={cardRef} className="card"
         onPointerMove={onMove} onPointerLeave={onLeave}>
+        <button className="card-hit" onClick={() => nav('#/unit/' + l.slug)}
+          aria-label={'Lihat detail ' + l.title} />
         <div className="card-media">
           {photos[0] ? <FadeImg src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
+          {badge && <span className={'card-status ' + badge.cls}>{badge.label}</span>}
           <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>
           {/* panel disingkap saat hover — pakai foto yang sama (bukan foto ke-2)
               supaya etalase tetap ringan; wipe clip-path meniru "object reveal" dari
@@ -2662,6 +2944,14 @@ function Card({ l, nav, index = 0, highlight = false }) {
           <div className="card-reveal">
             {GRADE_DESC[l.grade] || 'Unit sudah lolos kurasi 50+ titik'}
           </div>
+          {/* Chat cepat: melompati halaman detail, pesannya sudah berisi unit ini.
+              stopPropagation tidak perlu (bukan anak .card-hit), tapi tetap harus
+              di atasnya secara z-index — lihat catatan di .card-wa. */}
+          <a className="card-wa" href={unitWaLink(l)} target="_blank" rel="noopener noreferrer"
+            aria-label={'Chat WhatsApp tentang ' + l.title}
+            onClick={() => console.info('[WA] Chat unit →', l.title)}>
+            <WaIcon /><span>Chat Sekarang</span>
+          </a>
         </div>
         <div className="card-body">
           <h3>{l.title}</h3>
@@ -2669,20 +2959,203 @@ function Card({ l, nav, index = 0, highlight = false }) {
           <span className="card-price">{rupiah(l.price)}</span>
         </div>
         <span className="card-go"><span>Lihat detail</span><span className="aro">→</span></span>
-      </button>
+      </div>
+    </div>
+  )
+}
+
+// Etalase bisa berisi puluhan kartu, dan TIAP ketukan huruf di search bar
+// me-render ulang HomeView. Tanpa memo semua kartu ikut render ulang — termasuk
+// IntersectionObserver & tilt handler-nya — padahal props-nya sama persis.
+// `nav` sudah dibungkus useCallback di App, jadi memo-nya benar-benar menggigit.
+const Card = memo(CardBase)
+
+// ---------- Skeleton ----------
+// Meniru struktur Card 1:1 (media persegi → judul → meta → harga → kaki) supaya
+// grid tidak melompat begitu data asli masuk.
+function SkeletonCard() {
+  return (
+    <div className="sk" aria-hidden="true">
+      <div className="sk-media" />
+      <div className="sk-body">
+        <div className="sk-line" style={{ width: '82%', height: 13 }} />
+        <div className="sk-line" style={{ width: '54%' }} />
+        <div className="sk-line" style={{ width: '42%', height: 15, marginTop: 5 }} />
+      </div>
+      <div className="sk-foot"><div className="sk-line" style={{ width: '38%' }} /></div>
+    </div>
+  )
+}
+
+const SKELETON_COUNT = 6
+
+// ---------- Panel filter ----------
+function FilterPanel({ facets, panel, setPanel, onReset }) {
+  const { brands, years, grades, priceLo, priceHi } = facets
+  // Slider tak bernilai → pakai batas data sebagai posisi awal, sehingga thumb
+  // tidak menggantung di 0 saat filter harga belum disentuh.
+  const lo = panel.priceMin ?? priceLo
+  const hi = panel.priceMax ?? priceHi
+  const span = Math.max(1, priceHi - priceLo)
+  const step = Math.max(100_000, Math.round(span / 100))
+
+  const toggle = (key, val) => setPanel((p) => {
+    const has = p[key].includes(val)
+    const next = has ? p[key].filter((x) => x !== val) : [...p[key], val]
+    console.info('[FILTER] ' + key + ' →', next)
+    return { ...p, [key]: next }
+  })
+
+  // Kedua thumb tidak boleh saling menyilang — min dijepit di bawah max, dan
+  // sebaliknya. Tanpa ini, menyeret min melewati max membuat rentangnya terbalik
+  // dan hasilnya selalu nol unit.
+  const setMin = (v) => setPanel((p) => ({ ...p, priceMin: Math.min(Number(v), hi) }))
+  const setMax = (v) => setPanel((p) => ({ ...p, priceMax: Math.max(Number(v), lo) }))
+
+  const pct = (v) => ((v - priceLo) / span) * 100
+
+  return (
+    <div className="fp">
+      <div className="fp-head">
+        <h4>Filter</h4>
+        <button className="fp-reset" onClick={onReset} disabled={!panelActive(panel)}>
+          Reset Filter
+        </button>
+      </div>
+
+      <div className="fp-grp">
+        <label>Range Harga</label>
+        <div className="fp-price-val">{rupiah(lo)} – {rupiah(hi)}</div>
+        <div className="fp-range">
+          <span className="track" />
+          <span className="fill" style={{ left: pct(lo) + '%', right: (100 - pct(hi)) + '%' }} />
+          <input type="range" min={priceLo} max={priceHi} step={step} value={lo}
+            aria-label="Harga minimum" onChange={(e) => setMin(e.target.value)} />
+          <input type="range" min={priceLo} max={priceHi} step={step} value={hi}
+            aria-label="Harga maksimum" onChange={(e) => setMax(e.target.value)} />
+        </div>
+      </div>
+
+      {brands.length > 0 && (
+        <div className="fp-grp">
+          <label>Merek</label>
+          <div className="fp-opts">
+            {brands.map((b) => (
+              <label className="fp-opt" key={b}>
+                <input type="checkbox" checked={panel.brands.includes(b)}
+                  onChange={() => toggle('brands', b)} />
+                {b}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {years.length > 0 && (
+        <div className="fp-grp">
+          <label>Tahun</label>
+          {/* Tahun diambil dari unit yang BENAR-BENAR ada di etalase, bukan
+              rentang tetap — daftar tahun mati akan basi tiap ganti stok. */}
+          <select className="fp-sel" value={panel.year ?? ''}
+            onChange={(e) => setPanel((p) => ({ ...p, year: e.target.value ? Number(e.target.value) : null }))}>
+            <option value="">Semua tahun</option>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      )}
+
+      {grades.length > 0 && (
+        <div className="fp-grp">
+          <label>Kondisi</label>
+          {/* "Kondisi" = kolom grade. Labelnya bahasa manusia, nilainya S/A/B. */}
+          <div className="fp-opts">
+            {grades.map((g) => (
+              <label className="fp-opt" key={g}>
+                <input type="checkbox" checked={panel.grades.includes(g)}
+                  onChange={() => toggle('grades', g)} />
+                {GRADE_COND_LABEL[g] || 'Grade ' + g} <span className="mono" style={{ color: 'var(--dim)', fontSize: 11 }}>(Grade {g})</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------- Terakhir dilihat ----------
+function RecentlyViewed({ listings, recent, nav, onClear }) {
+  // Riwayat menyimpan ID, bukan salinan unit — harga/status bisa berubah, dan
+  // unit yang sudah terjual hilang dari `listings` sehingga otomatis rontok di
+  // sini. Urutan mengikuti riwayat (terbaru dulu), bukan urutan etalase.
+  const items = useMemo(
+    () => recent.map((id) => listings.find((l) => String(l.id) === String(id))).filter(Boolean),
+    [recent, listings])
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="recent">
+      <div className="recent-head">
+        <h3>🕐 Terakhir Dilihat</h3>
+        <button className="recent-clear" onClick={onClear}>Hapus riwayat</button>
+      </div>
+      <div className="recent-rail">
+        {items.map((l) => (
+          <button className="rcard" key={l.id} onClick={() => nav('#/unit/' + l.slug)}>
+            <div className="rcard-media">
+              {l.photos?.[0] ? <FadeImg src={l.photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
+            </div>
+            <div className="rcard-body">
+              <b>{l.title}</b>
+              <span>{rupiah(l.price)}</span>
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
 
 function HomeView({ listings, nav, query = '', filters = null, searchActive = false,
-  loading = false, error = '' }) {
-  // listings sudah difilter hanya status 'published' oleh App.
-  // Filter etalase memakai parser yang sama dengan dropdown navbar (harga,
-  // tahun, grade, teks) — jadi yang terlihat di grid persis yang dijanjikan
-  // dropdown. Section fitur & foto intro tetap pakai listings penuh.
-  const shown = searchActive
-    ? listings.filter((l) => matchListing(l, filters))
-    : listings
+  loading = false, error = '', panel, setPanel, sort, setSort, resetPanel,
+  recent = [], clearRecent }) {
+  // listings berisi status 'published' + 'booked' (unit ter-DP tetap tampil
+  // sebagai pemicu urgensi, tapi tidak bisa di-booking — lihat canBook di
+  // UnitView). Unit 'sold' tidak pernah sampai ke sini.
+  //
+  // Dua lapis filter yang DI-AND:
+  //   1. searchActive/filters — hasil urai teks bebas dari search bar navbar
+  //   2. panel               — kontrol eksplisit di sidebar/drawer
+  // Jadi "di bawah 30 juta" + centang Honda menyaring keduanya sekaligus.
+  // Section fitur & foto intro tetap pakai `listings` penuh, bukan `shown`.
+  const facets = useMemo(() => facetsOf(listings), [listings])
+  const shown = useMemo(() => {
+    const base = listings.filter((l) =>
+      (!searchActive || matchListing(l, filters)) && matchPanel(l, panel))
+    console.info('[FILTER] Menampilkan ' + base.length + ' dari ' + listings.length + ' unit — urut: ' + sort)
+    return sortListings(base, sort)
+  }, [listings, searchActive, filters, panel, sort])
+
+  const [drawer, setDrawer] = useState(false)
+  const nFilter = (panel.brands.length + panel.grades.length +
+    (panel.year ? 1 : 0) + (panel.priceMin || panel.priceMax ? 1 : 0))
+  // Tidak ada unit = tidak ada yang bisa disaring/diurutkan.
+  const showTools = !loading && !error && listings.length > 0
+
+  // Drawer mobile mengunci scroll body selama terbuka, dan Esc menutupnya —
+  // tanpa ini halaman di belakang ikut menggulung saat user menyapu panel.
+  useEffect(() => {
+    if (!drawer) return
+    const onKey = (e) => { if (e.key === 'Escape') setDrawer(false) }
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [drawer])
   // Unit asli terbaik (grade tertinggi yang punya foto) — dipakai sebagai foto
   // fallback kalau WebGL gagal render (bukan lagi bagian animasi pembuka).
   const introUnit =
@@ -2772,24 +3245,95 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <h2>Galeri Motorell.</h2>
               </div>
               <p className="aside">Klik unit untuk melihat foto, catatan kurasi, memilih paket perlindungan,
-                dan mengunci unit dengan DP — book melalui Contact Kami.</p>
+                dan mengunci unit dengan DP (book melalui Contact Kami)</p>
             </div>
-            <div className="grid">
-              {loading && (
-                <div className="empty">Memuat etalase…</div>)}
-              {!loading && error && (
-                <div className="empty">
-                  Gagal memuat etalase — {error}.<br />
-                  <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
-                    onClick={() => window.location.reload()}>Coba lagi</button>
-                </div>)}
-              {!loading && !error && listings.length === 0 && (
-                <div className="empty">Etalase sedang kosong — unit baru sedang dalam proses kurasi.</div>)}
-              {!loading && !error && listings.length > 0 && shown.length === 0 && (
-                <div className="empty">Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</div>)}
-              {!loading && !error && shown.map((l, i) => (
-                <Card key={l.id} l={l} nav={nav} index={i} highlight={searchActive} />))}
+            {/* Riwayat butuh data unit, jadi section ini menunggu fetch selesai;
+                komponennya sendiri menghilang kalau riwayatnya kosong. */}
+            {!loading && !error && (
+              <RecentlyViewed listings={listings} recent={recent} nav={nav} onClear={clearRecent} />
+            )}
+
+            <div className={'et-layout' + (showTools ? '' : ' bare')}>
+              {/* Panel & hitungan hanya berarti kalau datanya sudah ada. Saat
+                  memuat/gagal, facet-nya kosong sehingga slider harga jatuh ke
+                  rentang karangan (Rp 0–100 jt) dan hitungannya berbunyi
+                  "0 dari 0 unit" — dua-duanya membohongi pembaca. Sembunyikan
+                  sampai ada unit sungguhan untuk disaring.
+                  Sidebar ini juga mati di bawah 768px lewat CSS; di sana
+                  tombol Filter + drawer yang mengambil alih. */}
+              {showTools && (
+                <aside className="et-side">
+                  <FilterPanel facets={facets} panel={panel} setPanel={setPanel} onReset={resetPanel} />
+                </aside>
+              )}
+
+              <div>
+                {showTools && (
+                  <div className="et-bar">
+                    <p className="et-count">
+                      Menampilkan <b>{shown.length}</b> dari <b>{listings.length}</b> unit
+                    </p>
+                    <div className="et-tools">
+                      <button className="et-filter-btn" onClick={() => setDrawer(true)}>
+                        Filter{nFilter > 0 && <span className="n">{nFilter}</span>}
+                      </button>
+                      <select className="et-sort" value={sort} aria-label="Urutkan unit"
+                        onChange={(e) => setSort(e.target.value)}>
+                        {SORT_OPTIONS.map((o) => (
+                          <option key={o.code} value={o.code}>{o.label}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid">
+                  {loading && Array.from({ length: SKELETON_COUNT }, (_, i) => (
+                    <SkeletonCard key={i} />))}
+                  {!loading && error && (
+                    <div className="empty">
+                      Gagal memuat etalase — {error}.<br />
+                      <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+                        onClick={() => window.location.reload()}>Coba lagi</button>
+                    </div>)}
+                  {!loading && !error && listings.length === 0 && (
+                    <div className="empty">Etalase sedang kosong, unit baru sedang dalam proses kurasi.</div>)}
+                  {/* Nol hasil punya dua sebab berbeda — teks pencarian, atau
+                      filter panel. Menyebut "pencarian" saja saat yang menyaring
+                      sebenarnya panel akan membingungkan. */}
+                  {!loading && !error && listings.length > 0 && shown.length === 0 && (
+                    <div className="empty">
+                      {searchActive
+                        ? <>Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</>
+                        : <>Tidak ada unit yang cocok dengan filter ini.</>}
+                      {panelActive(panel) && (
+                        <><br />
+                          <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+                            onClick={resetPanel}>Reset filter</button>
+                        </>)}
+                    </div>)}
+                  {!loading && !error && shown.map((l, i) => (
+                    <Card key={l.id} l={l} nav={nav} index={i} highlight={searchActive} />))}
+                </div>
+              </div>
             </div>
+
+            <AnimatePresence>
+              {drawer && (
+                <>
+                  <motion.div className="fp-backdrop" onClick={() => setDrawer(false)}
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }} />
+                  <motion.div className="fp-drawer" role="dialog" aria-label="Filter unit"
+                    initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
+                    transition={{ type: 'tween', duration: 0.26, ease: [0.2, 0.7, 0.25, 1] }}>
+                    <div className="fp-close">
+                      <button onClick={() => setDrawer(false)} aria-label="Tutup filter">×</button>
+                    </div>
+                    <FilterPanel facets={facets} panel={panel} setPanel={setPanel} onReset={resetPanel} />
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </section>
       </Reveal>
@@ -3066,16 +3610,57 @@ function NavSearch({ value, onChange, onSubmit, results = [], total = 0, filters
 // Hash membawa query pencarian juga: "#/?q=xsr%20di%20bawah%2030%20juta".
 // Dengan begitu hasil pencarian bisa di-share/di-bookmark, dan tombol
 // back/forward browser mengembalikan pencarian sebelumnya.
+//
+// Filter panel & urutan ikut menumpang query string yang sama
+// ("#/?q=xsr&brand=Honda,Yamaha&max=30000000&sort=price_asc") — satu link
+// membawa SELURUH keadaan etalase, bukan cuma teks pencariannya.
+function panelFromParams(sp) {
+  const num = (k) => {
+    const n = Number(sp.get(k))
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+  const list = (k) => (sp.get(k) || '').split(',').map((s) => s.trim()).filter(Boolean)
+  return {
+    priceMin: num('min'), priceMax: num('max'),
+    brands: list('brand'), year: num('year'),
+    grades: list('grade').map((g) => g.toUpperCase()),
+  }
+}
+
+function sortFromParams(sp) {
+  const s = sp.get('sort')
+  // Nilai asing dari URL yang diedit tangan jangan sampai membuat <select>
+  // jadi uncontrolled — jatuh balik ke default.
+  return SORT_OPTIONS.some((o) => o.code === s) ? s : 'newest'
+}
+
+// Hanya nilai yang benar-benar aktif yang ditulis — URL bersih saat filter
+// kosong, dan '#/' polos tetap '#/' (bukan '#/?sort=newest&brand=').
+function stateToQuery(q, panel, sort) {
+  const sp = new URLSearchParams()
+  if (q) sp.set('q', q)
+  if (panel.priceMin) sp.set('min', String(panel.priceMin))
+  if (panel.priceMax) sp.set('max', String(panel.priceMax))
+  if (panel.brands.length) sp.set('brand', panel.brands.join(','))
+  if (panel.year) sp.set('year', String(panel.year))
+  if (panel.grades.length) sp.set('grade', panel.grades.join(','))
+  if (sort !== 'newest') sp.set('sort', sort)
+  return sp.toString()
+}
+
 function parseHash() {
   const raw = window.location.hash || '#/'
   const qIdx = raw.indexOf('?')
   const path = qIdx === -1 ? raw : raw.slice(0, qIdx)
-  const q = qIdx === -1 ? '' : (new URLSearchParams(raw.slice(qIdx + 1)).get('q') || '')
+  const sp = new URLSearchParams(qIdx === -1 ? '' : raw.slice(qIdx + 1))
+  const q = sp.get('q') || ''
+  const panel = panelFromParams(sp)
+  const sort = sortFromParams(sp)
   const unit = path.match(/^#\/unit\/(.+)$/)
-  if (unit) return { name: 'unit', slug: decodeURIComponent(unit[1]), q }
-  if (path === '#/admin') return { name: 'admin', q }
-  if (path === '#/kebijakan') return { name: 'kebijakan', q }
-  return { name: 'home', q }
+  if (unit) return { name: 'unit', slug: decodeURIComponent(unit[1]), q, panel, sort }
+  if (path === '#/admin') return { name: 'admin', q, panel, sort }
+  if (path === '#/kebijakan') return { name: 'kebijakan', q, panel, sort }
+  return { name: 'home', q, panel, sort }
 }
 
 // ---------- Halaman kebijakan / FAQ (route #/kebijakan) ----------
@@ -3140,10 +3725,25 @@ export default function App() {
   const toastRef = useRef(null)
   const [waHandoff, setWaHandoff] = useState(false)
   const [query, setQuery] = useState('')
+  // Filter panel & urutan lahir dari URL, jadi link hasil filter yang dibuka
+  // orang lain langsung menampilkan etalase yang sama persis.
+  const [panel, setPanel] = useState(() => parseHash().panel)
+  const [sort, setSort] = useState(() => parseHash().sort)
+  const [recent, setRecent] = useState(readRecent)
   // Etalase punya tiga keadaan berbeda yang dulu terlihat sama (grid kosong):
   // sedang memuat, gagal memuat, dan benar-benar kosong.
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState('')
+
+  const resetPanel = useCallback(() => {
+    console.info('[FILTER] Reset')
+    setPanel(EMPTY_PANEL)
+  }, [])
+
+  const clearRecent = useCallback(() => {
+    try { localStorage.removeItem(RECENT_KEY) } catch { /* mode privat */ }
+    setRecent([])
+  }, [])
 
   const toast = useCallback((msg) => {
     setToastMsg(msg)
@@ -3195,11 +3795,12 @@ export default function App() {
   // terjebak melangkahi 20 huruf yang barusan diketik.
   useEffect(() => {
     if (route.name !== 'home') return
-    const want = dQuery.trim() ? '#/?q=' + encodeURIComponent(dQuery.trim()) : '#/'
+    const qs = stateToQuery(dQuery.trim(), panel, sort)
+    const want = qs ? '#/?' + qs : '#/'
     if (window.location.hash !== want && (window.location.hash || '#/') !== want) {
       window.history.replaceState(null, '', want)
     }
-  }, [dQuery, route.name])
+  }, [dQuery, panel, sort, route.name])
 
   // Pencarian dari URL (link yang di-share / tombol back) masuk balik ke input.
   useEffect(() => {
@@ -3260,9 +3861,13 @@ export default function App() {
 
   const isStaff = Boolean(profile && ['admin', 'kurator'].includes(profile.role))
 
-  // Etalase publik: HANYA unit 'published'. Unit yang ter-DP (booked) atau
-  // terjual (sold) otomatis hilang dari sini; kalau booking batal, trigger DB
-  // mengembalikannya ke 'published' sehingga muncul lagi.
+  // Etalase publik: unit 'published' + 'booked'. Unit ter-DP sengaja TETAP
+  // tampil — dengan badge "Hampir Terjual" — sebagai pemicu urgensi; tombol
+  // booking-nya mati sendiri karena canBook menuntut status 'published'.
+  // Unit 'sold' tetap TIDAK diambil: etalase jangan berisi barang mati.
+  // Kalau booking batal, trigger DB mengembalikannya ke 'published'.
+  // Catatan: statusBadge() bergantung pada daftar status ini — kalau 'sold'
+  // nanti ikut ditampilkan, tambahkan juga cabang badge-nya di sana.
   const loadListings = useCallback(async () => {
     if (!supabase) return
     // Saat jaringan mati, klien Supabase mencoba ulang request tanpa henti dan
@@ -3273,7 +3878,7 @@ export default function App() {
     try {
       const { data, error } = await supabase.from('listings')
         .select('*, mod_parts_relation:motor_mod_parts(mod_part_id, mod_parts(*))')
-        .eq('status', 'published')
+        .in('status', ['published', 'booked'])
         .order('published_at', { ascending: false })
         .abortSignal(ctrl.signal)
       // Dulu error di sini ditelan diam-diam sehingga etalase gagal-muat
@@ -3347,6 +3952,17 @@ export default function App() {
     setBooking({ listing, warranty })
   }, [session, toast])
 
+  // Riwayat dicatat saat halaman unit BENAR-BENAR terbuka & unitnya ketemu —
+  // bukan saat kartunya diklik. Slug ngawur atau unit yang sudah hilang tidak
+  // ikut mengotori riwayat. Ditaruh sebelum early-return konfigurasi di bawah
+  // karena hook tidak boleh dipanggil setelah return bersyarat.
+  useEffect(() => {
+    if (route.name !== 'unit') return
+    const l = listings.find((x) => x.slug === route.slug) ||
+      (deepUnit && deepUnit.slug === route.slug ? deepUnit : null)
+    if (l && l.id) setRecent(pushRecent(l.id))
+  }, [route.name, route.slug, listings, deepUnit])
+
   if (!supabase) {
     return (
       <div className="cfg">
@@ -3415,7 +4031,10 @@ export default function App() {
         {route.name === 'home' && (
           <HomeView listings={listings} nav={nav}
             query={dQuery} filters={filters} searchActive={active}
-            loading={listLoading} error={listError} />)}
+            loading={listLoading} error={listError}
+            panel={panel} setPanel={setPanel} resetPanel={resetPanel}
+            sort={sort} setSort={setSort}
+            recent={recent} clearRecent={clearRecent} />)}
 
         {route.name === 'kebijakan' && <KebijakanView nav={nav} />}
 
