@@ -923,7 +923,21 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .thumbs img{width:100%;height:100%;object-fit:cover}
 /* tab switcher detail teknis (pola Engine/Chassis ala lembar spek) */
 .dtabs-wrap{margin-top:40px}
-.dtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+/* Di layar sempit ketiga tab tidak muat (butuh ~434px, tersedia ~335px) dan
+   barisnya menggulung — lihat catatan min-width:0 di .detail-grid.
+   Bayangan tepi memberi tahu masih ada tab di luar layar, dan padam sendiri
+   saat sudah mentok: lapisan "local" (sewarna latar) ikut bergeser bersama isi
+   dan menutupi bayangan "scroll" yang diam di tepinya. Murni CSS — tanpa
+   listener scroll. Scrollbar-nya sendiri disembunyikan karena di desktop
+   barisnya muat dan garis abu-abunya cuma jadi kotoran di bawah tab. */
+.dtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  background:
+    linear-gradient(90deg,var(--bg) 45%,rgba(255,255,255,0)) 0 0/28px 100% no-repeat local,
+    linear-gradient(270deg,var(--bg) 45%,rgba(255,255,255,0)) 100% 0/28px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%,rgba(17,17,20,.17),rgba(17,17,20,0)) 0 0/14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%,rgba(17,17,20,.17),rgba(17,17,20,0)) 100% 0/14px 100% no-repeat scroll}
+.dtabs::-webkit-scrollbar{display:none}
 .dtabs button{padding:13px 16px;font-size:14px;font-weight:600;color:var(--muted);
   position:relative;white-space:nowrap;flex:none;transition:color .2s}
 .dtabs button:hover{color:var(--ink)}
