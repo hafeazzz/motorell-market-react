@@ -36,6 +36,12 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')
 const digitsOf = (s) => Number(String(s).replace(/[^\d]/g, ''))
 const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim()
 
+// Link mentah dibuang dari deskripsi. Caption IG kerap memuat tautan post/profil
+// yang, begitu masuk kolom description, tampil apa adanya di tab "Tentang unit"
+// dan dibaca pembeli sebagai teks sampah — bukan informasi motor. Baris yang
+// isinya hanya link akan hilang seluruhnya (lihat parseCaption).
+const stripUrls = (s) => String(s).replace(/(?:https?:\/\/|www\.)\S+/gi, ' ').replace(/\s+/g, ' ').trim()
+
 // ---------- Harga ----------
 // Urutan dicoba dari yang paling eksplisit ke yang paling longgar.
 export function parsePrice(line) {
@@ -134,7 +140,10 @@ export function parseCaption(raw) {
         continue
       }
     }
-    rest.push(line)
+    // Link dibuang di sini, bukan di UI: kalau ia sempat masuk kolom
+    // description, ia akan tayang di halaman unit sebagai teks mentah.
+    const cleaned = stripUrls(line)
+    if (cleaned) rest.push(cleaned)
   }
 
   // Tahun boleh berada di baris lain kalau tidak ada di baris judul — tapi

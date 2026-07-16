@@ -261,6 +261,9 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
   }
 
   // Sudut pandang dihitung dari jumlah foto — 8 foto → 0/45/90…, 4 foto → 0/90/…
+  // Penunjuk derajat yang dulu tampil di pojok kiri atas foto sudah dihapus
+  // (mengganggu visual). Nilainya tetap dipakai untuk teks alt gambar, jadi
+  // pembaca layar masih tahu ini sudut pandang ke berapa — tak terlihat mata.
   const angle = spinnable ? Math.round((i * 360) / n) : 0
 
   // ---------- unit tanpa foto: jangan tampilkan kotak kosong ----------
@@ -311,8 +314,6 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
         </div>
 
         {!allReady && <div className="mc-skeleton" aria-hidden="true" />}
-
-        {spinnable && <span className="mc-angle">{String(angle).padStart(3, '0')}°</span>}
 
         {spinnable && (
           <>

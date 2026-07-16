@@ -96,12 +96,6 @@ const STATUS_LABEL = {
   draft: 'Draft', published: 'Tayang', booked: 'Di-booking', sold: 'Terjual', delisted: 'Arsip',
 }
 
-const GRADE_DESC = {
-  S: 'Istimewa, seperti baru — minus nyaris tidak ada.',
-  A: 'Siap pakai, kondisi terawat sesuai umur.',
-  B: 'Minus ringan tercatat jujur di halaman detail.',
-}
-
 // Definisi grade lengkap — tampil sebagai kartu penjelasan di section kurasi.
 const GRADE_DEF = [
   { g: 'S', text: 'Tidak berpatokan pada kilometer rendah, tapi meliputi seluruh kelayakan mesin, tampilan, dan suku cadang dalam kondisi prima — nyaris tidak ada minus.' },
@@ -364,7 +358,7 @@ function filterChips(f) {
 // juta" lalu mencentang Honda menyaring keduanya, bukan saling menimpa.
 //
 // "Kondisi" di UI = kolom `grade` di DB. Tidak ada kolom kondisi terpisah;
-// grade S/A/B sudah mewakili istimewa/bagus/standar (lihat GRADE_DESC).
+// grade S/A/B sudah mewakili istimewa/bagus/standar (lihat GRADE_DEF).
 const GRADE_COND_LABEL = { S: 'Istimewa', A: 'Bagus', B: 'Standar' }
 
 // Urutan: "Terlaris" TIDAK ada di sini — tabel listings tidak menyimpan
@@ -664,18 +658,17 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   transform:translateX(-130%);transition:none}
 .card:hover .card-media::after{transform:translateX(130%);transition:transform .65s ease}
 .card-media .blp{position:absolute;inset:11% 8%;opacity:1}
-/* padding-bottom besar: tombol WhatsApp duduk permanen di pojok kanan bawah
-   media, jadi teks kurasi diangkat ke atasnya — bukan bersembunyi di baliknya. */
-.card-reveal{position:absolute;inset:auto 0 0 0;z-index:2;
-  padding:16px 14px 56px;font-size:12.5px;line-height:1.45;font-weight:500;
-  color:#fff;background:linear-gradient(0deg,rgba(10,10,12,.82) 0%,rgba(10,10,12,0) 100%);
-  clip-path:inset(100% 0 0 0);transition:clip-path .45s cubic-bezier(.2,.8,.25,1)}
-.card:hover .card-reveal{clip-path:inset(0 0 0 0)}
+/* Badge grade DIAM saat kartu di-hover. Dulu ada aturan .card:hover .badge yang
+   memberinya translateY(-48px) — itulah "badge ikut bergerak" yang terlihat.
+   Ia TIDAK pernah ikut ter-scale bersama foto: scale-nya menempel di elemen
+   img saja, dan badge ini saudaranya, bukan anaknya. Angkatan itu semata untuk
+   memberi ruang bagi panel teks kurasi yang kini sudah dihapus dari kartu, jadi
+   alasannya ikut hilang. Sekarang perilakunya sama dengan .card-wa: diam.
+   overflow:hidden tetap perlu — kilau ::after pada badge S/A dipotong olehnya. */
 .badge{position:absolute;bottom:13px;left:13px;z-index:2;font-family:var(--mono);font-size:10.5px;
   font-weight:600;letter-spacing:.08em;padding:6px 11px;border-radius:999px;
   background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border:1px solid var(--line-2);
-  color:var(--ink);transition:transform .25s ease;overflow:hidden}
-.card:hover .badge{transform:translateY(-48px)}
+  color:var(--ink);overflow:hidden}
 /* varian warna per grade: S emas, A diamond, B silver — teks gelap agar kontras */
 .badge.g-s{background:linear-gradient(135deg,#ffe975 0%,#ffd700 38%,#b8860b 100%);
   border-color:rgba(184,134,11,.55);color:#231a00;
@@ -715,7 +708,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    dimatikan pointer-events-nya supaya tidak mencuri klik dari .card-hit. */
 .card-hit{position:absolute;inset:0;z-index:3;border-radius:var(--radius)}
 .card-hit:focus-visible{outline-offset:-3px}
-.badge,.card-reveal,.card-status{pointer-events:none}
+.badge,.card-status{pointer-events:none}
 .card-status{position:absolute;top:13px;left:13px;z-index:4;font-family:var(--mono);
   font-size:10px;font-weight:700;letter-spacing:.07em;padding:6px 10px;border-radius:999px;
   text-transform:uppercase;color:#fff;box-shadow:0 2px 8px rgba(17,17,20,.22)}
@@ -723,10 +716,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .card-status.st-booked{background:#e07b1c}
 /* Tombol WA melayang di atas .card-hit — z-index harus lebih tinggi, kalau
    tidak lapisan klik kartu menelan klik-nya dan malah membuka halaman unit.
-   Tombol ini sengaja TIDAK ikut terangkat saat kartu di-hover seperti .badge:
-   .badge bergerak karena ia cuma hiasan yang harus menyingkir dari panel
-   reveal, sedangkan ini SASARAN KLIK. Sasaran klik yang bergeser 48px persis
-   saat kursor mendekat akan kabur dari bawah jari/kursor penggunanya. */
+   Ia diam di tempat saat kartu di-hover: sasaran klik yang bergeser persis
+   ketika kursor mendekat akan kabur dari bawah jari/kursor penggunanya.
+   Badge grade kini mengikuti aturan yang sama. */
 .card-wa{position:absolute;right:12px;bottom:12px;z-index:5;display:inline-flex;
   align-items:center;gap:7px;padding:9px 14px;border-radius:999px;
   background:#25D366;color:#fff;font-size:12.5px;font-weight:700;letter-spacing:.01em;
@@ -1359,10 +1351,6 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .mc-nophoto{position:absolute;left:0;right:0;bottom:16px;text-align:center;
   font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim)}
-.mc-angle{position:absolute;top:12px;left:12px;z-index:13;font-family:var(--mono);
-  font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--ink);
-  background:rgba(255,255,255,.9);border:1px solid var(--line);padding:4px 10px;
-  border-radius:999px;pointer-events:none}
 .mc-dots{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:13;
   display:flex;gap:6px;padding:6px 9px;border-radius:999px;
   background:rgba(255,255,255,.86);backdrop-filter:blur(6px);border:1px solid var(--line)}
@@ -3225,13 +3213,6 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
           {photos[0] ? <FadeImg src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
           {badge && <span className={'card-status ' + badge.cls}>{badge.label}</span>}
           <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>
-          {/* panel disingkap saat hover — pakai foto yang sama (bukan foto ke-2)
-              supaya etalase tetap ringan; wipe clip-path meniru "object reveal" dari
-              video referensi desain. Isinya info BARU (bukan duplikat tahun/km/harga
-              yang sudah ada di card-body di bawahnya) */}
-          <div className="card-reveal">
-            {GRADE_DESC[l.grade] || 'Unit sudah lolos kurasi 50+ titik'}
-          </div>
           {/* Chat cepat: melompati halaman detail, pesannya sudah berisi unit ini.
               stopPropagation tidak perlu (bukan anak .card-hit), tapi tetap harus
               di atasnya secara z-index — lihat catatan di .card-wa. */}
