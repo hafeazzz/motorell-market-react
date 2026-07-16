@@ -15,6 +15,7 @@ import ModPartPanel from './ModPartPanel';
 import MotorCarousel from './MotorCarousel';
 import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
+import { parseCaption } from './captionParser';
 import { openSocialApp } from './utils/deepLink';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
@@ -40,6 +41,20 @@ const DP_FIXED = 500000
 
 // Batas foto per unit — foto pertama dalam urutan menjadi sampul etalase.
 const MAX_PHOTOS = 10
+
+// Format yang diterima. Dulu filternya cuma `type.startsWith('image/')`, yang
+// juga meloloskan GIF/BMP/SVG — tidak pernah dipakai untuk foto motor, dan SVG
+// di bucket publik membawa risiko script. Dibatasi ke tiga format foto saja.
+const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+// Batas ukuran file MENTAH, sekadar penjaga: compressImage() sudah menekan tiap
+// foto ke maks 1600px @ q0.82 (umumnya <500KB) sebelum diunggah, jadi ukuran
+// yang TERSIMPAN sudah aman berapa pun besar aslinya. Batas ini hanya untuk
+// menolak file raksasa/rusak yang bisa membuat createImageBitmap tersedak —
+// dan kalau kompresi gagal, ia mengembalikan file asli, jadi tetap perlu pagar.
+// Sengaja TIDAK 5MB: foto HP kelas atas rutin 8–15MB dan akan tertolak semua
+// padahal hasil kompresinya justru kecil.
+const MAX_PHOTO_MB = 15
 
 // Paket perlindungan — HARGA FINAL divalidasi ulang di Edge Function.
 // Kalau mengubah harga di sini, ubah juga di create-dp-payment.
@@ -1025,6 +1040,16 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 @keyframes pulse{50%{opacity:.25}}
 .m-note{font-size:12px;color:var(--dim);line-height:1.58;text-align:center;margin-top:12px}
 .m-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+/* Dua tombol (pratinjau + publish): menumpuk di HP, berdampingan begitu muat.
+   Publish diberi porsi lebih besar — ia aksi utamanya. */
+.m-actions-2{flex-direction:column}
+.m-actions-2 .btn{width:100%}
+@media(min-width:520px){
+  .m-actions-2{flex-direction:row}
+  .m-actions-2 .btn{width:auto}
+  .m-actions-2 .btn-ghost{flex:0 0 auto}
+  .m-actions-2 .btn-accent{flex:1}
+}
 .ok-mark{width:72px;height:72px;border-radius:50%;background:rgba(31,157,85,.1);
   display:flex;align-items:center;justify-content:center;margin:4px auto 14px}
 .ok-mark svg{width:34px;height:34px;stroke:var(--ok);stroke-width:3;fill:none;
@@ -1059,9 +1084,17 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .a-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
   flex-wrap:wrap;margin-bottom:28px}
 .a-head h1{font-size:clamp(27px,3.4vw,40px);font-weight:750;letter-spacing:-.025em}
+/* width:fit-content memaksa pil ini selebar isinya dan menolak menyusut: empat
+   tab butuh ~387px, jadi di layar 375px ia meluber dan MELEBARKAN SELURUH
+   DOKUMEN (navbar ikut salah lebar, muncul scroll horizontal di semua halaman
+   admin). max-width:100% mengembalikan batasnya ke lebar induk, dan overflow-x
+   membuat tab-nya menggulung di dalam pil — bukan mendorong halaman. */
 .a-tabs{display:flex;gap:6px;background:var(--bg-2);border:1px solid var(--line);
-  border-radius:999px;padding:4px;width:fit-content;margin-bottom:24px}
-.a-tabs button{padding:9px 18px;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--muted)}
+  border-radius:999px;padding:4px;width:fit-content;max-width:100%;
+  overflow-x:auto;scrollbar-width:none;margin-bottom:24px}
+.a-tabs::-webkit-scrollbar{display:none}
+.a-tabs button{padding:9px 18px;border-radius:999px;font-size:13.5px;font-weight:600;
+  color:var(--muted);flex:none;white-space:nowrap}
 .a-tabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(17,17,20,.08)}
 .a-list{display:flex;flex-direction:column;gap:11px}
 .a-row{background:var(--panel);border:1px solid var(--line);border-radius:12px;
@@ -1081,6 +1114,62 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .st.sold{color:var(--dim)}
 .st.draft{color:var(--muted)}
 .a-actions{display:flex;gap:7px;flex-wrap:wrap}
+/* ---------- parser caption Instagram ---------- */
+/* ---------- tata letak form unit: foto | caption+field ---------- */
+.uf-cols{display:grid;grid-template-columns:1fr;gap:22px;align-items:start}
+/* min-width:0 pada anak grid — tanpa ini kolomnya menolak menyusut di bawah
+   min-content isinya dan modal ikut melar (pelajaran dari .detail-grid). */
+.uf-cols > *{min-width:0}
+@media(min-width:900px){
+  .uf-cols{grid-template-columns:320px 1fr;gap:26px}
+  /* strip foto ikut menggulung sendiri kalau kolomnya penuh, bukan melebar */
+  .uf-left{position:sticky;top:0}
+}
+.cap{border:1px solid var(--line);background:var(--panel-2);border-radius:12px;
+  padding:15px 15px 13px;margin-bottom:18px;display:flex;flex-direction:column;gap:9px}
+.cap > label{font-size:12px;font-family:var(--mono);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.cap-ta{width:100%;min-height:120px;resize:vertical;border:1px solid var(--line-2);
+  border-radius:9px;padding:11px 12px;font-size:14px;line-height:1.55;background:var(--panel)}
+.cap-ta:focus{outline:none;border-color:var(--ink)}
+.cap-act{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cap-note{display:flex;flex-direction:column;gap:3px;font-size:12.5px}
+.cap-note b{font-weight:600}
+.cap-note b.ok{color:var(--ok)}
+.cap-note b.warn{color:var(--warn)}
+
+/* Penanda asal-usul isi field: hijau = diisi parser, kuning = parser menyerah
+   dan kolomnya masih kosong. Dipasang di .field supaya label ikut berwarna. */
+.field.ok input,.field.ok textarea,.field.ok select{border-color:var(--ok);
+  box-shadow:0 0 0 2px rgba(31,157,85,.12)}
+.field.warn input,.field.warn textarea,.field.warn select{border-color:var(--warn);
+  box-shadow:0 0 0 2px rgba(184,121,27,.14)}
+.field.ok > label::after{content:" · terisi otomatis";color:var(--ok);font-weight:600}
+.field.warn > label::after{content:" · isi manual";color:var(--warn);font-weight:600}
+
+/* ---------- progres unggah ---------- */
+.up-prog{display:flex;align-items:center;gap:10px;margin-top:9px}
+.up-bar{flex:1;height:5px;border-radius:5px;background:var(--bg-3);overflow:hidden}
+.up-bar span{display:block;height:100%;background:var(--accent);border-radius:5px;
+  transition:width .3s ease}
+.up-prog .mono{font-size:11px;color:var(--muted);flex:none}
+
+/* ---------- pratinjau kartu etalase ---------- */
+.prev-wrap{margin-top:16px;padding-top:16px;border-top:1px dashed var(--line-2)}
+.prev-card{max-width:290px;margin-top:10px}
+/* Kartu pratinjau tidak boleh "muncul saat masuk layar" seperti di etalase —
+   di dalam modal ia sering tidak pernah memicu IntersectionObserver dan akan
+   diam tak terlihat. */
+.prev-card .card-wrap{opacity:1;transform:none}
+
+/* ---------- konfirmasi setelah simpan ---------- */
+.a-done{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;border:1px solid var(--ok);background:rgba(31,157,85,.07);
+  border-radius:11px;padding:12px 14px;margin-bottom:16px;font-size:14px}
+.a-done-act{display:flex;align-items:center;gap:8px}
+.a-done-x{width:26px;height:26px;border-radius:50%;color:var(--muted);flex:none}
+.a-done-x:hover{color:var(--ink)}
+
 .photo-strip{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px}
 .photo-strip .ph{position:relative;width:90px;height:66px;border-radius:9px;overflow:hidden;
   border:1px solid var(--line-2);cursor:grab}
@@ -2155,6 +2244,12 @@ function BookingModal({ listing, warranty, onClose, toast }) {
 }
 
 // ---------- Form tambah / edit unit (admin) ----------
+// Nama field dalam bahasa manusia untuk pesan "gagal dideteksi".
+const FIELD_LABEL = {
+  brand: 'Merek', model: 'Model', year: 'Tahun',
+  price: 'Harga', mileage_km: 'Odometer', description: 'Deskripsi',
+}
+
 function UnitForm({ initial, onClose, onSaved, toast }) {
   const editing = Boolean(initial && initial.id)
   const [f, setF] = useState({
@@ -2169,6 +2264,12 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
   const [selectedModParts, setSelectedModParts] = useState([]);
   const [allModParts, setAllModParts] = useState([]);
   const [upMsg, setUpMsg] = useState('')
+  const [prog, setProg] = useState(null)      // {done,total} saat mengunggah
+  const [caption, setCaption] = useState('')
+  const [autoKeys, setAutoKeys] = useState(new Set())   // field hasil auto-isi
+  const [missKeys, setMissKeys] = useState(new Set())   // field yang gagal diparse
+  const [nett, setNett] = useState(false)
+  const [preview, setPreview] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const fileRef = useRef(null)
@@ -2199,21 +2300,47 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
   }, [editing, initial?.id, toast]);
 
   async function handleFiles(picked) {
-    const files = Array.from(picked || []).filter((x) => x.type.startsWith('image/'))
-    if (!files.length) return
+    const all = Array.from(picked || [])
+    if (!all.length) return
     setErr('')
+
+    // Tiap file yang ditolak DILAPORKAN alasannya. Menyaring diam-diam bikin
+    // admin mengira fotonya terunggah padahal tidak pernah sampai.
+    const skipped = []
+    const okType = all.filter((x) => {
+      if (ALLOWED_PHOTO_TYPES.includes(x.type)) return true
+      skipped.push(x.name + ' (format ' + (x.type || 'tidak dikenal') + ')')
+      return false
+    })
+    const okSize = okType.filter((x) => {
+      if (x.size <= MAX_PHOTO_MB * 1024 * 1024) return true
+      skipped.push(x.name + ' (' + (x.size / 1048576).toFixed(1) + 'MB)')
+      return false
+    })
+
     const remaining = MAX_PHOTOS - photos.length
     if (remaining <= 0) {
       setErr('Maksimal ' + MAX_PHOTOS + ' foto per unit sudah tercapai. Hapus salah satu foto dulu untuk menambah yang baru.')
       return
     }
-    if (files.length > remaining) {
-      setErr('Maksimal ' + MAX_PHOTOS + ' foto per unit — hanya ' + remaining + ' foto pertama dari pilihanmu yang diunggah.')
+    const batch = okSize.slice(0, remaining)
+    const notes = []
+    if (skipped.length) notes.push('Dilewati — hanya JPG/PNG/WEBP maks ' + MAX_PHOTO_MB + 'MB: ' + skipped.join(', '))
+    if (okSize.length > remaining) {
+      notes.push('Maksimal ' + MAX_PHOTOS + ' foto per unit — hanya ' + remaining + ' foto pertama yang diunggah.')
     }
-    const batch = files.slice(0, remaining)
+    if (notes.length) setErr(notes.join(' · '))
+    if (!batch.length) return
+
     if (!editing) {
       slugRef.current = slugify((f.brand || 'unit') + ' ' + (f.model || '') + ' ' + f.year) + '-' + slugRef.current.slice(-4)
     }
+
+    // Progres dihitung per FILE SELESAI, bukan per byte: supabase-js v2 tidak
+    // memancarkan event progres untuk Storage, jadi bar per-byte hanya akan
+    // jadi animasi bohongan. "foto ke-n dari m" itu jujur dan tetap berguna.
+    console.info('[UPLOAD] Mulai —', batch.length, 'foto')
+    setProg({ done: 0, total: batch.length })
     for (let i = 0; i < batch.length; i++) {
       setUpMsg('Mengunggah foto ' + (i + 1) + ' dari ' + batch.length + '…')
       try {
@@ -2224,12 +2351,49 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
         if (error) throw error
         const { data } = supabase.storage.from('unit-photos').getPublicUrl(path)
         setPhotos((p) => [...p, data.publicUrl])
+        setProg({ done: i + 1, total: batch.length })
       } catch (ex) {
         setErr('Gagal mengunggah foto: ' + (ex.message || 'coba lagi'))
         break
       }
     }
+    console.info('[UPLOAD] Selesai')
     setUpMsg('')
+    setProg(null)
+  }
+
+  // ---------- Parser caption ----------
+  // Hasil parse TIDAK langsung disimpan — ia mengisi field form supaya admin
+  // bisa memeriksa & mengoreksi dulu. Field yang berhasil terisi ditandai hijau,
+  // yang gagal ditandai kuning selama masih kosong.
+  function runParse() {
+    const { fields, missing, nett } = parseCaption(caption)
+    // `auto` DIHITUNG DI LUAR updater setF. Sempat dibangun di dalamnya dengan
+    // auto.push() lalu dibaca di baris setAutoKeys berikutnya — dan selalu
+    // kosong, karena React menjalankan updater-nya belakangan (di StrictMode
+    // malah dua kali, jadi isinya dobel). Akibatnya penanda hijau tidak pernah
+    // muncul walau field-nya benar-benar terisi.
+    // Sisa caption → Deskripsi, BUKAN "Catatan kurasi": kolom itu khusus
+    // minus/cacat, dan menaruh "kondisi istimewa" di sana jelas keliru.
+    const keys = ['brand', 'model', 'year', 'price', 'mileage_km', 'description']
+    const auto = keys.filter((k) => fields[k] !== null && fields[k] !== '')
+    setF((p) => {
+      const next = { ...p }
+      for (const k of auto) next[k] = fields[k]
+      return next
+    })
+    setAutoKeys(new Set(auto))
+    setMissKeys(new Set(missing))
+    setNett(nett)
+    console.info('[PARSE] terisi:', auto.join(', ') || '(tidak ada)', '| gagal:', missing.join(', ') || '(tidak ada)')
+  }
+
+  // Kelas penanda: hijau = hasil auto-isi; kuning = gagal dideteksi DAN masih
+  // kosong (jadi peringatannya hilang sendiri begitu admin mengetiknya).
+  const mark = (k) => {
+    if (missKeys.has(k) && !String(f[k] ?? '').trim()) return ' warn'
+    if (autoKeys.has(k)) return ' ok'
+    return ''
   }
 
   // urutan foto: index 0 = sampul etalase
@@ -2306,12 +2470,14 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
       return;
     }
 
-    onSaved();
+    // slug dioper balik supaya AdminView bisa menautkan langsung ke unit yang
+    // baru tayang — tanpa ini admin harus mencarinya sendiri di daftar.
+    onSaved({ slug: editing ? initial.slug : slugRef.current, status: f.status, title: payload.title })
   }
 
   return (
     <div className="overlay" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal" style={{ width: 'min(620px,100%)' }}>
+      <div className="modal" style={{ width: 'min(1020px,100%)' }}>
         <div className="m-head">
           <div><h3>{editing ? 'Edit unit' : 'Tambah unit ke etalase'}</h3>
             <span className="sub">{editing ? initial.title : 'Data tampil publik — tanpa modal beli'}</span></div>
@@ -2319,58 +2485,12 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
         </div>
         <div className="m-body">
           <form onSubmit={save}>
-            <div className="f-grid">
-              <div className="field"><label htmlFor="u-brand">Merek</label>
-                <input id="u-brand" value={f.brand} onChange={set('brand')} placeholder="Kawasaki" required /></div>
-              <div className="field"><label htmlFor="u-model">Model</label>
-                <input id="u-model" value={f.model} onChange={set('model')} placeholder="W175 SE" required /></div>
-              <div className="field"><label htmlFor="u-year">Tahun</label>
-                <input id="u-year" type="number" min="1980" max="2030" value={f.year} onChange={set('year')} required /></div>
-              <div className="field"><label htmlFor="u-km">Odometer (km) — isi 0 jika belum dicek</label>
-                <input id="u-km" type="number" min="0" value={f.mileage_km} onChange={set('mileage_km')} /></div>
-              <div className="field"><label htmlFor="u-color">Warna</label>
-                <input id="u-color" value={f.color} onChange={set('color')} placeholder="Hitam" /></div>
-              <div className="field"><label htmlFor="u-price">Harga jual (Rp)</label>
-                <input id="u-price" type="number" min="0" value={f.price} onChange={set('price')} placeholder="20800000" required /></div>
-              <div className="field"><label htmlFor="u-grade">Grade kurasi</label>
-                <select id="u-grade" value={f.grade} onChange={set('grade')}>
-                  <option value="S">S — istimewa, seperti baru</option>
-                  <option value="A">A — siap pakai</option>
-                  <option value="B">B — minus ringan tercatat</option>
-                </select></div>
-              <div className="field"><label htmlFor="u-status">Status</label>
-                <select id="u-status" value={f.status} onChange={set('status')}>
-                  <option value="published">Tayang di etalase</option>
-                  <option value="draft">Draft (belum tampil)</option>
-                </select></div>
-              <div className="field full"><label htmlFor="u-desc">Deskripsi</label>
-                <textarea id="u-desc" value={f.description} onChange={set('description')}
-                  placeholder="Kondisi mesin, riwayat servis, kelengkapan dokumen, plat…" /></div>
-              <div className="field full"><label htmlFor="u-issues">Catatan kurasi / minus (jujur)</label>
-                <textarea id="u-issues" value={f.known_issues} onChange={set('known_issues')}
-                  placeholder="Contoh: baret halus di sayap kiri, ban belakang 70%…" /></div>
-              <div className="field full">
-                <label>Part Modifikasi</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginBottom: '15px' }}>
-                  {allModParts.map(part => (
-                    <label key={part.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedModParts.includes(part.id)}
-                        onChange={() => {
-                          setSelectedModParts(prev =>
-                            prev.includes(part.id)
-                              ? prev.filter(id => id !== part.id)
-                              : [...prev, part.id]
-                          );
-                        }}
-                      />
-                      {part.name} ({rupiah(part.price)})
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="field full">
+            {/* Dua kolom di layar lebar: KIRI foto, KANAN caption + field.
+                Di HP keduanya menumpuk dan foto tetap duluan — urutan DOM-nya
+                memang sudah foto → form, jadi tidak perlu trik order CSS. */}
+            <div className="uf-cols">
+            <div className="uf-left">
+              <div className="field full uf-photos">
                 <label>Foto unit — {photos.length}/{MAX_PHOTOS} (otomatis dikompres sebelum diunggah)</label>
                 <div className="photo-strip"
                   onDragOver={(e) => e.preventDefault()}
@@ -2398,17 +2518,124 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
                       onClick={() => fileRef.current && fileRef.current.click()}>＋</button>
                   )}
                 </div>
-                <input ref={fileRef} type="file" accept="image/*" multiple hidden
+                <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  multiple hidden
                   onChange={(e) => { const fl = Array.from(e.target.files || []); e.target.value = ''; handleFiles(fl) }} />
+                {prog && (
+                  <div className="up-prog">
+                    <div className="up-bar"><span style={{ width: (prog.done / prog.total * 100) + '%' }} /></div>
+                    <span className="mono">{prog.done}/{prog.total}</span>
+                  </div>
+                )}
                 {upMsg && <p className="f-info">{upMsg}</p>}
                 <p className="f-info">Foto pertama = sampul di etalase. Seret thumbnail untuk mengubah urutan,
-                  atau jatuhkan file gambar langsung ke area ini.</p>
+                  atau jatuhkan file gambar langsung ke area ini. JPG/PNG/WEBP, maks {MAX_PHOTO_MB}MB per foto.</p>
               </div>
             </div>
+            <div className="uf-right">
+            <div className="cap">
+              <label htmlFor="u-cap">Paste Caption Instagram di sini</label>
+              <textarea id="u-cap" className="cap-ta" value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder={'YAMAHA XSR 155 2021\nKM 8.500\nHarga 27.800.000 NETT\nKondisi istimewa, pajak hidup, service record lengkap'} />
+              <div className="cap-act">
+                <button type="button" className="btn btn-ghost btn-sm" disabled={!caption.trim()}
+                  onClick={runParse}>Isi otomatis dari caption</button>
+                {(autoKeys.size > 0 || missKeys.size > 0) && (
+                  <span className="cap-note">
+                    {autoKeys.size > 0 && <b className="ok">{autoKeys.size} field terisi otomatis</b>}
+                    {missKeys.size > 0 && (
+                      <b className="warn">Tidak bisa deteksi otomatis, mohon isi manual: {[...missKeys].map((k) => FIELD_LABEL[k] || k).join(', ')}</b>
+                    )}
+                    {nett && <b className="ok">Harga terdeteksi NETT</b>}
+                  </span>
+                )}
+              </div>
+              <p className="f-info">Hasil deteksi hanya mengisi kolom di bawah — belum tersimpan.
+                Periksa &amp; koreksi dulu sebelum menayangkan.</p>
+            </div>
+            <div className="f-grid">
+              <div className={'field' + mark('brand')}><label htmlFor="u-brand">Merek</label>
+                <input id="u-brand" value={f.brand} onChange={set('brand')} placeholder="Kawasaki" required /></div>
+              <div className={'field' + mark('model')}><label htmlFor="u-model">Model</label>
+                <input id="u-model" value={f.model} onChange={set('model')} placeholder="W175 SE" required /></div>
+              <div className={'field' + mark('year')}><label htmlFor="u-year">Tahun</label>
+                <input id="u-year" type="number" min="1980" max="2030" value={f.year} onChange={set('year')} required /></div>
+              <div className={'field' + mark('mileage_km')}><label htmlFor="u-km">Odometer (km) — isi 0 jika belum dicek</label>
+                <input id="u-km" type="number" min="0" value={f.mileage_km} onChange={set('mileage_km')} /></div>
+              <div className="field"><label htmlFor="u-color">Warna</label>
+                <input id="u-color" value={f.color} onChange={set('color')} placeholder="Hitam" /></div>
+              <div className={'field' + mark('price')}><label htmlFor="u-price">Harga jual (Rp)</label>
+                <input id="u-price" type="number" min="0" value={f.price} onChange={set('price')} placeholder="20800000" required /></div>
+              <div className="field"><label htmlFor="u-grade">Grade kurasi</label>
+                <select id="u-grade" value={f.grade} onChange={set('grade')}>
+                  <option value="S">S — istimewa, seperti baru</option>
+                  <option value="A">A — siap pakai</option>
+                  <option value="B">B — minus ringan tercatat</option>
+                </select></div>
+              <div className="field"><label htmlFor="u-status">Status</label>
+                <select id="u-status" value={f.status} onChange={set('status')}>
+                  <option value="published">Tayang di etalase</option>
+                  <option value="draft">Draft (belum tampil)</option>
+                </select></div>
+              <div className={'field full' + mark('description')}><label htmlFor="u-desc">Deskripsi</label>
+                <textarea id="u-desc" value={f.description} onChange={set('description')}
+                  placeholder="Kondisi mesin, riwayat servis, kelengkapan dokumen, plat…" /></div>
+              <div className="field full"><label htmlFor="u-issues">Catatan kurasi / minus (jujur)</label>
+                <textarea id="u-issues" value={f.known_issues} onChange={set('known_issues')}
+                  placeholder="Contoh: baret halus di sayap kiri, ban belakang 70%…" /></div>
+              <div className="field full">
+                <label>Part Modifikasi</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginBottom: '15px' }}>
+                  {allModParts.map(part => (
+                    <label key={part.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedModParts.includes(part.id)}
+                        onChange={() => {
+                          setSelectedModParts(prev =>
+                            prev.includes(part.id)
+                              ? prev.filter(id => id !== part.id)
+                              : [...prev, part.id]
+                          );
+                        }}
+                      />
+                      {part.name} ({rupiah(part.price)})
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            </div>
+            </div>
             {err && <p className="f-err">{err}</p>}
-            <div className="m-actions">
-              <button className="btn btn-accent btn-full" disabled={busy || Boolean(upMsg)}>
-                {busy ? 'Menyimpan…' : editing ? 'Simpan perubahan' : 'Simpan unit'}
+
+            {/* Pratinjau memakai komponen Card YANG SAMA dengan etalase — kalau
+                pakai tiruan, yang dilihat admin bisa berbeda dari yang tayang.
+                nav dimatikan supaya klik di pratinjau tidak melempar keluar form. */}
+            {preview && (
+              <div className="prev-wrap">
+                <p className="f-info">Beginilah unit ini akan tampil di etalase:</p>
+                <div className="prev-card">
+                  <Card nav={() => {}} l={{
+                    id: 'preview', slug: editing ? initial.slug : slugRef.current,
+                    title: ((f.brand || '') + ' ' + (f.model || '') + ' ' + f.year).replace(/\s+/g, ' ').trim() || 'Unit baru',
+                    year: f.year, mileage_km: Number(f.mileage_km) || 0,
+                    color: f.color, price: Number(f.price) || 0, grade: f.grade,
+                    photos, status: f.status, created_at: new Date().toISOString(),
+                  }} />
+                </div>
+              </div>
+            )}
+
+            <div className="m-actions m-actions-2">
+              <button type="button" className="btn btn-ghost" onClick={() => setPreview((v) => !v)}>
+                {preview ? 'Tutup pratinjau' : 'Preview Etalase'}
+              </button>
+              <button className="btn btn-accent" disabled={busy || Boolean(upMsg)}>
+                {busy ? 'Menyimpan…'
+                  : editing ? 'Simpan perubahan'
+                    : f.status === 'published' ? 'Publish ke Etalase' : 'Simpan draft'}
               </button>
             </div>
           </form>
@@ -2500,6 +2727,7 @@ function AdminPanel({ profile, toast, nav }) {
   const [view, setView] = useState('units') // units | staff
   const [rows, setRows] = useState(null)
   const [form, setForm] = useState(null) // null | {} (baru) | listing (edit)
+  const [done, setDone] = useState(null) // {slug,status,title} unit yang barusan disimpan
   const [modPartForm, setModPartForm] = useState(null); // null | {} (baru) | mod_part (edit)
 
   const load = useCallback(async () => {
@@ -2552,6 +2780,25 @@ function AdminPanel({ profile, toast, nav }) {
 
         {view === 'units' && (
           <>
+            {/* Konfirmasi + tautan langsung ke unit yang baru disimpan. Tanpa ini
+                admin harus mencari sendiri unitnya di daftar untuk memastikan
+                hasilnya benar. Unit draft tidak punya halaman publik, jadi
+                tautannya hanya muncul untuk yang berstatus tayang. */}
+            {done && (
+              <div className="a-done">
+                <span>
+                  <b>{done.status === 'published' ? 'Tayang di etalase' : 'Tersimpan sebagai draft'}</b>
+                  {' — ' + done.title}
+                </span>
+                <span className="a-done-act">
+                  {done.status === 'published' && (
+                    <button className="btn btn-ghost btn-sm"
+                      onClick={() => nav('#/unit/' + done.slug)}>Lihat halaman unit →</button>
+                  )}
+                  <button className="a-done-x" onClick={() => setDone(null)} aria-label="Tutup">✕</button>
+                </span>
+              </div>
+            )}
             {rows === null && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
             {rows && rows.length === 0 && (
               <div className="empty">Belum ada unit. Klik "Tambah unit" untuk mengisi etalase pertamamu.</div>
@@ -2595,7 +2842,7 @@ function AdminPanel({ profile, toast, nav }) {
       {form !== null && (
         <UnitForm initial={form.id ? form : null} toast={toast}
           onClose={() => setForm(null)}
-          onSaved={() => { setForm(null); load() }} />
+          onSaved={(r) => { setForm(null); load(); setDone(r || null) }} />
       )}
     </section>
   )
