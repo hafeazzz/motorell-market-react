@@ -29,7 +29,6 @@ import Blueprint from './Blueprint'
 // Catatan: auto-rotate memang hanya hidup di desktop — di perangkat sentuh dan
 // prefers-reduced-motion ia tidak pernah menyala (lihat coarse()/reduced()).
 const AUTO_MS = 4000
-const DRAG_PER_FRAME = 100   // 100px seret = maju 1 frame
 const ZOOM_MIN = 1
 const ZOOM_MAX = 2.5
 const ZOOM_STEP = 0.0022     // per unit deltaY roda mouse (di lightbox)
@@ -138,10 +137,6 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
   const [loaded, setLoaded] = useState(0)
   const [lightbox, setLightbox] = useState(false)
 
-  const drag = useRef(null)      // state gesture aktif
-  const momentum = useRef(0)     // id rAF untuk inersia
-  const moved = useRef(false)    // bedakan klik dari seret
-
   // ---- preload: semua frame dimuat di depan, supaya memutar tidak nge-lag
   // menunggu gambar berikutnya ter-fetch di tengah gesture ----
   useEffect(() => {
@@ -187,68 +182,13 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
     setI((p) => mod(p + delta, n || 1))
   }, [n, stopAuto])
 
-  // ---- inersia: lepas seret dengan cepat → putaran lanjut lalu melambat ----
-  const glide = useCallback((framesLeft, dir) => {
-    cancelAnimationFrame(momentum.current)
-    let left = Math.abs(framesLeft)
-    if (!left) return
-    let last = performance.now()
-    let wait = 70 // jeda antar frame, melar tiap langkah → terasa melambat
-    const tick = (now) => {
-      if (now - last >= wait) {
-        setI((p) => mod(p + dir, n))
-        last = now
-        wait *= 1.35
-        left--
-      }
-      if (left > 0) momentum.current = requestAnimationFrame(tick)
-    }
-    momentum.current = requestAnimationFrame(tick)
-  }, [n])
-
-  useEffect(() => () => cancelAnimationFrame(momentum.current), [])
-
-  // ---- gesture pointer: seret HORIZONTAL memutar. Zoom tidak lagi di sini —
-  // gulir vertikal dibiarkan menjadi scroll halaman biasa (touch-action:pan-y
-  // di CSS), jadi carousel tidak lagi "menyandera" scroll. ----
-  const onPointerDown = (e) => {
-    if (!n) return
-    if (e.target.closest('button')) return // biarkan panah/dot menerima klik
-    cancelAnimationFrame(momentum.current)
-    stopAuto()
-    moved.current = false
-    drag.current = {
-      x: e.clientX, y: e.clientY,
-      startI: i, lastX: e.clientX, lastT: performance.now(), vx: 0,
-    }
-  }
-
-  const onPointerMove = (e) => {
-    const d = drag.current
-    if (!d) return
-    const dx = e.clientX - d.x
-    const dy = e.clientY - d.y
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved.current = true
-
-    const now = performance.now()
-    const dt = now - d.lastT
-    if (dt > 0) d.vx = (e.clientX - d.lastX) / dt // px/ms
-    d.lastX = e.clientX
-    d.lastT = now
-
-    if (!spinnable) return
-    // seret ke kiri = motor berputar maju, seperti memutar turntable
-    const frames = Math.round(-dx / DRAG_PER_FRAME)
-    setI(mod(d.startI + frames, n))
-  }
-
-  const onPointerUp = () => {
-    const d = drag.current
-    drag.current = null
-    if (!d || !spinnable) return
-    const extra = clamp(Math.round(Math.abs(d.vx) * 2.2), 0, n)
-    if (extra >= 1) glide(extra, d.vx < 0 ? 1 : -1)
-  }
+  // ---- Navigasi HANYA lewat tombol: panah, dot, thumbnail, keyboard ----
+  // Seret/geser jari SENGAJA DIHAPUS. Dulu gesture pointer horizontal memutar
+  // foto; di layar sentuh, jari yang dipakai untuk pinch-to-zoom ikut terbaca
+  // sebagai seret dan foto tergeser tanpa sengaja. Sekarang di atas foto tidak
+  // ada penangkap gesture sama sekali — pinch-zoom native browser bebas jalan
+  // (lihat touch-action:pinch-zoom di CSS), dan foto hanya berpindah lewat
+  // kontrol eksplisit. Perbesar tetap lewat ketuk → lightbox.
 
   // ---- keyboard: ←/→ putar, spasi setel auto-rotate, Enter buka lightbox ----
   const onKeyDown = (e) => {
@@ -282,13 +222,9 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
         className="gallery-main mc has-photo"
         role="group"
         tabIndex={0}
-        aria-label={'Galeri 360° ' + title + '. Panah kiri-kanan memutar, klik untuk memperbesar.'}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        aria-label={'Galeri ' + title + '. Panah kiri-kanan ganti foto, klik untuk memperbesar.'}
         onKeyDown={onKeyDown}
-        onClick={() => { if (!moved.current) setLightbox(true) }}>
+        onClick={() => setLightbox(true)}>
 
         <div className="mc-stage">
           <AnimatePresence initial={false} mode="popLayout">
@@ -335,8 +271,8 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
 
         <span className="mc-hint">
           {spinnable
-            ? (auto ? 'Berputar otomatis · seret untuk ambil alih · klik untuk perbesar'
-                    : 'Seret untuk memutar · klik untuk perbesar')
+            ? (auto ? 'Berputar otomatis · panah/thumbnail untuk pilih · klik untuk perbesar'
+                    : 'Panah atau thumbnail untuk ganti foto · klik untuk perbesar')
             : 'Klik untuk perbesar'}
         </span>
       </div>

@@ -611,6 +611,14 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
+/* Tombol sekunder "Standar kurasi" DI HERO diberi latar putih solid — di atas
+   latar hero yang ramai, versi transparannya kurang kontras. Di-scope ke
+   .hero-cta saja: .btn-ghost di tempat lain (modal, admin) berdiri di atas
+   panel putih sehingga transparan sudah terbaca putih; mengubahnya global
+   malah bisa janggal di panel abu-abu. Border & teks gelap tetap dari
+   .btn-ghost, jadi ia tetap terbaca sebagai tombol outline sekunder. */
+.hero-cta .btn-ghost{background:#fff}
+.hero-cta .btn-ghost:hover:not(:disabled){background:#fff}
 /* strip spesifikasi tipis ala lembar spek — label mono kecil di atas,
    angka besar di bawah, dipisah whitespace (bukan kotak-kotak card) */
 .spec-rail{display:grid;grid-template-columns:1fr;gap:22px;
@@ -891,7 +899,11 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   background:radial-gradient(120% 120% at 50% 25%, #fbfbfa, var(--bg-3) 82%);
   border:1px solid var(--line)}
 .gallery-main img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.gallery-main.has-photo img{cursor:zoom-in;touch-action:pan-y;user-select:none}
+/* touch-action:pan-y pinch-zoom — foto tak lagi menangkap seret horizontal
+   (fitur seret-untuk-memutar sudah dihapus), jadi jari bebas untuk pinch-zoom
+   native dan gulir vertikal halaman lewat begitu saja. Ganti foto kini hanya
+   lewat panah/thumbnail. */
+.gallery-main.has-photo img{cursor:zoom-in;touch-action:pan-y pinch-zoom;user-select:none}
 .gallery-main .blp{position:absolute;inset:13% 10%;opacity:1}
 .g-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:44px;height:44px;
   border-radius:50%;background:rgba(255,255,255,.92);border:1px solid var(--line-2);
@@ -951,8 +963,14 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .dtabs button.on{color:var(--ink)}
 .dtabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
   background:var(--accent)}
-.dtab-body{padding-top:22px;font-size:15.5px;line-height:1.72;color:#33363c;
-  max-width:60ch;white-space:pre-line;min-height:96px}
+/* Wrapper = grid; ketiga panel menempati sel yang sama (grid-area 1/1) sehingga
+   barisnya setinggi panel terpanjang. Tinggi tak berubah saat ganti tab. */
+.dtab-body{display:grid;padding-top:22px;min-height:96px}
+.dtab-panel{grid-area:1/1;font-size:15.5px;line-height:1.72;color:#33363c;
+  max-width:60ch;white-space:pre-line;
+  opacity:0;visibility:hidden;transition:opacity .22s ease-out}
+.dtab-panel.on{opacity:1;visibility:visible}
+@media(prefers-reduced-motion:reduce){.dtab-panel{transition:none}}
 .dtab-body .muted{color:var(--muted)}
 .dtab-warranty{list-style:none;max-width:540px}
 .dtab-warranty li{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;
@@ -2956,28 +2974,40 @@ function DetailTabs({ listing }) {
           </button>
         ))}
       </div>
-      <AnimatePresence mode="wait">
-        <motion.div key={tab} className="dtab-body" role="tabpanel"
-          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
-          {tab === 'unit' && (
-            <p>{listing.description || 'Deskripsi lengkap menyusul. Hubungi Motorell untuk detail unit ini.'}</p>)}
-          {tab === 'kurasi' && (
-            listing.known_issues
-              ? <p>{listing.known_issues}</p>
-              : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>)}
-          {tab === 'garansi' && (
-            <ul className="dtab-warranty">
-              {warrantiesForGrade(listing.grade).map((w) => (
-                <li key={w.code}>
-                  <b>{w.name}</b>
-                  <span>{w.desc}</span>
-                  <em>{w.price ? '+' + rupiah(w.price) : 'Termasuk'}</em>
-                </li>
-              ))}
-            </ul>)}
-        </motion.div>
-      </AnimatePresence>
+      {/* Ganti tab dulu memakai AnimatePresence mode="wait": panel lama keluar
+          (dengan geser vertikal) SEBELUM panel baru masuk, jadi tingginya
+          runtuh lalu melonjak lagi — itulah "goyang" di mobile.
+          Sekarang KETIGA panel selalu dirender dan ditumpuk di sel grid yang
+          sama (grid-area 1/1). Tinggi wrapper otomatis mengikuti panel
+          TERTINGGI di antara ketiganya — jadi ganti tab tidak pernah mengubah
+          tinggi kontainer, berapa pun panjang deskripsi unit ini (tidak perlu
+          angka min-height tetap yang menebak-nebak). Panel non-aktif
+          disembunyikan dengan visibility (tetap memesan ruang) dan pergantian
+          jadi sekadar transisi opacity — nol reflow. */}
+      <div className="dtab-body">
+        <div className={'dtab-panel' + (tab === 'unit' ? ' on' : '')}
+          role="tabpanel" aria-hidden={tab !== 'unit'}>
+          <p>{listing.description || 'Deskripsi lengkap menyusul. Hubungi Motorell untuk detail unit ini.'}</p>
+        </div>
+        <div className={'dtab-panel' + (tab === 'kurasi' ? ' on' : '')}
+          role="tabpanel" aria-hidden={tab !== 'kurasi'}>
+          {listing.known_issues
+            ? <p>{listing.known_issues}</p>
+            : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>}
+        </div>
+        <div className={'dtab-panel' + (tab === 'garansi' ? ' on' : '')}
+          role="tabpanel" aria-hidden={tab !== 'garansi'}>
+          <ul className="dtab-warranty">
+            {warrantiesForGrade(listing.grade).map((w) => (
+              <li key={w.code}>
+                <b>{w.name}</b>
+                <span>{w.desc}</span>
+                <em>{w.price ? '+' + rupiah(w.price) : 'Termasuk'}</em>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   )
 }
