@@ -1529,10 +1529,13 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   /* teks kiri, model 3D kanan; kolom model diberi porsi sedikit lebih besar.
      align-items:stretch → kolom model memanjang setinggi kolom teks, jadi
      bingkai model sepadan dengan tinggi section teks (heading → tombol). */
-  .hero-main{grid-template-columns:1fr 1.08fr;gap:clamp(40px,5vw,64px);align-items:stretch}
+  .hero-main{grid-template-columns:1fr 1.2fr;gap:clamp(36px,4vw,56px);align-items:stretch}
   .hero-copy{max-width:560px;align-self:center}
-  /* di desktop bingkai ikut tinggi kolom (bukan aspect-ratio) */
-  .hero-embed-frame{aspect-ratio:auto;min-height:440px}
+  /* Bingkai model diperluas: ikut tinggi kolom teks TAPI dengan lantai lebih
+     tinggi (520), plus kolom model lebih lebar (1.2fr). Bersama radius kamera
+     100% (framing bola-batas penuh) → motor besar tapi TIDAK terpotong di sudut
+     mana pun saat berputar, termasuk tampak samping yang paling panjang. */
+  .hero-embed-frame{aspect-ratio:auto;min-height:520px}
   .spec-rail{max-width:100%}
 }
 /* layar sempit: sembunyikan label "MARKET" di logo supaya search bar & tombol
@@ -1649,7 +1652,7 @@ function HeroModel({ fallbackPhoto }) {
                 auto-rotate=""
                 auto-rotate-delay="3000"
                 rotation-per-second="15deg"
-                camera-orbit="0deg 82deg 78%"
+                camera-orbit="0deg 82deg 100%"
                 shadow-intensity="1"
                 exposure="1"
                 environment-image="neutral"
