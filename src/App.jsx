@@ -3527,7 +3527,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             )}
           </div>
           <div className="spec-rail">
-            <span>Unit lolos inspeksi<b>50+ titik</b></span>
+            <span>titik inspeksi<b>50+</b></span>
             <span>Garansi mesin s.d.<b>37 hari</b></span>
             <span>Kunci unit<b>{rupiah(DP_FIXED)}</b></span>
             <span>Unit Terjual<b>100+</b></span>
