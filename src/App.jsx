@@ -574,6 +574,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-copy{max-width:100%}
 
 /* ---------- model 3D hero (tanpa kotak: hanya motornya) ---------- */
+/* Slot pembungkus untuk animasi intro (fade-in). Transparan ke layout: ia
+   sekadar meneruskan tinggi kolom grid ke .hero-embed di dalamnya. */
+.hero-model-slot{min-width:0;display:flex;flex-direction:column}
+.hero-model-slot > .hero-embed{flex:1}
 .hero-embed{min-width:0;display:flex;flex-direction:column}
 /* Bingkai = kotak ukuran tak terlihat (tanpa border/latar/bayangan/sudut) —
    yang tampak hanya modelnya. Di mobile aspect-ratio menahan tingginya; di
@@ -3061,6 +3065,11 @@ function RecentlyViewed({ listings, recent, nav, onClear }) {
   )
 }
 
+// Intro hero diputar SEKALI per page-load. Flag skala-modul (bukan state) supaya
+// tidak terulang saat HomeView di-mount ulang oleh navigasi SPA (buka unit lalu
+// kembali) — hanya reset saat halaman benar-benar di-refresh (modul dimuat lagi).
+let heroIntroSeen = false
+
 function HomeView({ listings, nav, query = '', filters = null, searchActive = false,
   loading = false, error = '', panel, setPanel, sort, setSort, resetPanel,
   recent = [], clearRecent }) {
@@ -3086,6 +3095,22 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
     (panel.year ? 1 : 0) + (panel.priceMin || panel.priceMax ? 1 : 0))
   // Tidak ada unit = tidak ada yang bisa disaring/diurutkan.
   const showTools = !loading && !error && listings.length > 0
+
+  // Intro hero: teks meluncur kanan→kiri, LALU model 3D fade-in setelah teks
+  // selesai. initial/animate (bukan whileInView) → jalan sekali saat mount, tidak
+  // terpicu ulang saat scroll. Dilewati untuk prefers-reduced-motion & untuk
+  // mount berikutnya di page-load yang sama (heroIntroSeen).
+  const [playIntro] = useState(() => !heroIntroSeen && !prefersReduced())
+  useEffect(() => { heroIntroSeen = true }, [])
+  // Total durasi ~1.8s (teks 1.1s → model mulai 1.2s, selesai 1.8s) — di bawah 2s.
+  const heroTextAnim = playIntro
+    ? { initial: { x: '100%', opacity: 0 }, animate: { x: 0, opacity: 1 },
+        transition: { duration: 1.1, ease: 'easeOut' } }
+    : {}
+  const heroModelAnim = playIntro
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 },
+        transition: { duration: 0.6, delay: 1.2, ease: 'easeIn' } }
+    : {}
 
   // Drawer mobile mengunci scroll body selama terbuka, dan Esc menutupnya —
   // tanpa ini halaman di belakang ikut menggulung saat user menyapu panel.
@@ -3140,7 +3165,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         <div className="hero-grid-lines" aria-hidden="true" />
         <div className="container hero-inner">
           <div className="hero-main">
-            <div className="hero-copy">
+            <motion.div className="hero-copy" {...heroTextAnim}>
               <p className="kicker">Motorell Market — Showroom motor terkurasi</p>
               <h1>Lebih dari motor bekas.<br />Kualitas <em>anti was-was.</em></h1>
               <p>Setiap motor telah dikurasi dan siap
@@ -3149,8 +3174,10 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
                 <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
               </div>
-            </div>
-            <HeroModel fallbackPhoto={introPhoto} />
+            </motion.div>
+            <motion.div className="hero-model-slot" {...heroModelAnim}>
+              <HeroModel fallbackPhoto={introPhoto} />
+            </motion.div>
           </div>
           <div className="spec-rail">
             <span>titik inspeksi<b>50+</b></span>
