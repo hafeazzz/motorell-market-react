@@ -419,7 +419,7 @@ function statusBadge(l) {
   const created = l.created_at ? new Date(l.created_at) : null
   if (created && !Number.isNaN(created.getTime())) {
     const days = (Date.now() - created.getTime()) / 86_400_000
-    if (days < NEW_UNIT_DAYS) return { label: '🆕 Baru!', cls: 'st-new' }
+    if (days < NEW_UNIT_DAYS) return { label: 'Baru!', cls: 'st-new' }
   }
   return null
 }
@@ -1643,10 +1643,12 @@ function HeroModel({ fallbackPhoto }) {
                 src={MODEL_SRC}
                 alt="Harley-Davidson FLHRXS Road King Special"
                 camera-controls=""
+                disable-zoom=""
+                disable-pan=""
+                interaction-prompt="none"
                 auto-rotate=""
                 auto-rotate-delay="3000"
                 rotation-per-second="15deg"
-                disable-pan=""
                 camera-orbit="0deg 82deg 78%"
                 shadow-intensity="1"
                 exposure="1"
@@ -3107,9 +3109,13 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
     ? { initial: { x: '100%', opacity: 0 }, animate: { x: 0, opacity: 1 },
         transition: { duration: 1.1, ease: 'easeOut' } }
     : {}
+  // Fade-in model lebih elegan: opacity + sedikit scale (0.92→1) + naik halus
+  // (y 20→0), pakai ease-out-expo [0.16,1,0.3,1] (cepat lalu melambat lembut).
+  // Transform saja → tanpa layout shift. Total intro jadi ~2.3s (delay 1.2 +
+  // durasi 1.1) — sengaja sedikit lebih panjang demi kesan premium.
   const heroModelAnim = playIntro
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 },
-        transition: { duration: 0.6, delay: 1.2, ease: 'easeIn' } }
+    ? { initial: { opacity: 0, scale: 0.92, y: 20 }, animate: { opacity: 1, scale: 1, y: 0 },
+        transition: { duration: 1.1, delay: 1.2, ease: [0.16, 1, 0.3, 1] } }
     : {}
 
   // Drawer mobile mengunci scroll body selama terbuka, dan Esc menutupnya —
