@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# 3D model binaries — jangan pernah di-normalisasi LF (bisa merusak file)
+*.glb binary
+*.gltf binary

@@ -579,8 +579,12 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-embed-frame{position:relative;width:100%;aspect-ratio:4/3;border-radius:16px;
   overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);
   background:radial-gradient(120% 120% at 50% 30%, #fbfbfa, var(--bg-3) 90%)}
-.hero-embed-iframe{position:absolute;inset:0;width:100%;height:100%;border:0;
-  transition:opacity .5s ease}
+/* <model-viewer> ditarget lewat nama tag (menghindari keruwetan class pada
+   custom element di React). Latar transparan → gradien bingkai jadi backdrop
+   showcase yang menyatu dengan hero. --poster-color kosong: matikan poster
+   default supaya loader branded kita yang terlihat. */
+.hero-embed-frame model-viewer{position:absolute;inset:0;width:100%;height:100%;
+  background-color:transparent;--poster-color:transparent;transition:opacity .5s ease}
 .hero-embed-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .hero-embed-ph{position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:13px;font-family:var(--mono);
@@ -1535,67 +1539,34 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 }
 `
 
-// ---------- Model 3D hero (Sketchfab embed) ----------
-// Menggantikan animasi motor abstrak berbasis Three.js yang dulu jadi latar
-// hero. Sekarang: model realistis Harley-Davidson dari Sketchfab, sebagai
-// elemen berbingkai (bukan latar transparan) supaya bisa benar-benar diputar.
+// ---------- Model 3D hero (native <model-viewer>) ----------
+// Dulu iframe Sketchfab; diganti karena UI chrome-nya (header, watermark,
+// toolbar) tak bisa dibersihkan 100% di akun gratis. Sekarang file .glb lokal
+// (public/models/) dirender <model-viewer> — web component resmi Google —
+// dengan kendali penuh: tanpa UI apa pun, hanya motor yang berputar pelan.
 //
-// Embed pihak ketiga bisa berat, jadi:
-//  - lazy: src iframe baru dipasang saat bingkai mendekati viewport (IO);
-//  - placeholder spinner selama memuat;
-//  - foto cadangan bila iframe gagal / diblokir.
+// Perf: pustaka model-viewer (~ratusan KB) DAN file .glb (14 MB) tidak dimuat
+// saat load awal. IntersectionObserver menunggu bingkai mendekati layar, baru
+// meng-import pustaka secara dinamis (chunk terpisah) lalu memasang viewer.
+// Placeholder spinner selama memuat; foto unit sebagai cadangan bila gagal.
 //
-// Atribusi lisensi (WAJIB, jangan dihapus): nama model, author "everhard", dan
-// Sketchfab — masing-masing tetap tertaut. Kata sambung "by/on" boleh gaya
-// bebas; yang wajib adalah ketiga tautannya.
-// Parameter tampilan embed: model auto-rotate BERSIH ala product showcase —
-// tanpa header (avatar/nama/tombol), tanpa teks "click & hold to rotate", tanpa
-// toolbar bawah. CATATAN akun gratis Sketchfab: sebagian parameter (terutama
-// ui_infos & ui_watermark) bisa DIABAIKAN di plan gratis, jadi watermark kecil
-// mungkin tetap muncul. Itu batasan resmi mereka — TIDAK ditutup overlay CSS
-// (melanggar ToS). Attribution wajib tetap ada di LUAR iframe (lihat <p> di
-// bawah), jadi kepatuhan lisensi tetap aman apa pun yang Sketchfab tampilkan.
-const SKETCHFAB_PARAMS = new URLSearchParams({
-  autostart: '1',         // langsung tampil, tanpa tombol play
-  autospin: '0.3',        // rotasi otomatis pelan (0.2–0.5 = halus)
-  ui_controls: '0',       // sembunyikan seluruh kontrol UI
-  ui_infos: '0',          // sembunyikan header (nama model, author, avatar)
-  ui_inspector: '0',
-  ui_stop: '0',           // sembunyikan tombol stop / "click & hold"
-  ui_watermark: '0',
-  ui_watermark_link: '0',
-  ui_ar: '0',
-  ui_help: '0',
-  ui_settings: '0',
-  ui_vr: '0',
-  ui_fullscreen: '0',
-  ui_annotations: '0',
-  transparent: '1',       // latar transparan → menyatu dengan bingkai hero
-}).toString()
-const SKETCHFAB_SRC =
-  'https://sketchfab.com/models/881433de7df245b3bc435360bb5006a9/embed?' + SKETCHFAB_PARAMS
-// Iframe yang diblokir peramban sering TIDAK memancarkan onError; tanpa batas
-// waktu, placeholder-nya menggantung selamanya. 12 detik = ambang aman "tidak
-// akan datang" tanpa memvonis koneksi lambat terlalu dini.
-const SKETCHFAB_TIMEOUT_MS = 12000
-// Atribut permission-policy execution-while-out-of-viewport / -not-rendered dari
-// snippet asli SENGAJA tidak dipakai: keduanya membiarkan WebGL 3D tetap jalan
-// saat hero sudah tergulung keluar layar — boros untuk metrik performa yang
-// justru jadi perhatian di sini. allowFullScreen + allow=... sudah cukup.
+// CATATAN camera-controls: snippet asli menulis camera-controls="false", tapi
+// atribut ini berbasis KEHADIRAN — menyetel "false" pun tetap MENGAKTIFKAN
+// kontrol (jadi motor bisa diseret). Untuk showcase murni tanpa interaksi,
+// atribut itu justru DIHILANGKAN sepenuhnya.
+//
+// Atribusi lisensi (WAJIB, jangan dihapus) tetap di LUAR viewer: nama model,
+// author "everhard", dan Sketchfab — masing-masing tertaut.
+const MODEL_SRC = '/models/harley-davidson-flhrxs.glb'
 
 function HeroModel({ fallbackPhoto }) {
   const frameRef = useRef(null)
+  const mvRef = useRef(null)
   const [visible, setVisible] = useState(false)   // sudah dekat viewport?
-  // 'probing'  — cek dulu apakah Sketchfab bisa dijangkau
-  // 'loading'  — terjangkau, iframe sedang dipasang
-  // 'ready'    — iframe selesai memuat
-  // 'failed'   — tak terjangkau / gagal → foto cadangan
-  const [state, setState] = useState('probing')
-  const timer = useRef(null)
+  const [libReady, setLibReady] = useState(false) // pustaka model-viewer termuat?
+  const [state, setState] = useState('loading')   // 'loading' | 'ready' | 'failed'
 
-  // Lazy: hero ada di puncak halaman jadi biasanya langsung terlihat, tapi IO
-  // tetap menunda pemasangan iframe sampai setelah paint pertama sehingga tidak
-  // ikut memblok muat awal.
+  // Lazy #1: tunda segalanya sampai bingkai mendekati viewport.
   useEffect(() => {
     const el = frameRef.current
     if (!el) return
@@ -1606,35 +1577,43 @@ function HeroModel({ fallbackPhoto }) {
     return () => io.disconnect()
   }, [])
 
-  // PROBE keterjangkauan — INI kunci fallback yang benar. onError iframe TIDAK
-  // bisa diandalkan: iframe yang diblokir/putus koneksi tetap memancarkan onLoad
-  // (untuk halaman error internalnya), jadi bergantung padanya = frame kosong
-  // tanpa cadangan. Sebagai gantinya kita ping satu aset kecil dari domain
-  // Sketchfab: kalau gambarnya gagal (adblock memblok domain, atau tidak ada
-  // koneksi) → langsung tampilkan cadangan, iframe tak usah dipasang.
+  // Lazy #2: setelah terlihat, pastikan dulu file .glb benar-benar ada, BARU
+  // import pustaka & pasang viewer — sekaligus menjaga bundel awal ramping.
+  //
+  // Kenapa di-probe fetch, bukan hanya andalkan event 'error' model-viewer:
+  // untuk file yang 404 (lokal, balasannya instan) event error bisa keburu
+  // memicu SEBELUM listener terpasang, jadi status tersangkut di "loading".
+  // fetch same-origin dengan Range 0-0 (ambil 1 byte) memberi vonis pasti:
+  // gagal → cadangan; ada → lanjut. Event 'error' viewer tetap dipertahankan
+  // untuk kasus file ADA tapi rusak saat di-decode.
   useEffect(() => {
-    if (!visible || state !== 'probing') return
-    let done = false
-    const settle = (next) => { if (!done) { done = true; clearTimeout(t); setState(next) } }
-    const t = setTimeout(() => settle('failed'), SKETCHFAB_TIMEOUT_MS)
-    const img = new Image()
-    img.onload = () => settle('loading')
-    img.onerror = () => settle('failed')
-    img.src = 'https://sketchfab.com/favicon.ico?cb=' + Date.now()
-    return () => { done = true; clearTimeout(t); img.onload = img.onerror = null }
-  }, [visible, state])
+    if (!visible) return
+    let alive = true
+    fetch(MODEL_SRC, { headers: { Range: 'bytes=0-0' } })
+      .then((res) => {
+        res.body?.cancel?.()  // jangan lanjutkan unduhan bila server abaikan Range
+        if (!alive) return
+        if (!res.ok && res.status !== 206) { setState('failed'); return }
+        return import('@google/model-viewer').then(() => { if (alive) setLibReady(true) })
+      })
+      .catch(() => { if (alive) setState('failed') })
+    return () => { alive = false }
+  }, [visible])
 
-  // Jam pengaman kedua: setelah iframe dipasang, kalau onLoad tak kunjung datang
-  // dalam batas waktu, jatuhkan ke cadangan.
+  // Event dari <model-viewer>: 'load' = model siap, 'error' = gagal (mis. .glb
+  // 404 / rusak) → foto cadangan. Keduanya dipancarkan andal, jadi tak perlu
+  // timeout tebakan seperti dulu pada iframe.
   useEffect(() => {
-    if (state !== 'loading') return
-    timer.current = setTimeout(
-      () => setState((s) => (s === 'loading' ? 'failed' : s)), SKETCHFAB_TIMEOUT_MS)
-    return () => clearTimeout(timer.current)
-  }, [state])
-
-  const onLoad = () => { clearTimeout(timer.current); setState('ready') }
-  const onError = () => { clearTimeout(timer.current); setState('failed') }
+    const mv = mvRef.current
+    if (!mv) return
+    const onLoad = () => setState('ready')
+    const onError = () => setState('failed')
+    mv.addEventListener('load', onLoad)
+    mv.addEventListener('error', onError)
+    // Jaga-jaga kalau model sudah keburu selesai sebelum listener terpasang.
+    if (mv.loaded) setState('ready')
+    return () => { mv.removeEventListener('load', onLoad); mv.removeEventListener('error', onError) }
+  }, [libReady])
 
   return (
     <div className="hero-embed">
@@ -1646,18 +1625,27 @@ function HeroModel({ fallbackPhoto }) {
             : <Blueprint />
         ) : (
           <>
-            {(state === 'loading' || state === 'ready') && (
-              <iframe
-                title="Harley-Davidson FLHRXS Road King Special"
-                className="hero-embed-iframe"
-                src={SKETCHFAB_SRC}
-                loading="lazy"
-                frameBorder="0"
-                allow="autoplay; fullscreen; xr-spatial-tracking"
-                allowFullScreen
-                onLoad={onLoad}
-                onError={onError}
-                style={{ opacity: state === 'ready' ? 1 : 0 }} />
+            {visible && libReady && (
+              <model-viewer
+                ref={mvRef}
+                src={MODEL_SRC}
+                alt="Harley-Davidson FLHRXS Road King Special"
+                auto-rotate=""
+                auto-rotate-delay="0"
+                rotation-per-second="15deg"
+                interaction-prompt="none"
+                disable-zoom=""
+                disable-pan=""
+                disable-tap=""
+                shadow-intensity="1"
+                exposure="1"
+                environment-image="neutral"
+                style={{ opacity: state === 'ready' ? 1 : 0 }}>
+                {/* slot kosong: buang progress-bar bawaan; loader branded kita
+                    (spinner di bawah) yang dipakai supaya konsisten & tanpa UI
+                    asing. */}
+                <div slot="progress-bar" />
+              </model-viewer>
             )}
             {state !== 'ready' && (
               <div className="hero-embed-ph" aria-hidden="true">
@@ -1669,13 +1657,13 @@ function HeroModel({ fallbackPhoto }) {
         )}
       </div>
       <p className="hero-embed-attr">
-        <a href="https://sketchfab.com/3d-models/harley-davidson-flhrxs-road-king-special-881433de7df245b3bc435360bb5006a9?utm_medium=embed&utm_campaign=share-popup&utm_content=881433de7df245b3bc435360bb5006a9"
+        <a href="https://sketchfab.com/3d-models/harley-davidson-flhrxs-road-king-special-881433de7df245b3bc435360bb5006a9"
           target="_blank" rel="nofollow noopener noreferrer">Harley-Davidson FLHRXS Road King Special</a>
         {' by '}
-        <a href="https://sketchfab.com/everhard?utm_medium=embed&utm_campaign=share-popup&utm_content=881433de7df245b3bc435360bb5006a9"
+        <a href="https://sketchfab.com/everhard"
           target="_blank" rel="nofollow noopener noreferrer">everhard</a>
         {' on '}
-        <a href="https://sketchfab.com?utm_medium=embed&utm_campaign=share-popup&utm_content=881433de7df245b3bc435360bb5006a9"
+        <a href="https://sketchfab.com"
           target="_blank" rel="nofollow noopener noreferrer">Sketchfab</a>
       </p>
     </div>
