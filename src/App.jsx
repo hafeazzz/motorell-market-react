@@ -1548,7 +1548,32 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 // Atribusi lisensi (WAJIB, jangan dihapus): nama model, author "everhard", dan
 // Sketchfab — masing-masing tetap tertaut. Kata sambung "by/on" boleh gaya
 // bebas; yang wajib adalah ketiga tautannya.
-const SKETCHFAB_SRC = 'https://sketchfab.com/models/881433de7df245b3bc435360bb5006a9/embed'
+// Parameter tampilan embed: model auto-rotate BERSIH ala product showcase —
+// tanpa header (avatar/nama/tombol), tanpa teks "click & hold to rotate", tanpa
+// toolbar bawah. CATATAN akun gratis Sketchfab: sebagian parameter (terutama
+// ui_infos & ui_watermark) bisa DIABAIKAN di plan gratis, jadi watermark kecil
+// mungkin tetap muncul. Itu batasan resmi mereka — TIDAK ditutup overlay CSS
+// (melanggar ToS). Attribution wajib tetap ada di LUAR iframe (lihat <p> di
+// bawah), jadi kepatuhan lisensi tetap aman apa pun yang Sketchfab tampilkan.
+const SKETCHFAB_PARAMS = new URLSearchParams({
+  autostart: '1',         // langsung tampil, tanpa tombol play
+  autospin: '0.3',        // rotasi otomatis pelan (0.2–0.5 = halus)
+  ui_controls: '0',       // sembunyikan seluruh kontrol UI
+  ui_infos: '0',          // sembunyikan header (nama model, author, avatar)
+  ui_inspector: '0',
+  ui_stop: '0',           // sembunyikan tombol stop / "click & hold"
+  ui_watermark: '0',
+  ui_watermark_link: '0',
+  ui_ar: '0',
+  ui_help: '0',
+  ui_settings: '0',
+  ui_vr: '0',
+  ui_fullscreen: '0',
+  ui_annotations: '0',
+  transparent: '1',       // latar transparan → menyatu dengan bingkai hero
+}).toString()
+const SKETCHFAB_SRC =
+  'https://sketchfab.com/models/881433de7df245b3bc435360bb5006a9/embed?' + SKETCHFAB_PARAMS
 // Iframe yang diblokir peramban sering TIDAK memancarkan onError; tanpa batas
 // waktu, placeholder-nya menggantung selamanya. 12 detik = ambang aman "tidak
 // akan datang" tanpa memvonis koneksi lambat terlalu dini.
