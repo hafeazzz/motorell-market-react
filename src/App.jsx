@@ -574,11 +574,12 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-copy{max-width:100%}
 
 /* ---------- model 3D hero (tanpa kotak: hanya motornya) ---------- */
-.hero-embed{min-width:0}
-/* Bingkai kini SEKADAR kotak ukuran tak terlihat (aspect-ratio menahan ruang &
-   proporsi) — tanpa border/latar/bayangan/sudut. Yang tampak hanya modelnya,
-   menyatu langsung dengan latar hero. */
-.hero-embed-frame{position:relative;width:100%;aspect-ratio:4/3}
+.hero-embed{min-width:0;display:flex;flex-direction:column}
+/* Bingkai = kotak ukuran tak terlihat (tanpa border/latar/bayangan/sudut) —
+   yang tampak hanya modelnya. Di mobile aspect-ratio menahan tingginya; di
+   desktop ia MEMANJANG mengisi tinggi kolom teks (lihat align-items:stretch di
+   media query) supaya motor punya ruang vertikal sebesar section teks. */
+.hero-embed-frame{position:relative;width:100%;aspect-ratio:4/3;flex:1;min-height:300px}
 /* <model-viewer> ditarget lewat nama tag (menghindari keruwetan class pada
    custom element di React). Latar transparan; cursor:grab menandakan bisa
    diputar (interaktif). --poster-color kosong: matikan poster default supaya
@@ -1521,9 +1522,13 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .detail-grid{grid-template-columns:7fr 5fr}
   .panel{position:sticky}
   .hero{min-height:92vh;min-height:92svh;min-height:92dvh;padding-top:140px}
-  /* teks kiri, model 3D kanan; teks sedikit lebih lebar dari model */
-  .hero-main{grid-template-columns:1.02fr .98fr;gap:clamp(40px,5vw,72px);align-items:center}
-  .hero-copy{max-width:560px}
+  /* teks kiri, model 3D kanan; kolom model diberi porsi sedikit lebih besar.
+     align-items:stretch → kolom model memanjang setinggi kolom teks, jadi
+     bingkai model sepadan dengan tinggi section teks (heading → tombol). */
+  .hero-main{grid-template-columns:1fr 1.08fr;gap:clamp(40px,5vw,64px);align-items:stretch}
+  .hero-copy{max-width:560px;align-self:center}
+  /* di desktop bingkai ikut tinggi kolom (bukan aspect-ratio) */
+  .hero-embed-frame{aspect-ratio:auto;min-height:440px}
   .spec-rail{max-width:100%}
 }
 /* layar sempit: sembunyikan label "MARKET" di logo supaya search bar & tombol
@@ -1638,6 +1643,7 @@ function HeroModel({ fallbackPhoto }) {
                 auto-rotate-delay="3000"
                 rotation-per-second="15deg"
                 disable-pan=""
+                camera-orbit="0deg 82deg 78%"
                 shadow-intensity="1"
                 exposure="1"
                 environment-image="neutral"
