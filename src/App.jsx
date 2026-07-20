@@ -573,18 +573,20 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-main{display:grid;grid-template-columns:1fr;gap:clamp(28px,5vw,52px);align-items:center}
 .hero-copy{max-width:100%}
 
-/* ---------- embed model 3D Sketchfab ---------- */
-.hero-embed{display:flex;flex-direction:column;gap:9px;min-width:0}
-/* aspect-ratio menjaga bingkai proporsional & responsif tanpa trik padding. */
-.hero-embed-frame{position:relative;width:100%;aspect-ratio:4/3;border-radius:16px;
-  overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);
-  background:radial-gradient(120% 120% at 50% 30%, #fbfbfa, var(--bg-3) 90%)}
+/* ---------- model 3D hero (tanpa kotak: hanya motornya) ---------- */
+.hero-embed{min-width:0}
+/* Bingkai kini SEKADAR kotak ukuran tak terlihat (aspect-ratio menahan ruang &
+   proporsi) — tanpa border/latar/bayangan/sudut. Yang tampak hanya modelnya,
+   menyatu langsung dengan latar hero. */
+.hero-embed-frame{position:relative;width:100%;aspect-ratio:4/3}
 /* <model-viewer> ditarget lewat nama tag (menghindari keruwetan class pada
-   custom element di React). Latar transparan → gradien bingkai jadi backdrop
-   showcase yang menyatu dengan hero. --poster-color kosong: matikan poster
-   default supaya loader branded kita yang terlihat. */
+   custom element di React). Latar transparan; cursor:grab menandakan bisa
+   diputar (interaktif). --poster-color kosong: matikan poster default supaya
+   loader branded kita yang terlihat. */
 .hero-embed-frame model-viewer{position:absolute;inset:0;width:100%;height:100%;
-  background-color:transparent;--poster-color:transparent;transition:opacity .5s ease}
+  background-color:transparent;--poster-color:transparent;cursor:grab;
+  transition:opacity .5s ease}
+.hero-embed-frame model-viewer:active{cursor:grabbing}
 .hero-embed-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .hero-embed-ph{position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:13px;font-family:var(--mono);
@@ -593,11 +595,12 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   border:3px solid var(--line-2);border-top-color:var(--accent);
   animation:hero-spin .8s linear infinite}
 @keyframes hero-spin{to{transform:rotate(360deg)}}
-/* Atribusi lisensi — kecil & tenang, tapi tautannya tetap jelas & berfungsi. */
-.hero-embed-attr{font-size:11.5px;line-height:1.5;color:var(--dim);text-align:center}
-.hero-embed-attr a{color:var(--muted);font-weight:600;text-decoration:underline;
-  text-underline-offset:2px}
-.hero-embed-attr a:hover{color:var(--accent)}
+/* Kredit lisensi model 3D — dipindah dari bawah hero ke footer (tetap WAJIB
+   ada demi lisensi Creative Commons; hanya lokasinya yang lebih tenang). */
+.foot-credit{margin-top:14px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.04em;color:var(--dim);line-height:1.6}
+.foot-credit a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+.foot-credit a:hover{color:var(--accent)}
 /* Ukuran diturunkan dari clamp(46px,6.4vw,86px): di ukuran lama "anti was-was."
    pecah di tanda hubung jadi "ANTI WAS-" / "WAS." — baris yatim yang jelek. */
 .hero-copy h1{font-size:clamp(34px,5.2vw,64px);font-weight:750;line-height:1.06;
@@ -1630,13 +1633,11 @@ function HeroModel({ fallbackPhoto }) {
                 ref={mvRef}
                 src={MODEL_SRC}
                 alt="Harley-Davidson FLHRXS Road King Special"
+                camera-controls=""
                 auto-rotate=""
-                auto-rotate-delay="0"
+                auto-rotate-delay="3000"
                 rotation-per-second="15deg"
-                interaction-prompt="none"
-                disable-zoom=""
                 disable-pan=""
-                disable-tap=""
                 shadow-intensity="1"
                 exposure="1"
                 environment-image="neutral"
@@ -1656,16 +1657,6 @@ function HeroModel({ fallbackPhoto }) {
           </>
         )}
       </div>
-      <p className="hero-embed-attr">
-        <a href="https://sketchfab.com/3d-models/harley-davidson-flhrxs-road-king-special-881433de7df245b3bc435360bb5006a9"
-          target="_blank" rel="nofollow noopener noreferrer">Harley-Davidson FLHRXS Road King Special</a>
-        {' by '}
-        <a href="https://sketchfab.com/everhard"
-          target="_blank" rel="nofollow noopener noreferrer">everhard</a>
-        {' on '}
-        <a href="https://sketchfab.com"
-          target="_blank" rel="nofollow noopener noreferrer">Sketchfab</a>
-      </p>
     </div>
   )
 }
@@ -4091,6 +4082,18 @@ export default function App() {
               <small>Powered by <b>Motorell Garage</b></small>
             </span>
           </div>
+          {/* Kredit model 3D hero — wajib demi lisensi Creative Commons Sketchfab. */}
+          <p className="foot-credit">
+            Model 3D:{' '}
+            <a href="https://sketchfab.com/3d-models/harley-davidson-flhrxs-road-king-special-881433de7df245b3bc435360bb5006a9"
+              target="_blank" rel="nofollow noopener noreferrer">Harley-Davidson FLHRXS Road King Special</a>
+            {' by '}
+            <a href="https://sketchfab.com/everhard"
+              target="_blank" rel="nofollow noopener noreferrer">everhard</a>
+            {' on '}
+            <a href="https://sketchfab.com"
+              target="_blank" rel="nofollow noopener noreferrer">Sketchfab</a>
+          </p>
         </div>
       </footer>
 
