@@ -6,10 +6,9 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
-import { motion, AnimatePresence, animate, useScroll, useTransform, useInView } from 'framer-motion'
+import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion'
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
-import * as THREE from 'three'
 import ArchiveTab from './ArchiveTab';
 import ModPartPanel from './ModPartPanel';
 import MotorCarousel from './MotorCarousel';
@@ -17,7 +16,6 @@ import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
 import { parseCaption } from './captionParser';
 import { openSocialApp } from './utils/deepLink';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
 // ---------- Konfigurasi ----------
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL
@@ -557,8 +555,8 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    Basis mobile dulu (tinggi otomatis, padding atas secukupnya untuk lolos
    dari nav fixed); baru di layar besar hero dikunci ke tinggi viewport dan
    padding atas ditambah — lihat @media(min-width:1021px) di bagian bawah. */
-.hero{position:relative;min-height:0;display:flex;align-items:flex-end;
-  padding:128px 0 56px;border-bottom:1px solid var(--line);overflow:hidden;
+.hero{position:relative;min-height:0;display:flex;align-items:center;
+  padding:120px 0 52px;border-bottom:1px solid var(--line);overflow:hidden;
   background:
     radial-gradient(1200px 640px at 80% 34%, #fafaf9, transparent 62%),
     linear-gradient(180deg,#ffffff 0%,#fbfbfa 100%)}
@@ -569,35 +567,33 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   background-size:64px 64px;
   mask-image:radial-gradient(80% 70% at 68% 40%, #000 0%, transparent 72%);
   -webkit-mask-image:radial-gradient(80% 70% at 68% 40%, #000 0%, transparent 72%)}
-.hero-3d{position:absolute;inset:0;z-index:1;opacity:.5}
-/* touch-action:none — drag vertikal DI ATAS motor mengontrol tilt kamera,
-   scroll halaman tetap jalan lewat area teks/CTA (pointer-events:auto) */
-.bike3d{position:absolute;inset:0;cursor:grab;touch-action:none}
-.bike3d:active{cursor:grabbing}
-.bike3d canvas{display:block;width:100% !important;height:100% !important}
-/* petunjuk gesture — di dalam flow (bawah CTA) supaya tidak pernah
-   menimpa teks lain di ukuran layar mana pun */
-.bike3d-hint{display:inline-flex;align-items:center;gap:8px;pointer-events:none;
-  margin-top:22px;font-family:var(--mono);font-size:10.5px;font-weight:600;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
-  background:rgba(255,255,255,.88);backdrop-filter:blur(8px);
-  border:1px solid var(--line);padding:8px 14px;border-radius:999px;
-  white-space:nowrap;animation:hint-bob 2.2s ease-in-out infinite}
-.bike3d-hint svg{width:16px;height:16px;color:var(--accent)}
-@keyframes hint-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-.bike3d-fallback-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.hero-fade{position:absolute;inset:0;z-index:2;pointer-events:none;
-  background:linear-gradient(0deg, rgba(255,255,255,.97) 0%, rgba(255,255,255,.55) 46%, rgba(255,255,255,.1) 100%)}
-/* pointer-events:none supaya drag di atas motor tembus ke canvas 3D di bawah;
-   hanya ELEMEN teks/tombol yang menangkap pointer — bukan kotak containernya,
-   supaya ruang kosong di sekitar teks tetap bisa dipakai gesture 3D dan
-   scroll via sentuhan pada teks tetap normal */
-.hero-inner{position:relative;z-index:3;width:100%;pointer-events:none}
-.hero-copy{pointer-events:none}
-.hero-copy h1,.hero-copy p,.spec-rail{pointer-events:auto}
-.hero-cta{pointer-events:none}
-.hero-cta .btn{pointer-events:auto}
+.hero-inner{position:relative;z-index:3;width:100%}
+/* hero-main: kolom teks + kolom model 3D. Mobile bertumpuk (teks lalu model);
+   di ≥1021px berdampingan (lihat media query di bawah). */
+.hero-main{display:grid;grid-template-columns:1fr;gap:clamp(28px,5vw,52px);align-items:center}
 .hero-copy{max-width:100%}
+
+/* ---------- embed model 3D Sketchfab ---------- */
+.hero-embed{display:flex;flex-direction:column;gap:9px;min-width:0}
+/* aspect-ratio menjaga bingkai proporsional & responsif tanpa trik padding. */
+.hero-embed-frame{position:relative;width:100%;aspect-ratio:4/3;border-radius:16px;
+  overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);
+  background:radial-gradient(120% 120% at 50% 30%, #fbfbfa, var(--bg-3) 90%)}
+.hero-embed-iframe{position:absolute;inset:0;width:100%;height:100%;border:0;
+  transition:opacity .5s ease}
+.hero-embed-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero-embed-ph{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:13px;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.hero-embed-spinner{width:30px;height:30px;border-radius:50%;
+  border:3px solid var(--line-2);border-top-color:var(--accent);
+  animation:hero-spin .8s linear infinite}
+@keyframes hero-spin{to{transform:rotate(360deg)}}
+/* Atribusi lisensi — kecil & tenang, tapi tautannya tetap jelas & berfungsi. */
+.hero-embed-attr{font-size:11.5px;line-height:1.5;color:var(--dim);text-align:center}
+.hero-embed-attr a{color:var(--muted);font-weight:600;text-decoration:underline;
+  text-underline-offset:2px}
+.hero-embed-attr a:hover{color:var(--accent)}
 /* Ukuran diturunkan dari clamp(46px,6.4vw,86px): di ukuran lama "anti was-was."
    pecah di tanda hubung jadi "ANTI WAS-" / "WAS." — baris yatim yang jelek. */
 .hero-copy h1{font-size:clamp(34px,5.2vw,64px);font-weight:750;line-height:1.06;
@@ -1517,13 +1513,11 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .feature.flip .feature-media-slide{order:2}
   .detail-grid{grid-template-columns:7fr 5fr}
   .panel{position:sticky}
-  .hero{min-height:94vh;min-height:94svh;min-height:94dvh;padding-top:148px}
-  .hero-fade{background:
-    linear-gradient(90deg, rgba(255,255,255,.99) 0%, rgba(255,255,255,.82) 30%, rgba(255,255,255,0) 56%),
-    linear-gradient(0deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,0) 24%)}
-  .hero-3d{opacity:1}
-  .hero-copy{max-width:640px}
-  .spec-rail{max-width:900px}
+  .hero{min-height:92vh;min-height:92svh;min-height:92dvh;padding-top:140px}
+  /* teks kiri, model 3D kanan; teks sedikit lebih lebar dari model */
+  .hero-main{grid-template-columns:1.02fr .98fr;gap:clamp(40px,5vw,72px);align-items:center}
+  .hero-copy{max-width:560px}
+  .spec-rail{max-width:100%}
 }
 /* layar sempit: sembunyikan label "MARKET" di logo supaya search bar & tombol
    Masuk tetap muat tanpa memicu horizontal scroll di HP kecil (≤560px) */
@@ -1541,497 +1535,125 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 }
 `
 
-// ---------- Motor 3D interaktif (hero) ----------
-// Dibuka dengan foto asli salah satu unit di etalase, lalu "menyingkap"
-// jadi render 3D yang bisa diputar — bukan langsung tampil sebagai kartun.
-function Bike3D({ introPhoto, onInteract }) {
-  const mountRef = useRef(null)
-  const [failed, setFailed] = useState(false)
-  // ref supaya closure event handler di dalam effect selalu memanggil
-  // callback terbaru tanpa perlu re-mount scene
-  const interactRef = useRef(onInteract)
-  interactRef.current = onInteract
+// ---------- Model 3D hero (Sketchfab embed) ----------
+// Menggantikan animasi motor abstrak berbasis Three.js yang dulu jadi latar
+// hero. Sekarang: model realistis Harley-Davidson dari Sketchfab, sebagai
+// elemen berbingkai (bukan latar transparan) supaya bisa benar-benar diputar.
+//
+// Embed pihak ketiga bisa berat, jadi:
+//  - lazy: src iframe baru dipasang saat bingkai mendekati viewport (IO);
+//  - placeholder spinner selama memuat;
+//  - foto cadangan bila iframe gagal / diblokir.
+//
+// Atribusi lisensi (WAJIB, jangan dihapus): nama model, author "everhard", dan
+// Sketchfab — masing-masing tetap tertaut. Kata sambung "by/on" boleh gaya
+// bebas; yang wajib adalah ketiga tautannya.
+const SKETCHFAB_SRC = 'https://sketchfab.com/models/881433de7df245b3bc435360bb5006a9/embed'
+// Iframe yang diblokir peramban sering TIDAK memancarkan onError; tanpa batas
+// waktu, placeholder-nya menggantung selamanya. 12 detik = ambang aman "tidak
+// akan datang" tanpa memvonis koneksi lambat terlalu dini.
+const SKETCHFAB_TIMEOUT_MS = 12000
+// Atribut permission-policy execution-while-out-of-viewport / -not-rendered dari
+// snippet asli SENGAJA tidak dipakai: keduanya membiarkan WebGL 3D tetap jalan
+// saat hero sudah tergulung keluar layar — boros untuk metrik performa yang
+// justru jadi perhatian di sini. allowFullScreen + allow=... sudah cukup.
 
+function HeroModel({ fallbackPhoto }) {
+  const frameRef = useRef(null)
+  const [visible, setVisible] = useState(false)   // sudah dekat viewport?
+  // 'probing'  — cek dulu apakah Sketchfab bisa dijangkau
+  // 'loading'  — terjangkau, iframe sedang dipasang
+  // 'ready'    — iframe selesai memuat
+  // 'failed'   — tak terjangkau / gagal → foto cadangan
+  const [state, setState] = useState('probing')
+  const timer = useRef(null)
+
+  // Lazy: hero ada di puncak halaman jadi biasanya langsung terlihat, tapi IO
+  // tetap menunda pemasangan iframe sampai setelah paint pertama sehingga tidak
+  // ikut memblok muat awal.
   useEffect(() => {
-    const mount = mountRef.current
-    if (!mount) return
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-    let renderer
-    try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    } catch {
-      setFailed(true)
-      return
-    }
-    // Layar sempit (HP) dapat cap lebih rendah — hemat GPU tanpa kelihatan buram
-    // karena render area-nya juga lebih kecil.
-    const dprCap = window.innerWidth <= 480 ? 1.5 : 2
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap))
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.08
-    mount.appendChild(renderer.domElement)
-
-    const scene = new THREE.Scene()
-    // environment map studio lembut — sumber pantulan realistis di bodi
-    // krom/tangki, biar tidak flat seperti render kartun.
-    const pmrem = new THREE.PMREMGenerator(renderer)
-    const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
-    scene.environment = envTex
-    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 50)
-    // Framing kamera responsif terhadap aspect ratio kontainer, di antara dua
-    // titik yang sudah ditentukan:
-    // - WIDE  (aspect ≥ 1.7, hero desktop full-bleed): kamera "melihat" ke titik
-    //   di kiri motor, bukan ke motornya langsung — mendorong motor ke sisi
-    //   kanan, menyisakan ruang kosong di kiri untuk teks headline. Ini persis
-    //   nilai lama, supaya tampilan desktop tidak berubah sama sekali.
-    // - NARROW (aspect ≤ 0.62, hero mobile potret): kamera mundur & motor
-    //   diposisikan di tengah, supaya seluruh bodi (roda depan-belakang,
-    //   tangki, setang) tetap masuk frame — tidak lagi terpotong seperti
-    //   sebelumnya saat frame sempit memakai framing versi wide.
-    // Di antara dua titik itu, posisi & target di-interpolasi linear.
-    const FRAME_WIDE = { pos: new THREE.Vector3(3.6, 1.55, 5.0), look: new THREE.Vector3(-1.6, 0.75, 0) }
-    const FRAME_NARROW = { pos: new THREE.Vector3(1.9, 2.15, 9.4), look: new THREE.Vector3(0.05, 0.85, 0) }
-    const ASPECT_WIDE = 1.7
-    const ASPECT_NARROW = 0.62
-    // Di atas base frame itu, user bisa menambah offset sendiri:
-    // - elev  : tilt kamera naik/turun (drag vertikal), clamp -20°..35°
-    // - zoom  : faktor jarak kamera (pinch dua jari), clamp 0.6..1.6
-    // Keduanya di-lerp tiap frame supaya halus, dan double-tap mengembalikan
-    // semuanya ke default dengan animasi (bukan snap).
-    const ELEV_MIN = -20 * Math.PI / 180, ELEV_MAX = 35 * Math.PI / 180
-    const ZOOM_MIN = 0.6, ZOOM_MAX = 1.6
-    let elev = 0, targetElev = 0, zoom = 1, targetZoom = 1
-    let curAspect = 1
-    const _pos = new THREE.Vector3(), _look = new THREE.Vector3(), _sph = new THREE.Spherical()
-    const updateCamera = () => {
-      const t = THREE.MathUtils.clamp((curAspect - ASPECT_NARROW) / (ASPECT_WIDE - ASPECT_NARROW), 0, 1)
-      _pos.lerpVectors(FRAME_NARROW.pos, FRAME_WIDE.pos, t)
-      _look.lerpVectors(FRAME_NARROW.look, FRAME_WIDE.look, t)
-      _sph.setFromVector3(_pos.sub(_look))
-      // elev positif = kamera naik = phi mengecil; jaga phi tetap aman dari kutub
-      _sph.phi = THREE.MathUtils.clamp(_sph.phi - elev, 0.18, Math.PI / 2 + 0.25)
-      _sph.radius *= zoom
-      camera.position.setFromSpherical(_sph).add(_look)
-      camera.lookAt(_look)
-    }
-    updateCamera()
-
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xdfdfdb, 1.05))
-    const key = new THREE.DirectionalLight(0xffffff, 2.7)
-    key.position.set(3.4, 5.6, 3.2)
-    key.castShadow = true
-    // shadow map lebih kecil di layar HP — beda visualnya tak terlihat pada
-    // render area kecil, tapi jauh lebih ringan untuk GPU kelas menengah
-    const shadowRes = window.innerWidth < 768 ? 1024 : 2048
-    key.shadow.mapSize.set(shadowRes, shadowRes)
-    // frustum bayangan dirapatkan ke motor supaya resolusi bayangan terpakai
-    // penuh (bayangan tajam mengikuti bentuk motor, bukan lingkaran samar)
-    key.shadow.camera.near = 0.5
-    key.shadow.camera.far = 22
-    key.shadow.camera.left = -3
-    key.shadow.camera.right = 3
-    key.shadow.camera.top = 3
-    key.shadow.camera.bottom = -3
-    key.shadow.bias = -0.0004
-    key.shadow.radius = 3
-    scene.add(key)
-    const fill = new THREE.DirectionalLight(0xffe8d6, 0.5)
-    fill.position.set(-4, 2, -3)
-    scene.add(fill)
-    const rim = new THREE.DirectionalLight(0xdfe9ff, 0.9)
-    rim.position.set(-2.4, 3.2, -4.4)
-    scene.add(rim)
-
-    // lantai penangkap bayangan — opacity dinaikkan supaya bayangan motor
-    // terlihat kontras & realistis mengikuti bentuk bodi, bukan noda samar
-    const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(3, 64),
-      new THREE.ShadowMaterial({ opacity: 0.34 }),
-    )
-    ground.rotation.x = -Math.PI / 2
-    ground.receiveShadow = true
-    scene.add(ground)
-
-    // ---- rakit motor dari bentuk dasar (siluet neo-retro ala Yamaha XSR) ----
-    // TODO(upgrade): geometri primitif Three.js tidak akan pernah fotorealistik
-    // seperti render CGI/foto XSR asli. Untuk hasil "seperti foto", ganti blok
-    // perakitan di bawah ini dengan IMPORT MODEL .glb (GLTFLoader) dari sumber
-    // berlisensi (mis. Sketchfab berbayar) — muat model, pasang castShadow di
-    // tiap mesh, lalu buang perakitan primitif ini. Yang di bawah adalah quick
-    // win untuk mendekatkan siluet ke XSR, bukan pengganti model asli.
-    const bike = new THREE.Group()
-    const mat = (color, o = {}) =>
-      new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3, envMapIntensity: 1, ...o })
-    const physical = (color, o = {}) =>
-      new THREE.MeshPhysicalMaterial({ color, roughness: 0.4, metalness: 0.5, envMapIntensity: 1.15, ...o })
-    const M = {
-      tire: mat('#17171b', { roughness: 0.93, metalness: 0.04, envMapIntensity: 0.3 }),
-      rim: physical('#c9c9cf', { metalness: 0.95, roughness: 0.1, clearcoat: 0.6, clearcoatRoughness: 0.1 }),
-      frame: mat('#1b1b21', { metalness: 0.55, roughness: 0.4 }),
-      chrome: physical('#e4e4e8', { metalness: 0.97, roughness: 0.05, clearcoat: 0.9, clearcoatRoughness: 0.05, envMapIntensity: 1.5 }),
-      tank: physical('#1a2f5e', { metalness: 0.55, roughness: 0.18, clearcoat: 1.0, clearcoatRoughness: 0.08, envMapIntensity: 1.5 }),
-      dark: mat('#101014', { roughness: 0.85, metalness: 0.1, envMapIntensity: 0.5 }),
-      engine: mat('#2d2d34', { metalness: 0.75, roughness: 0.32 }),
-    }
-    const shadowed = (m) => { m.castShadow = true; return m }
-    const V = (x, y, z = 0) => new THREE.Vector3(x, y, z)
-    const tube = (a, b, r, material) => {
-      const dir = new THREE.Vector3().subVectors(b, a)
-      const mesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(r, r, dir.length(), 14), material)
-      mesh.position.copy(a).add(b).multiplyScalar(0.5)
-      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize())
-      return shadowed(mesh)
-    }
-
-    // Proporsi mengacu gaya neo-retro Yamaha XSR: wheelbase ±2.1 unit,
-    // roda jari-jari, garpu teleskopik menyudut, tangki teardrop, jok flat.
-    const REAR = V(-1.02, 0.52), FRONT = V(1.08, 0.52)
-
-    // ---- roda jari-jari (spoke wheel) ----
-    const wheels = []
-    const makeWheel = (x, front) => {
-      const g = new THREE.Group()
-      // ban lebih gambot (tube tebal) untuk kesan dual-purpose XSR; radius luar
-      // dijaga ~0.52 supaya kontak ke lantai (bayangan) tetap pas
-      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.375, 0.145, 22, 52), M.tire)))
-      g.add(shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.03, 12, 40), M.rim)))
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.16, 18), M.engine)
-      hub.rotation.x = Math.PI / 2
-      g.add(shadowed(hub))
-      for (let i = 0; i < 18; i++) {
-        const a = (i / 18) * Math.PI * 2
-        const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.28, 6), M.chrome)
-        sp.position.set(Math.cos(a) * 0.19, Math.sin(a) * 0.19, i % 2 ? 0.035 : -0.035)
-        sp.rotation.z = a - Math.PI / 2
-        g.add(sp)
-      }
-      if (front) {
-        const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.185, 0.015, 30), M.chrome)
-        disc.rotation.x = Math.PI / 2
-        disc.position.z = 0.095
-        g.add(disc)
-      }
-      g.position.set(x, 0.52, 0)
-      bike.add(g)
-      wheels.push(g)
-    }
-    makeWheel(REAR.x, false)
-    makeWheel(FRONT.x, true)
-
-    // ---- rangka (backbone + downtube + cradle + seat rail) ----
-    bike.add(tube(V(0.55, 1.18), V(0.63, 1.34), 0.055, M.frame))       // steering head
-    bike.add(tube(V(0.6, 1.3), V(-0.3, 1.06), 0.05, M.frame))          // backbone
-    bike.add(tube(V(-0.3, 1.06), V(-0.92, 0.98), 0.038, M.frame))      // seat rail
-    bike.add(tube(V(0.57, 1.22), V(0.38, 0.6), 0.045, M.frame))        // downtube
-    bike.add(tube(V(0.38, 0.56), V(-0.3, 0.56), 0.04, M.frame))        // cradle bawah
-    bike.add(tube(V(-0.3, 1.06), V(-0.32, 0.6), 0.045, M.frame))       // tiang belakang
-    // swingarm (lengan ayun dua sisi)
-    bike.add(tube(V(-0.32, 0.64, 0.1), V(REAR.x, REAR.y, 0.1), 0.032, M.frame))
-    bike.add(tube(V(-0.32, 0.64, -0.1), V(REAR.x, REAR.y, -0.1), 0.032, M.frame))
-
-    // ---- garpu depan teleskopik (menyudut/rake, dua tabung per sisi) ----
-    for (const zs of [0.085, -0.085]) {
-      bike.add(tube(V(0.66, 1.38, zs), V(0.88, 0.94, zs), 0.03, M.chrome))   // tabung atas
-      bike.add(tube(V(0.88, 0.94, zs), V(FRONT.x, FRONT.y, zs), 0.042, M.dark)) // slider bawah
-    }
-    // segitiga penjepit (triple clamp)
-    const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.26), M.engine)
-    clamp.position.set(0.655, 1.36, 0)
-    bike.add(shadowed(clamp))
-
-    // ---- setang flat rendah (lebih sporty/rata dari sebelumnya) + grip ----
-    bike.add(tube(V(0.64, 1.38), V(0.61, 1.44), 0.028, M.chrome))      // riser pendek
-    bike.add(tube(V(0.61, 1.44, -0.34), V(0.61, 1.44, 0.34), 0.024, M.dark))  // bar flat
-    for (const zs of [0.38, -0.38]) {
-      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.15, 12), M.dark)
-      grip.rotation.x = Math.PI / 2
-      grip.position.set(0.61, 1.44, zs)
-      bike.add(shadowed(grip))
-    }
-
-    // ---- lampu depan bulat klasik ----
-    const lampHouse = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.14, 24), M.engine)
-    lampHouse.rotation.z = Math.PI / 2
-    lampHouse.position.set(0.76, 1.2, 0)
-    bike.add(shadowed(lampHouse))
-    const lens = new THREE.Mesh(new THREE.SphereGeometry(0.125, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5),
-      mat('#fff4dd', { emissive: 0xffe3b0, emissiveIntensity: 0.9, roughness: 0.25 }))
-    lens.rotation.z = -Math.PI / 2
-    lens.position.set(0.82, 1.2, 0)
-    bike.add(lens)
-
-    // ---- tangki teardrop besar & bulat (ciri khas XSR) + tutup bensin ----
-    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.5, 36, 28), M.tank)
-    tank.scale.set(1.5, 0.66, 0.92)
-    tank.position.set(0.12, 1.2, 0)
-    tank.rotation.z = 0.06
-    bike.add(shadowed(tank))
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.03, 14), M.chrome)
-    cap.position.set(0.22, 1.5, 0)
-    bike.add(cap)
-
-    // ---- jok single flat, pendek & rata + buntut (seat cowl) ----
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.06, 0.3), M.dark)
-    seat.position.set(-0.5, 1.06, 0)
-    bike.add(shadowed(seat))
-    // single seat cowl belakang — sedikit meninggi menyerupai buntut XSR
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.16, 0.26), M.dark)
-    tail.position.set(-0.86, 1.1, 0)
-    tail.rotation.z = 0.16
-    bike.add(shadowed(tail))
-    const tailLamp = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.12),
-      mat('#d02010', { emissive: 0xa01008, emissiveIntensity: 0.6 }))
-    tailLamp.position.set(-0.97, 1.05, 0)
-    bike.add(tailLamp)
-
-    // ---- mesin: crankcase + silinder bersirip + tutup samping ----
-    const crank = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.3, 0.32), M.engine)
-    crank.position.set(0.02, 0.62, 0)
-    bike.add(shadowed(crank))
-    const cyl = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.3, 0.28), M.engine)
-    cyl.position.set(0.1, 0.9, 0)
-    cyl.rotation.z = -0.15
-    bike.add(shadowed(cyl))
-    for (let i = 0; i < 4; i++) {
-      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.018, 0.34), M.rim)
-      fin.position.set(0.1 + (i - 1.5) * 0.0105, 0.9 + (i - 1.5) * 0.07, 0)
-      fin.rotation.z = -0.15
-      bike.add(fin)
-    }
-    const cover = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 22), M.rim)
-    cover.rotation.x = Math.PI / 2
-    cover.position.set(-0.06, 0.6, 0.17)
-    bike.add(cover)
-
-    // ---- knalpot: header melengkung + muffler ----
-    const exCurve = new THREE.CatmullRomCurve3([
-      V(0.16, 0.8, 0.17), V(0.36, 0.6, 0.2), V(0.3, 0.44, 0.2),
-      V(-0.2, 0.42, 0.21), V(-0.72, 0.5, 0.22),
-    ])
-    bike.add(shadowed(new THREE.Mesh(new THREE.TubeGeometry(exCurve, 32, 0.042, 12), M.chrome)))
-    const mufDir = new THREE.Vector3().subVectors(V(-1.18, 0.56, 0.22), V(-0.72, 0.5, 0.22))
-    const muffler = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, mufDir.length(), 18), M.chrome)
-    muffler.position.set(-0.95, 0.53, 0.22)
-    muffler.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), mufDir.normalize())
-    bike.add(shadowed(muffler))
-
-    // ---- twin shock belakang (per aksen oranye) ----
-    for (const zs of [0.155, -0.155]) {
-      bike.add(tube(V(-0.6, 1.0, zs), V(-0.92, 0.56, zs), 0.024, M.chrome))
-      const springDir = new THREE.Vector3().subVectors(V(-0.84, 0.67, zs), V(-0.68, 0.89, zs))
-      const spring = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, springDir.length(), 12), M.tank)
-      spring.position.set(-0.76, 0.78, zs)
-      spring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), springDir.normalize())
-      bike.add(spring)
-    }
-
-    // ---- spatbor pendek depan & belakang ----
-    const fenderF = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.035, 10, 26, Math.PI * 0.42), M.frame)
-    fenderF.position.set(FRONT.x, FRONT.y, 0)
-    fenderF.rotation.z = Math.PI * 0.32
-    bike.add(shadowed(fenderF))
-    const fenderR = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.04, 10, 26, Math.PI * 0.4), M.frame)
-    fenderR.position.set(REAR.x, REAR.y, 0)
-    fenderR.rotation.z = Math.PI * 0.38
-    bike.add(shadowed(fenderR))
-
-    bike.position.y = 0.02
-    scene.add(bike)
-
-    // ---- interaksi: 1 jari = putar (X) + tilt (Y), 2 jari = pinch zoom,
-    //      double-tap = reset kamera. Dilepas → momentum, lalu auto-spin. ----
-    const ROT_DEFAULT = -0.6
-    // sudut awal intro sengaja lebih dramatis (3/4 lebih menyamping) daripada
-    // ROT_DEFAULT murni, yang kalau dilihat dari diam saja cenderung tampak
-    // hampir dari depan lurus — ketahuan pas foto pembuka lama dihapus
-    const INTRO_HOLD_ROT = ROT_DEFAULT + 0.55
-    let rotY = INTRO_HOLD_ROT, targetY = INTRO_HOLD_ROT, lastX = 0, lastY = 0
-    let velY = 0 // kecepatan sudut terakhir, dipakai sebagai inertia saat dilepas
-    let lastTapAt = 0, lastPinchDist = 0
-    const pointers = new Map()
-    const dragging = () => pointers.size > 0
-    const autoSpin = !reduced
-
-    // New state for suspension effect
-    let suspensionOffset = 0;
-    let targetSuspensionOffset = 0;
-
-    const pinchDist = () => {
-      const [a, b] = [...pointers.values()]
-      return Math.hypot(a.x - b.x, a.y - b.y) || 1
-    }
-    const onDown = (e) => {
-      introControls?.stop()
-      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
-      try { mount.setPointerCapture(e.pointerId) } catch { /* pointer sudah lepas */ }
-      if (pointers.size === 1) {
-        lastX = e.clientX; lastY = e.clientY; velY = 0
-        // double-tap → kembalikan kamera & rotasi ke default (lerp di loop
-        // yang membuat transisinya halus, bukan snap)
-        const now = performance.now()
-        if (now - lastTapAt < 320) {
-          targetY = ROT_DEFAULT; targetElev = 0; targetZoom = 1;
-          targetSuspensionOffset = 0; // Reset suspension
-          lastTapAt = 0
-        } else {
-          lastTapAt = now
-          targetSuspensionOffset = -0.01; // Apply suspension compression on first touch
-        }
-      } else if (pointers.size === 2) {
-        lastPinchDist = pinchDist()
-      }
-      if (interactRef.current) interactRef.current()
-    }
-    const onMove = (e) => {
-      if (!pointers.has(e.pointerId)) return
-      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
-      if (pointers.size === 1) {
-        const dx = e.clientX - lastX, dy = e.clientY - lastY
-        targetY += dx * 0.012
-        velY = dx * 0.012
-        targetElev = THREE.MathUtils.clamp(targetElev + dy * 0.006, ELEV_MIN, ELEV_MAX)
-        lastX = e.clientX; lastY = e.clientY
-      } else if (pointers.size === 2) {
-        const d = pinchDist()
-        // jari melebar (d naik) = zoom in = kamera mendekat (faktor < 1)
-        targetZoom = THREE.MathUtils.clamp(targetZoom * (lastPinchDist / d), ZOOM_MIN, ZOOM_MAX)
-        lastPinchDist = d
-      }
-    }
-    const onUp = (e) => {
-      pointers.delete(e.pointerId)
-      if (pointers.size === 1) {
-        const p = [...pointers.values()][0]
-        lastX = p.x; lastY = p.y
-      }
-      targetSuspensionOffset = 0; // Release suspension
-    }
-    mount.addEventListener('pointerdown', onDown)
-    mount.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    window.addEventListener('pointercancel', onUp)
-
-    // ---- intro sinematik: hold sejenak di framing hero, lalu kamera
-    //      menyapu (arc) sambil mendekat (push-in) dengan percepatan
-    //      progresif — meniru pola referensi (hold → ease-in, TANPA
-    //      ease-out, seolah "dipotong" saat masih bergerak cepat).
-    //      Begitu selesai, sisa kecepatan diserahkan ke sistem momentum
-    //      yang sudah ada supaya nyambung mulus ke auto-spin, bukan
-    //      berhenti mendadak. Kode asli (bukan video), jadi tetap ringan
-    //      dan interaktif — drag/pinch user langsung menghentikan intro. ----
-    let introControls = null
-    let introRaf1 = 0, introRaf2 = 0
-    if (!reduced) {
-      const INTRO_ZOOM = 0.78 // seberapa dekat kamera mendorong masuk
-      // Setup scene (PMREM, puluhan mesh) + overhead awal halaman bisa
-      // menyita waktu nyata sebelum browser sempat render frame pertama.
-      // animate() mengukur progres dari WAKTU ASLI, bukan jumlah frame —
-      // kalau jamnya mulai sebelum browser sempat "bernapas", separuh
-      // durasi sudah "kebobolan" begitu render pertama tampil, dan intro
-      // kelihatan langsung selesai/snap. Tunda mulainya 2 frame supaya
-      // jamnya baru jalan setelah render benar-benar berjalan mulus.
-      introRaf1 = requestAnimationFrame(() => {
-        introRaf2 = requestAnimationFrame(() => {
-          introControls = animate(0, 1, {
-            duration: 2.3,
-            ease: 'circIn', // datar di awal (hold), lalu berakselerasi tajam
-            onUpdate: (p) => {
-              // dari sudut hold dramatis → mendarat pas di ROT_DEFAULT (baseline
-              // yang framing kameranya sudah di-tuning untuk komposisi hero)
-              targetY = INTRO_HOLD_ROT + (ROT_DEFAULT - INTRO_HOLD_ROT) * p
-              targetZoom = 1 + (INTRO_ZOOM - 1) * p
-            },
-            onComplete: () => {
-              // motor masih "bergerak" saat intro berakhir — momentum meluruh
-              // alami lewat loop render, bukan snap balik ke posisi awal
-              velY = -0.012
-              targetZoom = 1
-            },
-          })
-        })
-      })
-    }
-
-    // ---- ukuran mengikuti kontainer ----
-    const resize = () => {
-      const w = mount.clientWidth || 1, h = mount.clientHeight || 1
-      renderer.setSize(w, h)
-      camera.aspect = w / h
-      curAspect = camera.aspect
-      camera.updateProjectionMatrix()
-    }
-    resize()
-    const ro = new ResizeObserver(resize)
-    ro.observe(mount)
-
-    // ---- loop render ----
-    let raf, t = 0
-    const loop = () => {
-      raf = requestAnimationFrame(loop)
-      t += 0.016
-      if (!dragging()) {
-        // momentum: sisa kecepatan drag meluruh halus, lalu auto-spin pelan
-        targetY += velY
-        velY *= 0.94
-        if (autoSpin) targetY += 0.0038
-      }
-      rotY += (targetY - rotY) * 0.08
-      elev += (targetElev - elev) * 0.1
-      zoom += (targetZoom - zoom) * 0.1
-      suspensionOffset += (targetSuspensionOffset - suspensionOffset) * 0.1; // Smooth suspension change
-
-      bike.rotation.y = rotY;
-      // Dynamically adjust key light position based on bike rotation for shadow
-      const lightRotateAmount = (rotY - ROT_DEFAULT) * 0.1; // Small adjustment
-      key.position.set(3.4 * Math.cos(lightRotateAmount) + 3.2 * Math.sin(lightRotateAmount), 5.6, 3.2 * Math.cos(lightRotateAmount) - 3.4 * Math.sin(lightRotateAmount));
-
-
-      updateCamera()
-      if (!reduced) {
-        bike.position.y = 0.02 + Math.sin(t * 1.3) * 0.018 + suspensionOffset; // Apply suspension offset
-        for (const w of wheels) w.rotation.z -= 0.045
-      }
-      renderer.render(scene, camera)
-    }
-    loop()
-
-    return () => {
-      cancelAnimationFrame(raf)
-      cancelAnimationFrame(introRaf1)
-      cancelAnimationFrame(introRaf2)
-      introControls?.stop()
-      ro.disconnect()
-      mount.removeEventListener('pointerdown', onDown)
-      mount.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      window.removeEventListener('pointercancel', onUp)
-      scene.traverse((o) => {
-        if (o.geometry) o.geometry.dispose()
-        if (o.material) {
-          if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose())
-          else o.material.dispose()
-        }
-      })
-      renderer.dispose()
-      envTex.dispose()
-      pmrem.dispose()
-      if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement)
-    }
+    const el = frameRef.current
+    if (!el) return
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { setVisible(true); io.disconnect() }
+    }, { rootMargin: '200px' })
+    io.observe(el)
+    return () => io.disconnect()
   }, [])
 
-  if (failed) {
-    return introPhoto
-      ? <img className="bike3d-fallback-photo" src={introPhoto} alt="" />
-      : <Blueprint />
-  }
+  // PROBE keterjangkauan — INI kunci fallback yang benar. onError iframe TIDAK
+  // bisa diandalkan: iframe yang diblokir/putus koneksi tetap memancarkan onLoad
+  // (untuk halaman error internalnya), jadi bergantung padanya = frame kosong
+  // tanpa cadangan. Sebagai gantinya kita ping satu aset kecil dari domain
+  // Sketchfab: kalau gambarnya gagal (adblock memblok domain, atau tidak ada
+  // koneksi) → langsung tampilkan cadangan, iframe tak usah dipasang.
+  useEffect(() => {
+    if (!visible || state !== 'probing') return
+    let done = false
+    const settle = (next) => { if (!done) { done = true; clearTimeout(t); setState(next) } }
+    const t = setTimeout(() => settle('failed'), SKETCHFAB_TIMEOUT_MS)
+    const img = new Image()
+    img.onload = () => settle('loading')
+    img.onerror = () => settle('failed')
+    img.src = 'https://sketchfab.com/favicon.ico?cb=' + Date.now()
+    return () => { done = true; clearTimeout(t); img.onload = img.onerror = null }
+  }, [visible, state])
+
+  // Jam pengaman kedua: setelah iframe dipasang, kalau onLoad tak kunjung datang
+  // dalam batas waktu, jatuhkan ke cadangan.
+  useEffect(() => {
+    if (state !== 'loading') return
+    timer.current = setTimeout(
+      () => setState((s) => (s === 'loading' ? 'failed' : s)), SKETCHFAB_TIMEOUT_MS)
+    return () => clearTimeout(timer.current)
+  }, [state])
+
+  const onLoad = () => { clearTimeout(timer.current); setState('ready') }
+  const onError = () => { clearTimeout(timer.current); setState('failed') }
+
   return (
-    <div ref={mountRef} className="bike3d" role="img"
-      aria-label="Model 3D motor Motorell — seret untuk memutar, cubit untuk zoom" />
+    <div className="hero-embed">
+      <div className="hero-embed-frame" ref={frameRef}>
+        {state === 'failed' ? (
+          fallbackPhoto
+            ? <img className="hero-embed-fallback" src={fallbackPhoto}
+                alt="Motor pilihan Motorell" />
+            : <Blueprint />
+        ) : (
+          <>
+            {(state === 'loading' || state === 'ready') && (
+              <iframe
+                title="Harley-Davidson FLHRXS Road King Special"
+                className="hero-embed-iframe"
+                src={SKETCHFAB_SRC}
+                loading="lazy"
+                frameBorder="0"
+                allow="autoplay; fullscreen; xr-spatial-tracking"
+                allowFullScreen
+                onLoad={onLoad}
+                onError={onError}
+                style={{ opacity: state === 'ready' ? 1 : 0 }} />
+            )}
+            {state !== 'ready' && (
+              <div className="hero-embed-ph" aria-hidden="true">
+                <span className="hero-embed-spinner" />
+                <span>Memuat model 3D…</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <p className="hero-embed-attr">
+        <a href="https://sketchfab.com/3d-models/harley-davidson-flhrxs-road-king-special-881433de7df245b3bc435360bb5006a9?utm_medium=embed&utm_campaign=share-popup&utm_content=881433de7df245b3bc435360bb5006a9"
+          target="_blank" rel="nofollow noopener noreferrer">Harley-Davidson FLHRXS Road King Special</a>
+        {' by '}
+        <a href="https://sketchfab.com/everhard?utm_medium=embed&utm_campaign=share-popup&utm_content=881433de7df245b3bc435360bb5006a9"
+          target="_blank" rel="nofollow noopener noreferrer">everhard</a>
+        {' on '}
+        <a href="https://sketchfab.com?utm_medium=embed&utm_campaign=share-popup&utm_content=881433de7df245b3bc435360bb5006a9"
+          target="_blank" rel="nofollow noopener noreferrer">Sketchfab</a>
+      </p>
+    </div>
   )
 }
 
@@ -3474,17 +3096,8 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
     listings.find((l) => l.grade === 'S' && l.photos?.[0]) ||
     listings.find((l) => l.grade === 'A' && l.photos?.[0]) ||
     listings.find((l) => l.photos?.[0]) || null
+  // Foto unit terbaik dipakai sebagai cadangan kalau embed Sketchfab gagal muat.
   const introPhoto = introUnit?.photos?.[0] || null
-  // Petunjuk gesture 3D tampil sekali seumur perangkat: hilang begitu user
-  // berinteraksi pertama kali, diingat lewat localStorage. Dirender di sini
-  // (bukan di dalam .hero-3d) supaya tidak ikut transparan/tertutup layer teks.
-  const [hint3d, setHint3d] = useState(() => {
-    try { return !localStorage.getItem('m3d-hint-seen') } catch { return true }
-  })
-  const dismissHint = useCallback(() => {
-    try { localStorage.setItem('m3d-hint-seen', '1') } catch { /* private mode */ }
-    setHint3d(false)
-  }, [])
 
   // Transisi "portal" saat pindah dari hero ke etalase — cincin cahaya
   // membesar & memudar sambil halaman scroll, terinspirasi portal-frame
@@ -3515,29 +3128,19 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
       </AnimatePresence>
       <section className="hero">
         <div className="hero-grid-lines" aria-hidden="true" />
-        <div className="hero-3d">
-          <Bike3D introPhoto={introPhoto} onInteract={dismissHint} />
-        </div>
-        <div className="hero-fade" aria-hidden="true" />
         <div className="container hero-inner">
-          <div className="hero-copy">
-            <p className="kicker">Motorell Market — Showroom motor terkurasi</p>
-            <h1>Lebih dari motor bekas.<br />Kualitas <em>anti was-was.</em></h1>
-            <p>Setiap motor telah dikurasi dan siap
-              mengukir cerita perjalanan Anda.</p>
-            <div className="hero-cta">
-              <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
-              <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
+          <div className="hero-main">
+            <div className="hero-copy">
+              <p className="kicker">Motorell Market — Showroom motor terkurasi</p>
+              <h1>Lebih dari motor bekas.<br />Kualitas <em>anti was-was.</em></h1>
+              <p>Setiap motor telah dikurasi dan siap
+                mengukir cerita perjalanan Anda.</p>
+              <div className="hero-cta">
+                <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
+                <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
+              </div>
             </div>
-            {hint3d && (
-              <span className="bike3d-hint" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-                  strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12m0-1.5v-2a1.5 1.5 0 0 1 3 0V12m0-1v-.5a1.5 1.5 0 0 1 3 0V13c0 4-2.5 7-6.5 7-3 0-4.5-1.5-6-4l-1.7-3.3a1.4 1.4 0 0 1 2.3-1.5L8 14" />
-                </svg>
-                Seret · tilt · cubit untuk zoom
-              </span>
-            )}
+            <HeroModel fallbackPhoto={introPhoto} />
           </div>
           <div className="spec-rail">
             <span>titik inspeksi<b>50+</b></span>
