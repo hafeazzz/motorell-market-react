@@ -1091,6 +1091,16 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 
 /* ---------- admin ---------- */
 .admin{padding:120px 0 90px}
+/* Kotak diagnostik akses admin — muncul saat login tapi belum diakui staf. */
+.admin-diag{margin-top:22px;max-width:560px;border:1px solid var(--line);
+  border-radius:12px;padding:18px 20px;background:var(--panel-2)}
+.admin-diag > b{display:block;margin-bottom:12px}
+.admin-diag dl{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
+.admin-diag dl > div{display:flex;gap:10px;font-size:13.5px}
+.admin-diag dt{flex:none;width:120px;color:var(--muted)}
+.admin-diag dd{word-break:break-all}
+.admin-diag .mono{font-family:var(--mono);font-size:12.5px}
+.admin-diag-hint{font-size:13.5px;line-height:1.6;color:#33363c;margin-bottom:14px}
 .a-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
   flex-wrap:wrap;margin-bottom:28px}
 .a-head h1{font-size:clamp(27px,3.4vw,40px);font-weight:750;letter-spacing:-.025em}
@@ -2702,7 +2712,10 @@ function StaffPanel({ profile, toast }) {
               <div className="a-row" key={p.id}>
                 <div className="a-info">
                   <b>{p.full_name || 'Tanpa nama'}{isSelf ? ' (kamu)' : ''}</b>
-                  <span>{p.email || p.id}</span>
+                  {/* Tabel profiles tidak punya kolom email (dicek langsung ke DB),
+                      jadi tampilkan potongan user id — bukan p.email yang selalu
+                      undefined. Peran ditandai di tombol aksi di sebelah kanan. */}
+                  <span className="mono" style={{ fontSize: 11.5 }}>{String(p.id).slice(0, 8)}… · {ROLE_LABEL[p.role] || p.role}</span>
                 </div>
                 <div className="a-actions">
                   {isSelf ? (
@@ -4014,6 +4027,11 @@ export default function App() {
   const [route, setRoute] = useState(parseHash)
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [profileErr, setProfileErr] = useState('')
+  // false selama baris profiles masih diambil. Diagnostik "belum diakui staf"
+  // hanya boleh muncul SETELAH ini true — kalau tidak, admin sah pun sempat
+  // melihat kedipan "kamu bukan staf" sebelum role-nya termuat.
+  const [profileReady, setProfileReady] = useState(false)
   const [listings, setListings] = useState([])
   const [deepUnit, setDeepUnit] = useState(null)
   const [authOpen, setAuthOpen] = useState(false)
@@ -4151,12 +4169,30 @@ export default function App() {
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  useEffect(() => {
-    if (!supabase) return
-    if (!session) { setProfile(null); return }
-    supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
-      .then(({ data }) => setProfile(data))
+  // Muat baris profiles milik user yang login. Dulu error-nya DITELAN
+  // (.then(({data}) => setProfile(data))): kalau RLS menolak atau barisnya tidak
+  // ada, data jadi null dan hasilnya identik dengan "bukan admin" — tanpa jejak
+  // apa pun. Itulah kenapa admin baru yang gagal akses tidak memberi petunjuk.
+  // Sekarang error & "baris tidak ada" dibedakan, dicatat, dan disimpan ke
+  // state supaya layar admin bisa menjelaskan penyebab persisnya.
+  const loadProfile = useCallback(async () => {
+    if (!supabase || !session) { setProfile(null); setProfileErr(''); setProfileReady(false); return }
+    setProfileReady(false)
+    const { data, error } = await supabase.from('profiles')
+      .select('*').eq('id', session.user.id).maybeSingle()
+    if (error) {
+      console.error('[PROFILE] Gagal memuat baris profiles:', error.message)
+      setProfile(null); setProfileErr(error.message); setProfileReady(true)
+      return
+    }
+    if (!data) {
+      console.warn('[PROFILE] Tidak ada baris profiles untuk user', session.user.id,
+        '— role tak bisa ditentukan (trigger signup / backfill belum jalan?)')
+    }
+    setProfile(data); setProfileErr(''); setProfileReady(true)
   }, [session])
+
+  useEffect(() => { loadProfile() }, [loadProfile])
 
   const isStaff = Boolean(profile && ['admin', 'kurator'].includes(profile.role))
 
@@ -4353,6 +4389,38 @@ export default function App() {
                 Masuk dengan akun yang berperan admin atau kurator untuk mengelola etalase.</p>
               {!session && <div style={{ marginTop: 20 }}>
                 <button className="btn btn-accent" onClick={() => setAuthOpen(true)}>Masuk</button></div>}
+              {/* Selagi role masih diambil, jangan tuduh apa-apa dulu. */}
+              {session && !profileReady && (
+                <p className="f-info" style={{ marginTop: 18 }}>Memeriksa akses…</p>)}
+              {/* Diagnostik: saat SUDAH login, role SUDAH selesai dibaca, tapi
+                  belum diakui staf — tampilkan penyebab persisnya. Ini yang
+                  mengubah "tombol tidak muncul, entah kenapa" jadi jawaban
+                  langsung: bedakan role kurang, baris profiles tidak ada, atau
+                  RLS menolak. Hanya menampilkan data milik user itu sendiri. */}
+              {session && profileReady && (
+                <div className="admin-diag">
+                  <b>Kamu sudah login, tapi akun ini belum diakui sebagai staf.</b>
+                  <dl>
+                    <div><dt>User ID</dt><dd className="mono">{session.user.id}</dd></div>
+                    <div><dt>Baris profiles</dt><dd>{profileErr ? 'gagal dibaca' : profile ? 'ada' : 'TIDAK ADA'}</dd></div>
+                    <div><dt>Role terbaca</dt><dd className="mono">{profile ? String(profile.role) : '—'}</dd></div>
+                    {profileErr && <div><dt>Error</dt><dd className="mono">{profileErr}</dd></div>}
+                  </dl>
+                  <p className="admin-diag-hint">
+                    {profileErr
+                      ? 'Baris profiles-mu tidak bisa dibaca — kemungkinan kebijakan RLS. Lihat supabase/migrations/0002_profiles_admin_role.sql.'
+                      : !profile
+                        ? 'Belum ada baris profiles untuk akun ini, jadi role tidak bisa disetel. Jalankan migrasi 0002 (membuat trigger + mengisi baris yang hilang), lalu minta admin menyetel role-mu.'
+                        : 'Baris profiles ada tapi role-nya belum admin/kurator. Minta admin lain menyetelnya di Panel admin → Staf. Kalau baru saja diubah, klik Muat ulang atau keluar-masuk lagi.'}
+                  </p>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+                    <button className="btn btn-ghost btn-sm" onClick={loadProfile}>Muat ulang peran</button>
+                    <button className="btn btn-ghost btn-sm"
+                      onClick={async () => { await supabase.auth.signOut(); toast('Kamu sudah keluar — masuk lagi untuk menyegarkan peran'); }}>
+                      Keluar &amp; masuk lagi</button>
+                  </div>
+                </div>
+              )}
             </div></section>)}
       </main>
 
