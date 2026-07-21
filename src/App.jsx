@@ -1235,6 +1235,15 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .titip-ok b{display:block;margin-bottom:8px}
 .titip-ok p{color:#33363c;line-height:1.6;font-size:14.5px;margin-bottom:14px}
 .titip-mine{max-width:720px;margin-top:38px}
+/* panduan foto (read-only) di form titip jual */
+.titip-guide{margin:6px 0 22px}
+.titip-guide-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:10px}
+.titip-guide-item{margin:0}
+.titip-guide-item img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;
+  border:1px solid var(--line);pointer-events:none;user-select:none}
+.titip-guide-item figcaption{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin-top:6px}
+@media(min-width:560px){ .titip-guide-grid{grid-template-columns:repeat(3,1fr)} }
 /* detail submission di panel review admin */
 .titip-detail{border:1px solid var(--line);border-top:none;border-radius:0 0 11px 11px;
   padding:14px 16px;margin:-6px 0 10px;background:var(--panel-2)}
@@ -1768,7 +1777,7 @@ function HeroModel({ fallbackPhoto }) {
                 auto-rotate=""
                 auto-rotate-delay="3000"
                 rotation-per-second="15deg"
-                camera-orbit="0deg 82deg 100%"
+                camera-orbit="270deg 82deg 100%"
                 shadow-intensity="1"
                 exposure="1"
                 environment-image="neutral"
@@ -2766,22 +2775,27 @@ function TiltMedia({ children, className = '' }) {
 }
 
 // ---------- Reveal: fade + slide-up halus saat elemen masuk viewport ----------
-function Reveal({ children, className = '', style }) {
+// `once` (default false): perilaku lama = memudar-masuk tiap kali elemen masuk
+// viewport lagi (dipakai section fitur/lokasi yang memang ingin re-trigger).
+// once=true = muncul SEKALI lalu tetap tampil selamanya — dipakai etalase, di
+// mana kartu yang "hilang lalu muncul lagi" saat scroll naik-turun mengganggu.
+function Reveal({ children, className = '', style, once = false }) {
   const ref = useRef(null)
   const [shown, setShown] = useState(false)
   useEffect(() => {
     const el = ref.current
     if (!el) return
     if (prefersReduced()) { setShown(true); return }
-    // Dulu observer di-disconnect setelah kena sekali → animasi cuma jalan di
-    // kunjungan pertama. Sekarang kelasnya mengikuti isIntersecting, jadi blok
-    // ini memudar-masuk lagi tiap kali digulung balik ke layar.
     const io = new IntersectionObserver(([entry]) => {
-      setShown(entry.isIntersecting)
+      if (once) {
+        if (entry.isIntersecting) { setShown(true); io.disconnect() }
+      } else {
+        setShown(entry.isIntersecting)
+      }
     }, { threshold: 0.16 })
     io.observe(el)
     return () => io.disconnect()
-  }, [])
+  }, [once])
   return (
     <div ref={ref} className={(className + ' reveal' + (shown ? ' shown' : '')).trim()} style={style}>
       {children}
@@ -3149,15 +3163,16 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
   const [shown, setShown] = useState(false)
   const reduced = useRef(false)
 
-  // Muncul berurutan saat kartu masuk layar — dan mengulang tiap kali kartu
-  // masuk lagi (observer tidak lagi di-disconnect setelah kena sekali).
+  // Muncul SEKALI saat kartu pertama masuk layar, lalu TETAP tampil (Tugas 2).
+  // Dulu shown mengikuti isIntersecting sehingga kartu memudar-hilang saat
+  // digulung keluar dan muncul lagi saat balik — mengganggu di etalase.
   useEffect(() => {
     reduced.current = prefersReduced()
     const el = wrapRef.current
     if (!el) return
     if (reduced.current) { setShown(true); return }
     const io = new IntersectionObserver((entries) => {
-      for (const en of entries) setShown(en.isIntersecting)
+      if (entries.some((en) => en.isIntersecting)) { setShown(true); io.disconnect() }
     }, { threshold: 0.15 })
     io.observe(el)
     return () => io.disconnect()
@@ -3510,7 +3525,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         </div>
       </section>
 
-      <Reveal> {/* Wrapped the #etalase section */}
+      <Reveal once> {/* etalase: fade-in SEKALI, tak reverse saat scroll (Tugas 2) */}
         <section className="section" id="etalase">
           <div className="container">
             <div className="sec-head">
@@ -4014,6 +4029,11 @@ const TITIP_STATUS_LABEL = {
   pending: 'Menunggu review', approved: 'Tayang di etalase',
   rejected: 'Ditolak', sold: 'Terjual',
 }
+// Label angle untuk panduan foto (dipetakan ke foto-foto contoh unit resmi).
+const PHOTO_GUIDE_LABELS = [
+  'Tampak depan', 'Samping kiri', 'Samping kanan',
+  'Tampak belakang', 'Odometer / KM', 'Kondisi mesin',
+]
 
 function TitipJualView({ session, nav, toast, onLoginClick }) {
   const empty = {
@@ -4029,6 +4049,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
   const [err, setErr] = useState('')
   const [done, setDone] = useState(false)
   const [mine, setMine] = useState(null)        // submission milik user
+  const [guide, setGuide] = useState([])        // foto contoh dari unit resmi
   const fileRef = useRef(null)
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
 
@@ -4040,6 +4061,17 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
       .select('*').eq('seller_id', session.user.id).order('created_at', { ascending: false })
       .then(({ data }) => setMine(data || []))
   }, [session, done])
+
+  // Foto contoh untuk panduan: ambil dari unit resmi yang fotonya PALING lengkap
+  // di etalase. Read-only, murni referensi angle — tidak ikut ter-submit.
+  useEffect(() => {
+    supabase.from('listings').select('photos').eq('status', 'published')
+      .then(({ data }) => {
+        const best = (data || []).map((r) => r.photos).filter((p) => Array.isArray(p) && p.length)
+          .sort((a, b) => b.length - a.length)[0] || []
+        setGuide(best.slice(0, 6))
+      })
+  }, [])
 
   async function handleFiles(picked) {
     const all = Array.from(picked || [])
@@ -4162,6 +4194,25 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                 <textarea id="t-keleng" value={f.kelengkapan} onChange={set('kelengkapan')}
                   placeholder="STNK hidup, BPKB ada, faktur, kunci serep…" /></div>
             </div>
+
+            {/* Panduan foto — contoh dari unit resmi (read-only). Membantu
+                penjual mengambil angle yang konsisten dengan standar etalase. */}
+            {guide.length > 0 && (
+              <div className="titip-guide">
+                <h3 className="titip-sec" style={{ marginBottom: 6 }}>Panduan foto — contoh yang baik</h3>
+                <p className="f-info" style={{ marginTop: 0 }}>Ambil foto motormu dengan angle serupa
+                  contoh di bawah (foto dari unit etalase Motorell) untuk hasil terbaik.</p>
+                <div className="titip-guide-grid">
+                  {guide.map((url, i) => (
+                    <figure key={i} className="titip-guide-item">
+                      <img src={url} alt={'Contoh ' + (PHOTO_GUIDE_LABELS[i] || 'foto')} loading="lazy"
+                        draggable={false} />
+                      <figcaption>Contoh: {PHOTO_GUIDE_LABELS[i] || 'Foto ' + (i + 1)}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <h3 className="titip-sec">Foto motor — {photos.length}/{MAX_PHOTOS} (min {TITIP_MIN_PHOTOS})</h3>
             <div className="photo-strip">

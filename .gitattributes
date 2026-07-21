@@ -4,3 +4,7 @@
 # 3D model binaries — jangan pernah di-normalisasi LF (bisa merusak file)
 *.glb binary
 *.gltf binary
+
+# Aset gambar biner — jangan pernah dinormalisasi LF
+*.png binary
+*.ico binary
