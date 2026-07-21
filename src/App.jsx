@@ -583,7 +583,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    yang tampak hanya modelnya. Di mobile aspect-ratio menahan tingginya; di
    desktop ia MEMANJANG mengisi tinggi kolom teks (lihat align-items:stretch di
    media query) supaya motor punya ruang vertikal sebesar section teks. */
-.hero-embed-frame{position:relative;width:100%;aspect-ratio:4/3;flex:1;min-height:300px}
+.hero-embed-frame{position:relative;width:100%;aspect-ratio:3/2;flex:1;min-height:0}
 /* <model-viewer> ditarget lewat nama tag (menghindari keruwetan class pada
    custom element di React). Latar transparan; cursor:grab menandakan bisa
    diputar (interaktif). --poster-color kosong: matikan poster default supaya
@@ -629,9 +629,11 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-cta .btn-ghost:hover:not(:disabled){background:#fff}
 /* strip spesifikasi tipis ala lembar spek — label mono kecil di atas,
    angka besar di bawah, dipisah whitespace (bukan kotak-kotak card) */
-.spec-rail{display:grid;grid-template-columns:1fr;gap:22px;
-  margin-top:32px;padding-top:24px;border-top:1px solid var(--line-2);max-width:100%}
-.spec-rail span{display:flex;flex-direction:column;gap:9px;font-family:var(--mono);
+/* Mobile: 2×2 (bukan 4 baris menumpuk yang boros ruang & terasa panjang).
+   Di ≥768px kembali sebaris berempat (lihat media query di bawah). */
+.spec-rail{display:grid;grid-template-columns:repeat(2,1fr);gap:20px 18px;
+  margin-top:28px;padding-top:22px;border-top:1px solid var(--line-2);max-width:100%}
+.spec-rail span{display:flex;flex-direction:column;gap:7px;font-family:var(--mono);
   font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .spec-rail b{color:var(--ink);font-size:clamp(19px,5vw,29px);font-weight:750;
   letter-spacing:-.02em;line-height:1;font-family:var(--font);white-space:nowrap}
@@ -640,7 +642,11 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* overflow-x:clip — menahan elemen reveal yang meluncur dari sisi (translateX)
    agar tidak memicu horizontal scroll di HP, tanpa membuat scroll-container
    vertikal (overflow-y tetap visible) */
-.section{padding:clamp(76px,11vw,132px) 0;overflow-x:clip}
+/* Padding vertikal section: di mobile dulu 76px atas+bawah (152px whitespace di
+   antara TIAP section, di halaman yang sangat panjang) — terasa lega berlebihan.
+   Lantai clamp diturunkan ke 52px supaya mobile lebih ringkas & minimalis;
+   tablet/desktop (11vw) tak berubah. */
+.section{padding:clamp(52px,11vw,132px) 0;overflow-x:clip}
 .section.grey{background:var(--bg-2);border-block:1px solid var(--line)}
 .sec-head{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:26px;
   margin-bottom:clamp(30px,4vw,46px)}
