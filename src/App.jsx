@@ -841,6 +841,70 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   background:var(--panel);border-radius:999px;padding:10px 16px;font-size:13px;font-weight:600}
 .et-filter-btn .n{background:var(--accent);color:#fff;font-family:var(--mono);font-size:10px;
   min-width:17px;height:17px;border-radius:999px;display:grid;place-items:center;padding:0 4px}
+/* bar filter+sort di atas kedua galeri (bukan lagi sidebar) */
+.et-bar-top{justify-content:flex-start;margin-bottom:24px}
+
+/* ---------- galeri carousel (Motorell & Titip Jual, IDENTIK) ---------- */
+.gal{margin-bottom:clamp(30px,4vw,44px)}
+.gal-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:15px}
+.gal-title{font-size:clamp(19px,2.6vw,26px);font-weight:730;letter-spacing:-.02em}
+.gal-sub{font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--muted);margin-top:5px}
+.gal-arrows{display:none;gap:8px;flex:none}
+.gal-arrows button{width:38px;height:38px;border-radius:50%;border:1px solid var(--line-2);
+  background:var(--panel);font-size:16px;color:var(--ink);display:grid;place-items:center;
+  transition:border-color .2s,opacity .2s}
+.gal-arrows button:hover:not(:disabled){border-color:var(--ink)}
+.gal-arrows button:disabled{opacity:.3;cursor:not-allowed}
+/* fade tepi-kanan = penanda "masih ada unit lagi, geser" */
+.gal-wrap{position:relative}
+.gal-wrap::after{content:"";position:absolute;top:0;right:0;bottom:14px;width:54px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,var(--bg));opacity:0;transition:opacity .25s;z-index:2}
+.gal-wrap.more::after{opacity:1}
+.gal-rail{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;
+  padding-bottom:14px;scrollbar-width:thin}
+.gal-rail::-webkit-scrollbar{height:6px}
+.gal-rail::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:9px}
+/* Lebar kartu: mobile ~70vw (kecil, terlihat sekilas kartu berikutnya — Tugas 3);
+   ≥768 empat sekaligus; ≥1100 ENAM sekaligus (maks 6 — Tugas 2). Semua unit
+   tetap dirender, sisanya lewat geser. */
+.gal-item{flex:0 0 70vw;max-width:320px;scroll-snap-align:start}
+.gal-item > .card-wrap{width:100%}
+@media(min-width:520px){ .gal-item{flex-basis:46vw;max-width:300px} }
+@media(min-width:768px){
+  .gal-item{flex-basis:calc((100% - 3*16px)/4);max-width:none}
+  .gal-arrows{display:flex}
+}
+@media(min-width:1100px){ .gal-item{flex-basis:calc((100% - 5*16px)/6)} }
+/* Kartu di carousel lebih ringkas agar 6 muat rapi tanpa terasa sesak. */
+.gal-item .card-body{padding:14px 14px 12px;gap:4px}
+.gal-item .card-body h3{font-size:14.5px;line-height:1.25}
+.gal-item .card-meta{font-size:10.5px}
+.gal-item .card-price{font-size:15.5px;margin-top:6px}
+.gal-item .card-go{padding:11px 14px;font-size:12px}
+.gal-item .card-wa{font-size:11px;padding:7px 10px;gap:5px;right:10px;bottom:10px}
+.gal-item .card-wa svg{width:13px;height:13px}
+.gal-item .badge{font-size:9.5px;padding:5px 8px;bottom:10px;left:10px}
+.gal-item .card-status{font-size:9px;padding:4px 8px;top:10px;left:10px}
+/* Di ≥768px kartu jadi sempit (4/6 sekaligus): tombol chat jadi IKON saja
+   supaya tak bertabrakan dengan badge grade. Di mobile (kartu ~70vw lebar)
+   teks penuh "Chat Sekarang" tetap ditampilkan. CTA chat lengkap juga ada di
+   halaman detail. */
+@media(min-width:768px){
+  .gal-item .card-wa{padding:9px;gap:0}
+  .gal-item .card-wa span{display:none}
+  .gal-item .card-wa svg{width:16px;height:16px}
+}
+
+/* CTA di antara kedua galeri */
+.gal-cta{display:flex;flex-direction:column;gap:15px;align-items:flex-start;
+  border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,34px);
+  background:var(--panel-2);margin:clamp(6px,1.5vw,16px) 0 clamp(30px,4vw,44px)}
+.gal-cta h3{font-size:clamp(20px,3vw,30px);font-weight:730;letter-spacing:-.02em;margin-bottom:7px}
+.gal-cta p{color:var(--muted);font-size:14.5px;line-height:1.55;max-width:520px}
+@media(min-width:640px){
+  .gal-cta{flex-direction:row;align-items:center;justify-content:space-between;gap:28px}
+  .gal-cta .btn{flex:none}
+}
 
 /* ---------- panel filter ---------- */
 .fp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
@@ -1634,18 +1698,12 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .lb-close{width:42px;height:42px}
   .photo-strip .rm{width:22px;height:22px;font-size:11px}
   .thumbs button{width:78px;height:60px}
-  /* Desktop: panel filter jadi sidebar kiri yang ikut menggulung bersama grid.
-     Tombol "Filter" & drawer hanya untuk mobile — di sini keduanya mati total. */
-  .et-layout{grid-template-columns:230px 1fr}
-  .et-side{display:block}
-  .et-filter-btn{display:none}
-  .fp-backdrop,.fp-drawer{display:none}
-  .fp{position:sticky;top:88px}
+  /* Filter kini tombol → drawer di SEMUA ukuran (dua galeri carousel tak cocok
+     dengan sidebar). Drawer tetap aktif di desktop. */
   .rcard{width:172px}
 }
 @media(min-width:1021px){
   .grid{grid-template-columns:repeat(3,1fr)}
-  .et-layout{grid-template-columns:260px 1fr}
   .feature{grid-template-columns:1fr 1fr;gap:clamp(44px,6vw,88px)}
   .feature.flip .feature-media-slide{order:2}
   .detail-grid{grid-template-columns:7fr 5fr}
@@ -3398,6 +3456,62 @@ function RecentlyViewed({ listings, recent, nav, onClear }) {
   )
 }
 
+// ---------- Galeri carousel (geser horizontal, ~6 tampil) ----------
+// Dipakai IDENTIK untuk Galeri Motorell & Galeri Titip Jual (Tugas 4). Semua
+// unit dirender; hanya ~6 yang terlihat sekaligus, sisanya lewat geser/scroll.
+// Bukan membatasi query — pembatasan murni tampilan (lebar kartu + overflow-x).
+function Gallery({ title, subtitle, units, nav, searchActive, loading = false }) {
+  const railRef = useRef(null)
+  const [edges, setEdges] = useState({ l: false, r: false })
+  // Update penanda tepi (untuk fade & mengaktifkan panah) saat scroll/resize.
+  const sync = useCallback(() => {
+    const el = railRef.current
+    if (!el) return
+    const max = el.scrollWidth - el.clientWidth
+    setEdges({ l: el.scrollLeft > 4, r: el.scrollLeft < max - 4 })
+  }, [])
+  useEffect(() => {
+    const el = railRef.current
+    if (!el) return
+    sync()
+    el.addEventListener('scroll', sync, { passive: true })
+    window.addEventListener('resize', sync)
+    return () => { el.removeEventListener('scroll', sync); window.removeEventListener('resize', sync) }
+  }, [sync, units.length, loading])
+  const nudge = (dir) => {
+    const el = railRef.current
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="gal">
+      <div className="gal-head">
+        <div>
+          <h3 className="gal-title">{title}</h3>
+          <p className="gal-sub">{subtitle}{!loading && units.length > 0 ? ' · ' + units.length + ' unit' : ''}</p>
+        </div>
+        {!loading && units.length > 0 && (
+          <div className="gal-arrows">
+            <button type="button" aria-label="Geser kiri" disabled={!edges.l} onClick={() => nudge(-1)}>←</button>
+            <button type="button" aria-label="Geser kanan" disabled={!edges.r} onClick={() => nudge(1)}>→</button>
+          </div>
+        )}
+      </div>
+      <div className={'gal-wrap' + (edges.r ? ' more' : '')}>
+        <div className="gal-rail" ref={railRef}>
+          {loading
+            ? Array.from({ length: SKELETON_COUNT }, (_, i) => (
+                <div className="gal-item" key={i}><SkeletonCard /></div>))
+            : units.map((l, i) => (
+                <div className="gal-item" key={l.id}>
+                  <Card l={l} nav={nav} index={i} highlight={searchActive} />
+                </div>))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Intro hero diputar SEKALI per page-load. Flag skala-modul (bukan state) supaya
 // tidak terulang saat HomeView di-mount ulang oleh navigasi SPA (buka unit lalu
 // kembali) — hanya reset saat halaman benar-benar di-refresh (modul dimuat lagi).
@@ -3416,12 +3530,17 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
   // Jadi "di bawah 30 juta" + centang Honda menyaring keduanya sekaligus.
   // Section fitur & foto intro tetap pakai `listings` penuh, bukan `shown`.
   const facets = useMemo(() => facetsOf(listings), [listings])
-  const shown = useMemo(() => {
-    const base = listings.filter((l) =>
-      (!searchActive || matchListing(l, filters)) && matchPanel(l, panel))
-    console.info('[FILTER] Menampilkan ' + base.length + ' dari ' + listings.length + ' unit — urut: ' + sort)
-    return sortListings(base, sort)
+  // Etalase kini DUA galeri terpisah (resmi & titip jual). Filter (search +
+  // panel) + sort berlaku SAMA ke keduanya; tak ada lagi urutan prioritas
+  // gabungan — masing-masing galeri diurut sendiri di dalam section-nya.
+  const { officialShown, titipShown } = useMemo(() => {
+    const match = (l) => (!searchActive || matchListing(l, filters)) && matchPanel(l, panel)
+    const off = sortListings(listings.filter((l) => !isTitip(l) && match(l)), sort)
+    const tj = sortListings(listings.filter((l) => isTitip(l) && match(l)), sort)
+    console.info('[ETALASE] resmi ' + off.length + ' · titip jual ' + tj.length + ' — urut: ' + sort)
+    return { officialShown: off, titipShown: tj }
   }, [listings, searchActive, filters, panel, sort])
+  const officialAll = useMemo(() => listings.filter((l) => !isTitip(l)), [listings])
 
   const [drawer, setDrawer] = useState(false)
   const nFilter = (panel.brands.length + panel.grades.length +
@@ -3525,86 +3644,84 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         </div>
       </section>
 
-      <Reveal once> {/* etalase: fade-in SEKALI, tak reverse saat scroll (Tugas 2) */}
+      <Reveal once> {/* etalase: fade-in SEKALI, tak reverse saat scroll */}
         <section className="section" id="etalase">
           <div className="container">
             <div className="sec-head">
               <div>
-                <p className="kicker">Galeri</p>
-                <h2>Galeri Motorell.</h2>
+                <p className="kicker">Etalase</p>
+                <h2>Etalase Motorell Market.</h2>
               </div>
-              <p className="aside">Klik unit untuk melihat foto, catatan kurasi, memilih paket perlindungan,
-                dan mengunci unit dengan DP (book melalui Contact Kami)</p>
+              <p className="aside">Klik unit untuk foto & detail lengkap. Geser tiap galeri
+                untuk melihat lebih banyak unit.</p>
             </div>
-            {/* Riwayat butuh data unit, jadi section ini menunggu fetch selesai;
-                komponennya sendiri menghilang kalau riwayatnya kosong. */}
             {!loading && !error && (
               <RecentlyViewed listings={listings} recent={recent} nav={nav} onClear={clearRecent} />
             )}
 
-            <div className={'et-layout' + (showTools ? '' : ' bare')}>
-              {/* Panel & hitungan hanya berarti kalau datanya sudah ada. Saat
-                  memuat/gagal, facet-nya kosong sehingga slider harga jatuh ke
-                  rentang karangan (Rp 0–100 jt) dan hitungannya berbunyi
-                  "0 dari 0 unit" — dua-duanya membohongi pembaca. Sembunyikan
-                  sampai ada unit sungguhan untuk disaring.
-                  Sidebar ini juga mati di bawah 768px lewat CSS; di sana
-                  tombol Filter + drawer yang mengambil alih. */}
-              {showTools && (
-                <aside className="et-side">
-                  <FilterPanel facets={facets} panel={panel} setPanel={setPanel} onReset={resetPanel} />
-                </aside>
-              )}
-
-              <div>
-                {showTools && (
-                  <div className="et-bar">
-                    <p className="et-count">
-                      Menampilkan <b>{shown.length}</b> dari <b>{listings.length}</b> unit
-                    </p>
-                    <div className="et-tools">
-                      <button className="et-filter-btn" onClick={() => setDrawer(true)}>
-                        Filter{nFilter > 0 && <span className="n">{nFilter}</span>}
-                      </button>
-                      <select className="et-sort" value={sort} aria-label="Urutkan unit"
-                        onChange={(e) => setSort(e.target.value)}>
-                        {SORT_OPTIONS.map((o) => (
-                          <option key={o.code} value={o.code}>{o.label}</option>))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid">
-                  {loading && Array.from({ length: SKELETON_COUNT }, (_, i) => (
-                    <SkeletonCard key={i} />))}
-                  {!loading && error && (
-                    <div className="empty">
-                      Gagal memuat etalase — {error}.<br />
-                      <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
-                        onClick={() => window.location.reload()}>Coba lagi</button>
-                    </div>)}
-                  {!loading && !error && listings.length === 0 && (
-                    <div className="empty">Etalase sedang kosong, unit baru sedang dalam proses kurasi.</div>)}
-                  {/* Nol hasil punya dua sebab berbeda — teks pencarian, atau
-                      filter panel. Menyebut "pencarian" saja saat yang menyaring
-                      sebenarnya panel akan membingungkan. */}
-                  {!loading && !error && listings.length > 0 && shown.length === 0 && (
-                    <div className="empty">
-                      {searchActive
-                        ? <>Tidak ada unit yang cocok dengan pencarian "{query.trim()}".</>
-                        : <>Tidak ada unit yang cocok dengan filter ini.</>}
-                      {panelActive(panel) && (
-                        <><br />
-                          <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
-                            onClick={resetPanel}>Reset filter</button>
-                        </>)}
-                    </div>)}
-                  {!loading && !error && shown.map((l, i) => (
-                    <Card key={l.id} l={l} nav={nav} index={i} highlight={searchActive} />))}
+            {/* Filter + sort — berlaku ke KEDUA galeri di bawah. */}
+            {showTools && (
+              <div className="et-bar et-bar-top">
+                <div className="et-tools">
+                  <button className="et-filter-btn always" onClick={() => setDrawer(true)}>
+                    Filter{nFilter > 0 && <span className="n">{nFilter}</span>}
+                  </button>
+                  <select className="et-sort" value={sort} aria-label="Urutkan unit"
+                    onChange={(e) => setSort(e.target.value)}>
+                    {SORT_OPTIONS.map((o) => (
+                      <option key={o.code} value={o.code}>{o.label}</option>))}
+                  </select>
                 </div>
               </div>
+            )}
+
+            {/* ---- Galeri Motorell (unit resmi) ---- */}
+            {error ? (
+              <div className="empty">
+                Gagal memuat etalase — {error}.<br />
+                <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+                  onClick={() => window.location.reload()}>Coba lagi</button>
+              </div>
+            ) : loading ? (
+              <Gallery title="Galeri Motorell" subtitle="Unit resmi hasil kurasi tim Motorell"
+                units={[]} nav={nav} loading />
+            ) : officialAll.length === 0 ? (
+              <div className="empty">Etalase sedang kosong, unit baru sedang dalam proses kurasi.</div>
+            ) : officialShown.length === 0 ? (
+              <div className="gal">
+                <div className="gal-head"><div>
+                  <h3 className="gal-title">Galeri Motorell</h3>
+                  <p className="gal-sub">Unit resmi hasil kurasi tim Motorell</p>
+                </div></div>
+                <div className="empty">
+                  {searchActive
+                    ? <>Tidak ada unit resmi yang cocok dengan pencarian "{query.trim()}".</>
+                    : <>Tidak ada unit resmi yang cocok dengan filter ini.</>}
+                  {panelActive(panel) && (
+                    <><br /><button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+                      onClick={resetPanel}>Reset filter</button></>)}
+                </div>
+              </div>
+            ) : (
+              <Gallery title="Galeri Motorell" subtitle="Unit resmi hasil kurasi tim Motorell"
+                units={officialShown} nav={nav} searchActive={searchActive} />
+            )}
+
+            {/* ---- CTA di ANTARA kedua galeri ---- */}
+            <div className="gal-cta">
+              <div>
+                <h3>Punya Motor yang Ingin Dijual?</h3>
+                <p>Titip motor Anda di Motorell Market dan jangkau lebih banyak pembeli.</p>
+              </div>
+              <a className="btn btn-accent" href="#/titip-jual"
+                onClick={(e) => { e.preventDefault(); nav('#/titip-jual') }}>Titip Jual Sekarang</a>
             </div>
+
+            {/* ---- Galeri Titip Jual (approved & lolos filter) ---- */}
+            {!loading && !error && titipShown.length > 0 && (
+              <Gallery title="Galeri Titip Jual" subtitle="Unit titipan dari masyarakat"
+                units={titipShown} nav={nav} searchActive={searchActive} />
+            )}
 
             <AnimatePresence>
               {drawer && (
@@ -3623,25 +3740,6 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 </>
               )}
             </AnimatePresence>
-          </div>
-        </section>
-      </Reveal>
-
-      {/* Band Titip Jual — entry point utama (terutama untuk mobile, di mana
-          tombol nav "Titip Jual" disembunyikan). */}
-      <Reveal>
-        <section className="section titip-band">
-          <div className="container">
-            <div className="titip-band-in">
-              <div>
-                <p className="kicker">Titip Jual</p>
-                <h2>Punya motor? Titip jual di Motorell.</h2>
-                <p className="aside">Unitmu direview tim kami, lalu tayang di etalase yang sama.
-                  Calon pembeli menghubungimu langsung.</p>
-              </div>
-              <a className="btn btn-accent" href="#/titip-jual"
-                onClick={(e) => { e.preventDefault(); nav('#/titip-jual') }}>Titip jual motor Anda</a>
-            </div>
           </div>
         </section>
       </Reveal>
