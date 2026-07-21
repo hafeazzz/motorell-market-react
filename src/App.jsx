@@ -368,13 +368,17 @@ const SORT_OPTIONS = [
   { code: 'price_desc', label: 'Harga: Tinggi ke Rendah' },
 ]
 
-const EMPTY_PANEL = { priceMin: null, priceMax: null, brands: [], year: null, grades: [] }
+// showTitip: true (default) = tampilkan unit titip jual juga; false = HANYA unit
+// resmi Motorell. Disimpan di panel supaya ikut URL & tombol reset.
+const EMPTY_PANEL = { priceMin: null, priceMax: null, brands: [], year: null, grades: [], showTitip: true }
 
 const panelActive = (p) =>
-  Boolean(p && (p.priceMin || p.priceMax || p.brands.length || p.year || p.grades.length))
+  Boolean(p && (p.priceMin || p.priceMax || p.brands.length || p.year || p.grades.length ||
+    p.showTitip === false))
 
 function matchPanel(l, p) {
   if (!p) return true
+  if (p.showTitip === false && isTitip(l)) return false
   if (p.priceMin && Number(l.price) < p.priceMin) return false
   if (p.priceMax && Number(l.price) > p.priceMax) return false
   if (p.year && Number(l.year) !== Number(p.year)) return false
@@ -384,13 +388,21 @@ function matchPanel(l, p) {
 }
 
 // sort() memutasi array — listings berasal dari state, jadi selalu salin dulu.
+//
+// PRIORITAS SUMBER (wajib): unit resmi Motorell (source 'official') SELALU di
+// atas unit titip jual, di SEMUA mode sort. Caranya: rank sumber jadi kunci
+// urut PRIMER; pilihan sort user (harga/terbaru) hanya berlaku SEBAGAI kunci
+// SEKUNDER di dalam masing-masing grup. Jadi "harga termurah" pun tidak pernah
+// menyelipkan unit titip jual di atas unit resmi.
 function sortListings(arr, sort) {
-  const out = [...arr]
-  if (sort === 'price_asc') return out.sort((a, b) => Number(a.price) - Number(b.price))
-  if (sort === 'price_desc') return out.sort((a, b) => Number(b.price) - Number(a.price))
-  // 'newest': published_at bisa null (unit lama), jatuh balik ke created_at.
-  return out.sort((a, b) =>
-    new Date(b.published_at || b.created_at || 0) - new Date(a.published_at || a.created_at || 0))
+  const rank = (l) => (isTitip(l) ? 1 : 0)
+  const within = (a, b) => {
+    if (sort === 'price_asc') return Number(a.price) - Number(b.price)
+    if (sort === 'price_desc') return Number(b.price) - Number(a.price)
+    // 'newest': published_at bisa null (unit lama), jatuh balik ke created_at.
+    return new Date(b.published_at || b.created_at || 0) - new Date(a.published_at || a.created_at || 0)
+  }
+  return [...arr].sort((a, b) => (rank(a) - rank(b)) || within(a, b))
 }
 
 // Rentang harga & daftar merek diturunkan DARI DATA, bukan dikunci konstanta —
@@ -438,6 +450,58 @@ function unitWaLink(l) {
     'Apakah unit ini masih tersedia?'
   return 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' + encodeURIComponent(msg)
 }
+
+// ---------- Titip Jual (marketplace unit dari masyarakat) ----------
+// Unit titip jual disimpan di tabel terpisah (titip_jual_units) dengan skema
+// berbahasa Indonesia. Di frontend ia DINORMALKAN ke bentuk yang sama dengan
+// unit resmi supaya Card/DetailView/filter bisa memakainya tanpa cabang di mana-
+// mana — pembedanya cukup field `source`.
+const KONDISI_OPTS = ['Istimewa', 'Bagus', 'Standar']
+// "Kondisi" titip jual dipetakan ke huruf grade HANYA untuk keperluan filter
+// "Kondisi" bersama; kartunya TIDAK menampilkan badge grade emas/perak (itu
+// menandakan kurasi resmi Motorell), melainkan badge "TITIP JUAL".
+const KONDISI_TO_GRADE = { Istimewa: 'S', Bagus: 'A', Standar: 'B' }
+
+// 08xxxx / +62xxxx / 62xxxx → 62xxxx (format wa.me). Non-digit dibuang.
+function waPhone(raw) {
+  let d = String(raw || '').replace(/[^\d]/g, '')
+  if (d.startsWith('0')) d = '62' + d.slice(1)
+  else if (d.startsWith('62')) { /* sudah benar */ }
+  else if (d.startsWith('8')) d = '62' + d
+  return d
+}
+
+// Baris titip_jual_units → bentuk "unit" yang dikenal Card/DetailView.
+function normalizeTitip(row) {
+  const title = [row.merek, row.model, row.tahun].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+  return {
+    ...row,
+    source: 'titip_jual',
+    // slug sintetis stabil untuk routing #/unit/<slug>; deep-link mem-parse 'tj-'.
+    slug: 'tj-' + String(row.id).slice(0, 8),
+    title,
+    brand: row.merek, model: row.model, year: row.tahun,
+    mileage_km: row.odometer || 0, color: row.warna || null,
+    price: Number(row.harga_diinginkan) || 0,
+    grade: KONDISI_TO_GRADE[row.kondisi] || null,
+    description: row.deskripsi || null,
+    photos: Array.isArray(row.photos) ? row.photos : [],
+    // published_at dipakai sort 'newest'; pakai waktu approve bila ada.
+    published_at: row.reviewed_at || row.created_at,
+  }
+}
+
+// Kontak pembeli titip jual mengarah LANGSUNG ke nomor penjual (keputusan
+// bisnis), bukan CS Motorell.
+function sellerWaLink(l) {
+  const msg = 'Halo, saya lihat motor Anda di Motorell Market:\n' +
+    '🏍️ ' + l.title + '\n' +
+    '💰 ' + rupiah(l.price) + '\n\n' +
+    'Apakah masih tersedia?'
+  return 'https://wa.me/' + waPhone(l.seller_phone) + '?text=' + encodeURIComponent(msg)
+}
+
+const isTitip = (l) => l && l.source === 'titip_jual'
 
 // ---------- Unit terakhir dilihat (localStorage) ----------
 const RECENT_KEY = 'recently_viewed'
@@ -701,6 +765,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .badge.g-b{background:linear-gradient(135deg,#e2e2e2 0%,#c0c0c0 46%,#a8a8a8 100%);
   border-color:rgba(118,118,122,.45);color:#232327;
   box-shadow:0 2px 7px rgba(90,90,94,.3),inset 0 1px 1px rgba(255,255,255,.6)}
+/* Badge "TITIP JUAL" — netral & datar (bukan metalik seperti grade), supaya
+   jelas beda dari unit kurasi resmi Motorell. */
+.badge.badge-titip{background:rgba(20,22,28,.9);backdrop-filter:blur(6px);
+  border-color:rgba(255,255,255,.18);color:#fff;letter-spacing:.1em}
 /* kilau lembut yang menyapu pelan di badge S (shine) dan A (shimmer) */
 .badge.g-s::after,.badge.g-a::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(115deg,transparent 32%,rgba(255,255,255,.6) 47%,transparent 62%);
@@ -1032,6 +1100,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   border-radius:9px;border:1px solid var(--line-2)}
 .stnote.warn{color:var(--warn);border-color:rgba(184,121,27,.32);background:rgba(184,121,27,.05)}
 .stnote.dim{color:var(--muted)}
+.stnote.titip-note{font-family:var(--font);font-size:13px;line-height:1.55;color:#33363c;
+  background:var(--panel-2);border-color:var(--line-2)}
+.stnote.titip-note b{color:var(--ink)}
 
 /* ---------- modal ---------- */
 .overlay{position:fixed;inset:0;z-index:90;background:rgba(20,20,24,.42);
@@ -1143,10 +1214,46 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .a-price{font-size:15px;font-weight:750}
 .st{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.06em;
   padding:5px 11px;border-radius:999px;border:1px solid var(--line-2)}
-.st.published{color:var(--ok);border-color:rgba(31,157,85,.32);background:rgba(31,157,85,.06)}
-.st.booked{color:var(--warn);border-color:rgba(184,121,27,.32);background:rgba(184,121,27,.06)}
+.st.published,.st.approved{color:var(--ok);border-color:rgba(31,157,85,.32);background:rgba(31,157,85,.06)}
+.st.booked,.st.pending{color:var(--warn);border-color:rgba(184,121,27,.32);background:rgba(184,121,27,.06)}
 .st.sold{color:var(--dim)}
 .st.draft{color:var(--muted)}
+.st.rejected{color:#c62828;border-color:rgba(198,40,40,.32);background:rgba(198,40,40,.06)}
+
+/* ---------- halaman Titip Jual ---------- */
+.titip{padding:clamp(96px,12vw,132px) 0 clamp(56px,8vw,90px)}
+.titip-h1{font-size:clamp(28px,5vw,46px);font-weight:750;letter-spacing:-.025em;margin:12px 0 12px}
+.titip-lead{color:var(--muted);max-width:600px;line-height:1.62;margin-bottom:30px}
+.titip-sec{font-size:13px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);margin:28px 0 14px}
+.titip-form{max-width:720px}
+.titip-gate{max-width:520px;border:1px solid var(--line);border-radius:14px;padding:22px 24px;
+  background:var(--panel-2)}
+.titip-gate p{color:#33363c;line-height:1.6;margin-bottom:16px}
+.titip-ok{max-width:600px;border:1px solid var(--ok);background:rgba(31,157,85,.07);
+  border-radius:14px;padding:20px 22px;margin-bottom:28px}
+.titip-ok b{display:block;margin-bottom:8px}
+.titip-ok p{color:#33363c;line-height:1.6;font-size:14.5px;margin-bottom:14px}
+.titip-mine{max-width:720px;margin-top:38px}
+/* detail submission di panel review admin */
+.titip-detail{border:1px solid var(--line);border-top:none;border-radius:0 0 11px 11px;
+  padding:14px 16px;margin:-6px 0 10px;background:var(--panel-2)}
+.titip-detail-photos{display:flex;gap:8px;overflow-x:auto;margin-bottom:12px}
+.titip-detail-photos img{width:104px;height:78px;object-fit:cover;border-radius:8px;flex:none}
+.titip-detail dl{display:flex;flex-direction:column;gap:7px}
+.titip-detail dl > div{display:flex;gap:10px;font-size:13.5px}
+.titip-detail dt{flex:none;width:96px;color:var(--muted)}
+.titip-detail dd{color:#33363c}
+/* band CTA titip jual di homepage */
+.titip-band{padding:clamp(40px,6vw,72px) 0}
+.titip-band-in{display:flex;flex-direction:column;gap:20px;align-items:flex-start;
+  border:1px solid var(--line);border-radius:16px;padding:clamp(24px,4vw,40px);
+  background:var(--panel-2)}
+.titip-band-in h2{font-size:clamp(22px,3.2vw,34px);font-weight:740;letter-spacing:-.02em;margin:10px 0 8px}
+.titip-band-in .aside{max-width:520px;font-size:14.5px;color:var(--muted);line-height:1.55}
+@media(min-width:768px){
+  .titip-band-in{flex-direction:row;align-items:center;justify-content:space-between;gap:32px}
+}
 .a-actions{display:flex;gap:7px;flex-wrap:wrap}
 /* ---------- parser caption Instagram ---------- */
 /* ---------- tata letak form unit: foto | caption+field ---------- */
@@ -1254,6 +1361,9 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .foot-base{flex-direction:column;align-items:flex-start;gap:14px}
   .foot-brand{text-align:left}
 }
+/* Nav penuh di layar sempit — tombol "Titip Jual" disembunyikan dari nav supaya
+   tak meluber; discoverability mobile ditangani band CTA di homepage. */
+@media(max-width:720px){ .nav-titip{display:none} }
 .toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,16px);z-index:120;
   background:var(--ink);color:#fff;font-size:13.5px;font-weight:500;padding:12px 20px;
   border-radius:999px;opacity:0;pointer-events:none;transition:.3s;max-width:88vw;
@@ -2388,6 +2498,125 @@ function StaffPanel({ profile, toast }) {
   )
 }
 
+// ---------- Review Titip Jual (khusus admin) ----------
+const TITIP_FILTERS = [
+  { code: 'pending', label: 'Perlu review' },
+  { code: 'approved', label: 'Disetujui' },
+  { code: 'rejected', label: 'Ditolak' },
+]
+
+function TitipReview({ profile, toast, nav }) {
+  const [tab, setTab] = useState('pending')
+  const [rows, setRows] = useState(null)
+  const [err, setErr] = useState('')
+  const [busyId, setBusyId] = useState(null)
+  const [openId, setOpenId] = useState(null)   // baris yang detail-nya dibuka
+
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.from('titip_jual_units')
+      .select('*').order('created_at', { ascending: false })
+    if (error) { setErr(error.message); setRows([]); return }
+    setErr(''); setRows(data || [])
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  async function review(row, status) {
+    let rejection_reason = null
+    if (status === 'rejected') {
+      rejection_reason = window.prompt('Alasan penolakan (wajib, akan terlihat penjual):', '')
+      if (!rejection_reason || !rejection_reason.trim()) { toast('Reject dibatalkan — alasan wajib diisi'); return }
+    }
+    setBusyId(row.id)
+    const { error } = await supabase.from('titip_jual_units').update({
+      status, reviewed_by: profile.id, reviewed_at: new Date().toISOString(),
+      rejection_reason,
+    }).eq('id', row.id)
+    setBusyId(null)
+    if (error) { toast('Gagal: ' + error.message); return }
+    toast(status === 'approved' ? 'Unit titip jual disetujui & tayang' : 'Submission ditolak')
+    load()
+  }
+
+  const shown = (rows || []).filter((r) => r.status === tab)
+
+  return (
+    <div>
+      <div className="a-tabs" style={{ marginTop: 4 }}>
+        {TITIP_FILTERS.map((t) => {
+          const n = (rows || []).filter((r) => r.status === t.code).length
+          return (
+            <button key={t.code} type="button" className={tab === t.code ? 'on' : ''}
+              onClick={() => setTab(t.code)}>{t.label}{n ? ' (' + n + ')' : ''}</button>
+          )
+        })}
+      </div>
+
+      {rows === null && !err && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
+      {err && (
+        <div className="empty" style={{ textAlign: 'left' }}>
+          Tidak bisa memuat titip jual: <span className="mono">{err}</span><br />
+          Kemungkinan tabel <span className="mono">titip_jual_units</span> belum dibuat — jalankan
+          migrasi <span className="mono">0003_titip_jual.sql</span>.
+        </div>
+      )}
+      {rows && !err && shown.length === 0 && (
+        <div className="empty">Tidak ada submission {TITIP_FILTERS.find((t) => t.code === tab).label.toLowerCase()}.</div>
+      )}
+      {shown.length > 0 && (
+        <div className="a-list">
+          {shown.map((r) => (
+            <div key={r.id}>
+              <div className="a-row">
+                <div className="a-thumb">
+                  {Array.isArray(r.photos) && r.photos[0]
+                    ? <img src={r.photos[0]} alt="" />
+                    : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
+                </div>
+                <div className="a-info">
+                  <b>{[r.merek, r.model, r.tahun].filter(Boolean).join(' ')}</b>
+                  <span>{rupiah(r.harga_diinginkan)} · {r.kondisi || '—'} · {(r.photos || []).length} foto · {r.seller_name} ({r.seller_phone})</span>
+                </div>
+                <div className="a-actions">
+                  <button className="btn btn-ghost btn-sm"
+                    onClick={() => setOpenId(openId === r.id ? null : r.id)}>
+                    {openId === r.id ? 'Tutup' : 'Detail'}</button>
+                  {r.status === 'pending' && (
+                    <>
+                      <button className="btn btn-sm btn-dark" disabled={busyId === r.id}
+                        onClick={() => review(r, 'approved')}>Approve</button>
+                      <button className="btn btn-sm btn-ghost" disabled={busyId === r.id}
+                        onClick={() => review(r, 'rejected')}>Reject</button>
+                    </>
+                  )}
+                  {r.status === 'approved' && (
+                    <button className="btn btn-ghost btn-sm"
+                      onClick={() => nav('#/unit/tj-' + String(r.id).slice(0, 8))}>Lihat →</button>
+                  )}
+                </div>
+              </div>
+              {openId === r.id && (
+                <div className="titip-detail">
+                  <div className="titip-detail-photos">
+                    {(r.photos || []).map((u, i) => <img key={i} src={u} alt={'Foto ' + (i + 1)} />)}
+                  </div>
+                  <dl>
+                    <div><dt>Penjual</dt><dd>{r.seller_name} · {r.seller_phone}{r.seller_email ? ' · ' + r.seller_email : ''}</dd></div>
+                    <div><dt>Kendaraan</dt><dd>{[r.merek, r.model, r.tahun].join(' ')} · {r.odometer ? fmt(r.odometer) + ' km' : 'km —'} · {r.warna || '—'} · plat {r.plat_nomor || '—'}</dd></div>
+                    <div><dt>Harga</dt><dd>{rupiah(r.harga_diinginkan)} · kondisi {r.kondisi || '—'}</dd></div>
+                    {r.deskripsi && <div><dt>Deskripsi</dt><dd>{r.deskripsi}</dd></div>}
+                    {r.kelengkapan && <div><dt>Kelengkapan</dt><dd>{r.kelengkapan}</dd></div>}
+                    {r.rejection_reason && <div><dt>Alasan tolak</dt><dd>{r.rejection_reason}</dd></div>}
+                  </dl>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---------- Panel admin ----------
 function AdminPanel({ profile, toast, nav }) {
   const [view, setView] = useState('units') // units | staff
@@ -2433,12 +2662,15 @@ function AdminPanel({ profile, toast, nav }) {
           <div className="a-tabs">
             <button type="button" className={view === 'units' ? 'on' : ''} onClick={() => setView('units')}>Etalase</button>
             <button type="button" className={view === 'staff' ? 'on' : ''} onClick={() => setView('staff')}>Staf</button>
+            <button type="button" className={view === 'titip' ? 'on' : ''} onClick={() => setView('titip')}>Titip Jual</button>
             <button type="button" className={view === 'archive' ? 'on' : ''} onClick={() => setView('archive')}>Arsip</button>
             <button type="button" className={view === 'mod_parts' ? 'on' : ''} onClick={() => setView('mod_parts')}>Part Modifikasi</button>
           </div>
         )}
 
         {view === 'staff' && canManageStaff && <StaffPanel profile={profile} toast={toast} />}
+
+        {view === 'titip' && canManageStaff && <TitipReview profile={profile} toast={toast} nav={nav} />}
 
         {view === 'archive' && <ArchiveTab />}
 
@@ -2623,11 +2855,17 @@ const DETAIL_TABS = [
 ]
 
 function DetailTabs({ listing }) {
+  const titip = isTitip(listing)
+  // Titip jual bukan hasil kurasi Motorell → tanpa tab "Catatan kurasi" &
+  // "Perlindungan"; sebagai gantinya tab "Kelengkapan" (dokumen dari penjual).
+  const tabs = titip
+    ? [{ id: 'unit', label: 'Tentang unit' }, { id: 'kelengkapan', label: 'Kelengkapan' }]
+    : DETAIL_TABS
   const [tab, setTab] = useState('unit')
   return (
     <div className="dtabs-wrap">
       <div className="dtabs" role="tablist" aria-label="Detail unit">
-        {DETAIL_TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t.id} type="button" role="tab" aria-selected={tab === t.id}
             className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
             {t.label}
@@ -2649,24 +2887,35 @@ function DetailTabs({ listing }) {
           role="tabpanel" aria-hidden={tab !== 'unit'}>
           <p>{listing.description || 'Deskripsi lengkap menyusul. Hubungi Motorell untuk detail unit ini.'}</p>
         </div>
-        <div className={'dtab-panel' + (tab === 'kurasi' ? ' on' : '')}
-          role="tabpanel" aria-hidden={tab !== 'kurasi'}>
-          {listing.known_issues
-            ? <p>{listing.known_issues}</p>
-            : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>}
-        </div>
-        <div className={'dtab-panel' + (tab === 'garansi' ? ' on' : '')}
-          role="tabpanel" aria-hidden={tab !== 'garansi'}>
-          <ul className="dtab-warranty">
-            {warrantiesForGrade(listing.grade).map((w) => (
-              <li key={w.code}>
-                <b>{w.name}</b>
-                <span>{w.desc}</span>
-                <em>{w.price ? '+' + rupiah(w.price) : 'Termasuk'}</em>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {titip ? (
+          <div className={'dtab-panel' + (tab === 'kelengkapan' ? ' on' : '')}
+            role="tabpanel" aria-hidden={tab !== 'kelengkapan'}>
+            {listing.kelengkapan
+              ? <p>{listing.kelengkapan}</p>
+              : <p className="muted">Kelengkapan dokumen belum dicantumkan penjual — tanyakan langsung via WhatsApp.</p>}
+          </div>
+        ) : (
+          <>
+            <div className={'dtab-panel' + (tab === 'kurasi' ? ' on' : '')}
+              role="tabpanel" aria-hidden={tab !== 'kurasi'}>
+              {listing.known_issues
+                ? <p>{listing.known_issues}</p>
+                : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>}
+            </div>
+            <div className={'dtab-panel' + (tab === 'garansi' ? ' on' : '')}
+              role="tabpanel" aria-hidden={tab !== 'garansi'}>
+              <ul className="dtab-warranty">
+                {warrantiesForGrade(listing.grade).map((w) => (
+                  <li key={w.code}>
+                    <b>{w.name}</b>
+                    <span>{w.desc}</span>
+                    <em>{w.price ? '+' + rupiah(w.price) : 'Termasuk'}</em>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -2697,6 +2946,9 @@ function DetailView({ listing, nav, onBook }) {
   const avail = warrantiesForGrade(listing.grade)
   const warranty = avail.find((w) => w.code === wcode) || avail[0]
   const canBook = listing.status === 'published'
+  // Titip jual: TANPA paket perlindungan / DP / booking (eksklusif unit resmi).
+  // Panel kanan & CTA-nya diganti total (kontak langsung ke penjual).
+  const titip = isTitip(listing)
 
   const totalModPartsPrice = selectedModParts.reduce((sum, part) => sum + Number(part.price), 0);
   const totalPrice = Number(listing.price) + totalModPartsPrice;
@@ -2709,17 +2961,48 @@ function DetailView({ listing, nav, onBook }) {
           <div>
             <MotorCarousel photos={photos} title={listing.title} selectedModParts={selectedModParts} />
             <DetailTabs listing={listing} />
-            <div className="unit-terms">
-              <h4>Ketentuan unit ini</h4>
-              <ul>
-                <li><span className="dot">•</span><span>DP flat <b>{rupiah(DP_FIXED)}</b> untuk mengunci unit — bukan persentase harga.</span></li>
-                <li><span className="dot">•</span><span>Masa hold <b>3 hari</b> untuk pelunasan dan serah terima; lewat itu unit bisa ditawarkan kembali.</span></li>
-                <li><span className="dot">•</span><span>DP <b>direfund 100%</b> bila kondisi unit tidak sesuai deskripsi yang tercantum.</span></li>
-                <li><span className="dot">•</span><span>Selengkapnya di <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>halaman kebijakan</a>.</span></li>
-              </ul>
-            </div>
+            {/* Ketentuan DP/hold/refund hanya berlaku untuk unit resmi Motorell. */}
+            {!titip && (
+              <div className="unit-terms">
+                <h4>Ketentuan unit ini</h4>
+                <ul>
+                  <li><span className="dot">•</span><span>DP flat <b>{rupiah(DP_FIXED)}</b> untuk mengunci unit — bukan persentase harga.</span></li>
+                  <li><span className="dot">•</span><span>Masa hold <b>3 hari</b> untuk pelunasan dan serah terima; lewat itu unit bisa ditawarkan kembali.</span></li>
+                  <li><span className="dot">•</span><span>DP <b>direfund 100%</b> bila kondisi unit tidak sesuai deskripsi yang tercantum.</span></li>
+                  <li><span className="dot">•</span><span>Selengkapnya di <a href="#/kebijakan" onClick={(e) => { e.preventDefault(); nav('#/kebijakan') }}>halaman kebijakan</a>.</span></li>
+                </ul>
+              </div>
+            )}
           </div>
 
+          {titip ? (
+          <aside className="panel">
+            <p className="stnote titip-note">
+              <b>Unit Titip Jual dari Masyarakat.</b> Unit ini dititipkan penjual perorangan,
+              belum melalui kurasi & garansi resmi Motorell. Cek kondisi langsung sebelum
+              bertransaksi. Motorell hanya menjembatani.
+            </p>
+            <h1>{listing.title}</h1>
+            <p className="price">{rupiah(listing.price)}</p>
+            <div className="specs">
+              <div><small>Tahun</small><b>{listing.year}</b></div>
+              <div><small>Odometer</small><b>{listing.mileage_km ? fmt(listing.mileage_km) + ' km' : '—'}</b></div>
+              <div><small>Kondisi</small><b>{listing.kondisi || '—'}</b></div>
+              <div><small>Warna</small><b>{listing.color || '—'}</b></div>
+            </div>
+            <div className="rows">
+              <div className="row"><span>Penjual</span><b>{listing.seller_name || '—'}</b></div>
+              {listing.plat_nomor && <div className="row"><span>Plat</span><b>{listing.plat_nomor}</b></div>}
+            </div>
+            <div className="panel-cta has-sticky-twin">
+              <a className="btn btn-accent btn-full" href={sellerWaLink(listing)}
+                target="_blank" rel="noopener noreferrer">Chat penjual via WhatsApp</a>
+              <p className="fine">Kamu akan terhubung langsung ke nomor WhatsApp penjual untuk
+                tanya kondisi, nego harga, dan atur COD. Transaksi di luar tanggung jawab Motorell —
+                selalu cek fisik & dokumen unit sebelum membayar.</p>
+            </div>
+          </aside>
+          ) : (
           <aside className="panel">
             {listing.status === 'booked' && (
               <p className="stnote warn">Unit sedang di-booking pembeli lain. Bila DP-nya batal, unit tayang kembali otomatis.</p>)}
@@ -2823,8 +3106,18 @@ function DetailView({ listing, nav, onBook }) {
                   'deskripsi yang tercantum.'}</p>
             </div>
           </aside>
+          )}
         </div>
-        {canBook && (
+        {titip ? (
+          <div className="sticky-cta">
+            <div className="sticky-cta-price">
+              <span>Harga penjual</span>
+              <b>{rupiah(listing.price)}</b>
+            </div>
+            <a className="btn btn-accent" href={sellerWaLink(listing)}
+              target="_blank" rel="noopener noreferrer">Chat penjual</a>
+          </div>
+        ) : canBook && (
           <div className="sticky-cta">
             <div className="sticky-cta-price">
               <span>Harga unit</span>
@@ -2902,13 +3195,17 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
         <div className="card-media">
           {photos[0] ? <FadeImg src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
           {badge && <span className={'card-status ' + badge.cls}>{badge.label}</span>}
-          <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>
-          {/* Chat cepat: melompati halaman detail, pesannya sudah berisi unit ini.
-              stopPropagation tidak perlu (bukan anak .card-hit), tapi tetap harus
-              di atasnya secara z-index — lihat catatan di .card-wa. */}
-          <a className="card-wa" href={unitWaLink(l)} target="_blank" rel="noopener noreferrer"
+          {/* Unit titip jual: badge "TITIP JUAL" (transparansi ke pembeli), TANPA
+              badge grade emas/perak — grade menandakan kurasi resmi Motorell yang
+              titip jual belum lalui. Unit resmi: badge grade seperti biasa. */}
+          {isTitip(l)
+            ? <span className="badge badge-titip">TITIP JUAL</span>
+            : <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>}
+          {/* Chat cepat. Titip jual → langsung ke penjual; resmi → CS Motorell. */}
+          <a className="card-wa" href={isTitip(l) ? sellerWaLink(l) : unitWaLink(l)}
+            target="_blank" rel="noopener noreferrer"
             aria-label={'Chat WhatsApp tentang ' + l.title}
-            onClick={() => console.info('[WA] Chat unit →', l.title)}>
+            onClick={() => console.info('[WA] Chat unit →', l.title, isTitip(l) ? '(penjual)' : '(CS)')}>
             <WaIcon /><span>Chat Sekarang</span>
           </a>
         </div>
@@ -3038,6 +3335,16 @@ function FilterPanel({ facets, panel, setPanel, onReset }) {
           </div>
         </div>
       )}
+
+      {/* Toggle sumber: default tampilkan semua; matikan untuk HANYA unit resmi. */}
+      <div className="fp-grp">
+        <label>Sumber unit</label>
+        <label className="fp-opt">
+          <input type="checkbox" checked={panel.showTitip !== false}
+            onChange={(e) => setPanel((p) => ({ ...p, showTitip: e.target.checked }))} />
+          Tampilkan unit Titip Jual
+        </label>
+      </div>
     </div>
   )
 }
@@ -3301,6 +3608,25 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 </>
               )}
             </AnimatePresence>
+          </div>
+        </section>
+      </Reveal>
+
+      {/* Band Titip Jual — entry point utama (terutama untuk mobile, di mana
+          tombol nav "Titip Jual" disembunyikan). */}
+      <Reveal>
+        <section className="section titip-band">
+          <div className="container">
+            <div className="titip-band-in">
+              <div>
+                <p className="kicker">Titip Jual</p>
+                <h2>Punya motor? Titip jual di Motorell.</h2>
+                <p className="aside">Unitmu direview tim kami, lalu tayang di etalase yang sama.
+                  Calon pembeli menghubungimu langsung.</p>
+              </div>
+              <a className="btn btn-accent" href="#/titip-jual"
+                onClick={(e) => { e.preventDefault(); nav('#/titip-jual') }}>Titip jual motor Anda</a>
+            </div>
           </div>
         </section>
       </Reveal>
@@ -3591,6 +3917,7 @@ function panelFromParams(sp) {
     priceMin: num('min'), priceMax: num('max'),
     brands: list('brand'), year: num('year'),
     grades: list('grade').map((g) => g.toUpperCase()),
+    showTitip: sp.get('titip') !== '0',   // ?titip=0 → sembunyikan titip jual
   }
 }
 
@@ -3611,6 +3938,7 @@ function stateToQuery(q, panel, sort) {
   if (panel.brands.length) sp.set('brand', panel.brands.join(','))
   if (panel.year) sp.set('year', String(panel.year))
   if (panel.grades.length) sp.set('grade', panel.grades.join(','))
+  if (panel.showTitip === false) sp.set('titip', '0')
   if (sort !== 'newest') sp.set('sort', sort)
   return sp.toString()
 }
@@ -3627,6 +3955,7 @@ function parseHash() {
   if (unit) return { name: 'unit', slug: decodeURIComponent(unit[1]), q, panel, sort }
   if (path === '#/admin') return { name: 'admin', q, panel, sort }
   if (path === '#/kebijakan') return { name: 'kebijakan', q, panel, sort }
+  if (path === '#/titip-jual') return { name: 'titip', q, panel, sort }
   return { name: 'home', q, panel, sort }
 }
 
@@ -3678,6 +4007,222 @@ function KebijakanView({ nav }) {
   )
 }
 
+// ---------- Halaman Titip Jual (route #/titip-jual) — form publik ----------
+const TITIP_MIN_PHOTOS = 3
+const TITIP_MAX_MB = 5      // batas per foto (mentah) — lebih ketat dari admin
+const TITIP_STATUS_LABEL = {
+  pending: 'Menunggu review', approved: 'Tayang di etalase',
+  rejected: 'Ditolak', sold: 'Terjual',
+}
+
+function TitipJualView({ session, nav, toast, onLoginClick }) {
+  const empty = {
+    seller_name: '', seller_phone: '', seller_email: '',
+    merek: '', model: '', tahun: new Date().getFullYear(), odometer: '',
+    warna: '', plat_nomor: '', kondisi: 'Bagus', harga_diinginkan: '',
+    deskripsi: '', kelengkapan: '',
+  }
+  const [f, setF] = useState(empty)
+  const [photos, setPhotos] = useState([])      // URL hasil upload
+  const [prog, setProg] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [done, setDone] = useState(false)
+  const [mine, setMine] = useState(null)        // submission milik user
+  const fileRef = useRef(null)
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+
+  // Prefill nama dari profil bila ada; muat submission milik sendiri.
+  useEffect(() => {
+    if (!session) { setMine(null); return }
+    setF((p) => ({ ...p, seller_email: p.seller_email || session.user.email || '' }))
+    supabase.from('titip_jual_units')
+      .select('*').eq('seller_id', session.user.id).order('created_at', { ascending: false })
+      .then(({ data }) => setMine(data || []))
+  }, [session, done])
+
+  async function handleFiles(picked) {
+    const all = Array.from(picked || [])
+    if (!all.length) return
+    setErr('')
+    const skipped = []
+    const ok = all.filter((x) => {
+      if (!ALLOWED_PHOTO_TYPES.includes(x.type)) { skipped.push(x.name + ' (format)'); return false }
+      if (x.size > TITIP_MAX_MB * 1024 * 1024) { skipped.push(x.name + ' (' + (x.size / 1048576).toFixed(1) + 'MB)'); return false }
+      return true
+    })
+    const remaining = MAX_PHOTOS - photos.length
+    const batch = ok.slice(0, remaining)
+    if (skipped.length) setErr('Dilewati (hanya JPG/PNG/WEBP maks ' + TITIP_MAX_MB + 'MB): ' + skipped.join(', '))
+    if (!batch.length) return
+    setProg({ done: 0, total: batch.length })
+    for (let i = 0; i < batch.length; i++) {
+      try {
+        const blob = await compressImage(batch[i])
+        const path = session.user.id + '/' + Date.now() + '-' + i + '.jpg'
+        const { error } = await supabase.storage.from('titip-jual-photos')
+          .upload(path, blob, { contentType: 'image/jpeg' })
+        if (error) throw error
+        const { data } = supabase.storage.from('titip-jual-photos').getPublicUrl(path)
+        setPhotos((p) => [...p, data.publicUrl])
+        setProg({ done: i + 1, total: batch.length })
+      } catch (ex) {
+        setErr('Gagal mengunggah foto: ' + (ex.message || 'coba lagi')); break
+      }
+    }
+    setProg(null)
+  }
+
+  async function submit(e) {
+    e.preventDefault()
+    setErr('')
+    if (!f.seller_name.trim() || !f.seller_phone.trim()) { setErr('Nama dan No. HP penjual wajib diisi.'); return }
+    if (!f.merek.trim() || !f.model.trim() || !f.harga_diinginkan) { setErr('Merek, model, dan harga wajib diisi.'); return }
+    if (photos.length < TITIP_MIN_PHOTOS) { setErr('Unggah minimal ' + TITIP_MIN_PHOTOS + ' foto motor.'); return }
+    setBusy(true)
+    const payload = {
+      seller_id: session.user.id,
+      seller_name: f.seller_name.trim(), seller_phone: f.seller_phone.trim(),
+      seller_email: f.seller_email.trim() || null,
+      merek: f.merek.trim(), model: f.model.trim(), tahun: Number(f.tahun),
+      odometer: Number(f.odometer) || null, warna: f.warna.trim() || null,
+      plat_nomor: f.plat_nomor.trim() || null, kondisi: f.kondisi,
+      harga_diinginkan: Number(f.harga_diinginkan), deskripsi: f.deskripsi.trim() || null,
+      kelengkapan: f.kelengkapan.trim() || null, photos, status: 'pending',
+    }
+    const { error } = await supabase.from('titip_jual_units').insert(payload)
+    setBusy(false)
+    if (error) { setErr('Gagal mengirim: ' + error.message); return }
+    console.info('[TITIP] Submission terkirim — status pending')
+    setF(empty); setPhotos([]); setDone(true)
+    window.scrollTo(0, 0)
+  }
+
+  return (
+    <section className="titip">
+      <div className="container">
+        <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
+        <p className="kicker">Titip Jual</p>
+        <h1 className="titip-h1">Titip Jual Motor Anda</h1>
+        <p className="titip-lead">Punya motor yang ingin dijual? Titipkan ke Motorell Market.
+          Tim kami review dulu (1–2 hari kerja) sebelum unitmu tayang di etalase. Setelah tayang,
+          calon pembeli menghubungimu langsung lewat WhatsApp.</p>
+
+        {done && (
+          <div className="titip-ok">
+            <b>Terima kasih! Motor Anda akan direview oleh tim Motorell dalam 1–2 hari kerja.</b>
+            <p>Kami akan menghubungi Anda melalui WhatsApp/telepon yang didaftarkan. Status bisa kamu
+              cek di bagian "Submission saya" di bawah.</p>
+            <button className="btn btn-ghost btn-sm" onClick={() => setDone(false)}>Titip motor lain</button>
+          </div>
+        )}
+
+        {!session ? (
+          <div className="titip-gate">
+            <p>Masuk atau daftar dulu untuk menitipkan motor — supaya kamu bisa memantau status
+              submission-mu.</p>
+            <button className="btn btn-accent" onClick={onLoginClick}>Masuk / Daftar</button>
+          </div>
+        ) : !done && (
+          <form className="titip-form" onSubmit={submit}>
+            <h3 className="titip-sec">Data penjual</h3>
+            <div className="f-grid">
+              <div className="field"><label htmlFor="t-name">Nama penjual *</label>
+                <input id="t-name" value={f.seller_name} onChange={set('seller_name')} required /></div>
+              <div className="field"><label htmlFor="t-phone">No. HP / WhatsApp *</label>
+                <input id="t-phone" value={f.seller_phone} onChange={set('seller_phone')} placeholder="08xxxxxxxxxx" required /></div>
+              <div className="field full"><label htmlFor="t-email">Email (opsional)</label>
+                <input id="t-email" type="email" value={f.seller_email} onChange={set('seller_email')} /></div>
+            </div>
+
+            <h3 className="titip-sec">Data kendaraan</h3>
+            <div className="f-grid">
+              <div className="field"><label htmlFor="t-merek">Merek *</label>
+                <input id="t-merek" value={f.merek} onChange={set('merek')} placeholder="Honda" required /></div>
+              <div className="field"><label htmlFor="t-model">Model *</label>
+                <input id="t-model" value={f.model} onChange={set('model')} placeholder="Vario 160" required /></div>
+              <div className="field"><label htmlFor="t-tahun">Tahun *</label>
+                <input id="t-tahun" type="number" min="1980" max="2030" value={f.tahun} onChange={set('tahun')} required /></div>
+              <div className="field"><label htmlFor="t-odo">Odometer (km)</label>
+                <input id="t-odo" type="number" min="0" value={f.odometer} onChange={set('odometer')} /></div>
+              <div className="field"><label htmlFor="t-warna">Warna</label>
+                <input id="t-warna" value={f.warna} onChange={set('warna')} /></div>
+              <div className="field"><label htmlFor="t-plat">Plat nomor</label>
+                <input id="t-plat" value={f.plat_nomor} onChange={set('plat_nomor')} placeholder="B 1234 XYZ" /></div>
+              <div className="field"><label htmlFor="t-kondisi">Kondisi</label>
+                <select id="t-kondisi" value={f.kondisi} onChange={set('kondisi')}>
+                  {KONDISI_OPTS.map((k) => <option key={k} value={k}>{k}</option>)}
+                </select></div>
+              <div className="field"><label htmlFor="t-harga">Harga diinginkan (Rp) *</label>
+                <input id="t-harga" type="number" min="0" value={f.harga_diinginkan} onChange={set('harga_diinginkan')} placeholder="18000000" required /></div>
+              <div className="field full"><label htmlFor="t-desc">Deskripsi tambahan</label>
+                <textarea id="t-desc" value={f.deskripsi} onChange={set('deskripsi')}
+                  placeholder="Riwayat servis, alasan jual, kondisi mesin…" /></div>
+              <div className="field full"><label htmlFor="t-keleng">Kelengkapan dokumen</label>
+                <textarea id="t-keleng" value={f.kelengkapan} onChange={set('kelengkapan')}
+                  placeholder="STNK hidup, BPKB ada, faktur, kunci serep…" /></div>
+            </div>
+
+            <h3 className="titip-sec">Foto motor — {photos.length}/{MAX_PHOTOS} (min {TITIP_MIN_PHOTOS})</h3>
+            <div className="photo-strip">
+              {photos.map((url, i) => (
+                <div className="ph" key={url}>
+                  <img src={url} alt={'Foto ' + (i + 1)} />
+                  <button type="button" className="rm" aria-label="Hapus foto"
+                    onClick={() => setPhotos((p) => p.filter((u) => u !== url))}>✕</button>
+                </div>
+              ))}
+              {photos.length < MAX_PHOTOS && (
+                <button type="button" className="up-tile" aria-label="Tambah foto"
+                  onClick={() => fileRef.current && fileRef.current.click()}>＋</button>
+              )}
+            </div>
+            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+              multiple hidden
+              onChange={(e) => { const fl = Array.from(e.target.files || []); e.target.value = ''; handleFiles(fl) }} />
+            {prog && (
+              <div className="up-prog">
+                <div className="up-bar"><span style={{ width: (prog.done / prog.total * 100) + '%' }} /></div>
+                <span className="mono">{prog.done}/{prog.total}</span>
+              </div>
+            )}
+            <p className="f-info">Foto jelas dari beberapa sudut membantu unitmu cepat laku. JPG/PNG/WEBP, maks {TITIP_MAX_MB}MB per foto.</p>
+
+            {err && <p className="f-err">{err}</p>}
+            <div className="m-actions">
+              <button className="btn btn-accent btn-full" disabled={busy || Boolean(prog)}>
+                {busy ? 'Mengirim…' : 'Kirim untuk direview'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {session && Array.isArray(mine) && mine.length > 0 && (
+          <div className="titip-mine">
+            <h3 className="titip-sec">Submission saya</h3>
+            <div className="a-list">
+              {mine.map((m) => (
+                <div className="a-row" key={m.id}>
+                  <div className="a-thumb">
+                    {Array.isArray(m.photos) && m.photos[0]
+                      ? <img src={m.photos[0]} alt="" />
+                      : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
+                  </div>
+                  <div className="a-info">
+                    <b>{[m.merek, m.model, m.tahun].filter(Boolean).join(' ')}</b>
+                    <span>{rupiah(m.harga_diinginkan)}{m.status === 'rejected' && m.rejection_reason ? ' · Alasan: ' + m.rejection_reason : ''}</span>
+                  </div>
+                  <span className={'st ' + m.status}>{TITIP_STATUS_LABEL[m.status] || m.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export default function App() {
   const [route, setRoute] = useState(parseHash)
   const [session, setSession] = useState(null)
@@ -3687,7 +4232,8 @@ export default function App() {
   // hanya boleh muncul SETELAH ini true — kalau tidak, admin sah pun sempat
   // melihat kedipan "kamu bukan staf" sebelum role-nya termuat.
   const [profileReady, setProfileReady] = useState(false)
-  const [listings, setListings] = useState([])
+  const [listings, setListings] = useState([])       // unit resmi (tabel listings)
+  const [titipUnits, setTitipUnits] = useState([])   // titip jual 'approved', dinormalkan
   const [deepUnit, setDeepUnit] = useState(null)
   const [authOpen, setAuthOpen] = useState(false)
   const [booking, setBooking] = useState(null) // {listing, warranty}
@@ -3756,11 +4302,16 @@ export default function App() {
   // diam 300ms — hanya yang terakhir ini dipakai untuk memfilter, menulis URL,
   // dan auto-scroll, supaya tidak ada kerja berat per ketukan tombol.
   const dQuery = useDebounced(query, 300)
+  // Gabungan yang ditampilkan di etalase: resmi + titip jual ('approved').
+  // sortListings menjamin resmi selalu di atas. Dipakai untuk grid, pencarian,
+  // dan lookup detail supaya semuanya konsisten dari satu sumber.
+  const units = useMemo(() => [...listings, ...titipUnits], [listings, titipUnits])
+
   const filters = useMemo(() => parseQuery(dQuery), [dQuery])
   const active = hasFilter(filters)
   const results = useMemo(
-    () => (active ? listings.filter((l) => matchListing(l, filters)) : []),
-    [active, listings, filters])
+    () => (active ? units.filter((l) => matchListing(l, filters)) : []),
+    [active, units, filters])
 
   // Hash diperbarui tanpa menambah entri history per ketukan (replaceState tidak
   // memicu hashchange) — link tetap bisa di-share, tapi tombol back tidak
@@ -3876,6 +4427,7 @@ export default function App() {
       if (error) throw new Error(error.message)
       setListings((data || []).map((l) => ({
         ...l,
+        source: 'official',
         mod_parts: (l.mod_parts_relation || []).map((mpr) => mpr.mod_parts).filter(Boolean),
       })))
       setListError('')
@@ -3905,14 +4457,42 @@ export default function App() {
     return () => { supabase.removeChannel(ch) }
   }, [loadListings])
 
+  // Titip jual yang sudah 'approved' → dinormalkan & digabung ke etalase (di
+  // bawah unit resmi, lihat sortListings). Kegagalannya SENGAJA tidak
+  // memblok etalase resmi: kalau tabelnya belum ada (migrasi 0003 belum jalan)
+  // atau error, titip jual kosong tapi etalase resmi tetap tampil.
+  const loadTitipJual = useCallback(async () => {
+    if (!supabase) return
+    const { data, error } = await supabase.from('titip_jual_units')
+      .select('*').eq('status', 'approved').order('reviewed_at', { ascending: false })
+    if (error) {
+      console.warn('[TITIP] Gagal memuat titip jual (etalase resmi tetap jalan):', error.message)
+      setTitipUnits([])
+      return
+    }
+    setTitipUnits((data || []).map(normalizeTitip))
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) return
+    loadTitipJual()
+    const ch = supabase.channel('public-titip')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'titip_jual_units' }, loadTitipJual)
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [loadTitipJual])
+
   // deep link ke unit yang tidak ada di etalase publik (booked/sold/draft)
   useEffect(() => {
     if (route.name !== 'unit' || !supabase) { setDeepUnit(null); return }
-    const found = listings.find((l) => l.slug === route.slug)
+    const found = units.find((l) => l.slug === route.slug)
     if (found) { setDeepUnit(null); return }
+    // Slug titip jual ('tj-...') yang tak ada di units berarti belum approved →
+    // tidak boleh dibuka publik; jangan query tabel listings untuknya.
+    if (String(route.slug).startsWith('tj-')) { setDeepUnit(null); return }
     supabase.from('listings').select('*').eq('slug', route.slug).maybeSingle()
-      .then(({ data }) => setDeepUnit(data))
-  }, [route, listings])
+      .then(({ data }) => setDeepUnit(data ? { ...data, source: 'official' } : null))
+  }, [route, units])
 
   // lanjutkan booking otomatis setelah login
   useEffect(() => {
@@ -3968,7 +4548,7 @@ export default function App() {
   }
 
   const current = route.name === 'unit'
-    ? (listings.find((l) => l.slug === route.slug) || deepUnit)
+    ? (units.find((l) => l.slug === route.slug) || deepUnit)
     : null
 
   return (
@@ -3997,6 +4577,9 @@ export default function App() {
           <div className="nav-actions">
             {isStaff && route.name !== 'admin' && (
               <button className="btn btn-quiet btn-sm" onClick={() => nav('#/admin')}>Panel admin</button>)}
+            {route.name !== 'titip' && (
+              <button className="btn btn-ghost btn-sm nav-titip" onClick={() => nav('#/titip-jual')}
+                title="Titip jual motor Anda di Motorell">Titip Jual</button>)}
             <button className="btn btn-ghost btn-sm nav-loc" onClick={goLokasi} title="Lokasi showroom Motorell">
               <svg className="nav-loc-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -4019,7 +4602,7 @@ export default function App() {
 
       <main>
         {route.name === 'home' && (
-          <HomeView listings={listings} nav={nav}
+          <HomeView listings={units} nav={nav}
             query={dQuery} filters={filters} searchActive={active}
             loading={listLoading} error={listError}
             panel={panel} setPanel={setPanel} resetPanel={resetPanel}
@@ -4027,6 +4610,10 @@ export default function App() {
             recent={recent} clearRecent={clearRecent} />)}
 
         {route.name === 'kebijakan' && <KebijakanView nav={nav} />}
+
+        {route.name === 'titip' && (
+          <TitipJualView session={session} nav={nav} toast={toast}
+            onLoginClick={() => setAuthOpen(true)} />)}
 
         {route.name === 'unit' && (current
           ? <DetailView listing={current} nav={nav} onBook={requestBooking} />
