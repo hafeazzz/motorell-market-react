@@ -257,6 +257,19 @@ function useCountdown(expiresAt) {
 const prefersReduced = () =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// Reaktif terhadap breakpoint: true bila `query` cocok, ikut berubah saat resize.
+function useMediaQuery(query) {
+  const [match, setMatch] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const on = () => setMatch(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [query])
+  return match
+}
+
 // Foto yang muncul dengan fade halus begitu selesai dimuat
 function FadeImg({ className = '', ...props }) {
   const [ok, setOk] = useState(false)
@@ -982,16 +995,26 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* Panel filter inline (mobile toggle) — aliran normal, scroll unified. */
 .pg-filter{margin-bottom:18px;animation:pgFilterIn .22s ease}
 @keyframes pgFilterIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
-/* Grid responsif: 1 kolom → 2 (≥640) → 3 (≥1024). 6/hal = 3×2 di desktop. */
-.pg-grid{display:grid;grid-template-columns:1fr;gap:16px}
-@media(min-width:640px){ .pg-grid{grid-template-columns:repeat(2,1fr)} }
-@media(min-width:1024px){
-  .pg-grid{grid-template-columns:repeat(3,1fr);gap:18px}
-  /* Kartu menyempit (3 kolom + sidebar ~200px): tombol WA jadi IKON saja supaya
-     tidak bertabrakan dengan badge (mis. "TITIP JUAL" yang lebar). */
-  .pg-grid .card-wa{padding:9px;gap:0}
-  .pg-grid .card-wa span{display:none}
-  .pg-grid .card-wa svg{width:16px;height:16px}
+/* Grid: 2 kolom (mobile → 2×2 = 4/hal) → 3 kolom (≥768 → 3×2 = 6/hal). */
+.pg-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(min-width:768px){ .pg-grid{grid-template-columns:repeat(3,1fr);gap:18px} }
+/* Tombol WA di kartu grid = IKON saja (kartu grid selalu ringkas) → tak pernah
+   bertabrakan dengan badge (mis. "TITIP JUAL" yang lebar) di kartu sempit. */
+.pg-grid .card-wa{padding:9px;gap:0}
+.pg-grid .card-wa span{display:none}
+.pg-grid .card-wa svg{width:16px;height:16px}
+/* Kartu lebih RINGKAS di mobile (2 kolom, lebar ~160px) agar 2×2 muat rapi. */
+@media(max-width:767px){
+  .pg-grid{gap:10px}
+  .pg-grid .card-body{padding:12px 12px 11px;gap:3px}
+  .pg-grid .card-body h3{font-size:13.5px;line-height:1.25}
+  .pg-grid .card-meta{font-size:10px}
+  .pg-grid .card-price{font-size:14.5px;margin-top:5px}
+  .pg-grid .card-go{padding:11px 12px;font-size:11.5px}
+  .pg-grid .card-wa{padding:8px}
+  .pg-grid .card-wa svg{width:14px;height:14px}
+  .pg-grid .badge{font-size:9px;padding:5px 8px;bottom:9px;left:9px;letter-spacing:.06em}
+  .pg-grid .card-status{font-size:8.5px;padding:4px 7px;top:9px;left:9px}
 }
 
 /* ---------- kontrol paginasi (tombol SELALU tampil) ---------- */
@@ -3789,8 +3812,10 @@ function Pagination({ page, total, onGo, onEdge }) {
 // (mobile), urutan, pencarian, dan PAGINASI (6/halaman, tombol SELALU tampil).
 // State LOKAL: filter Motorell tidak menyentuh Titip Jual. Ubah filter/urut/cari →
 // balik ke halaman 1; halaman menyusut → dijepit otomatis.
-function PagedGallery({ title, subtitle, units, nav, perPage = 6, loading = false }) {
+function PagedGallery({ title, subtitle, units, nav, loading = false }) {
   const ref = useRef(null)
+  // Mobile (<768px): 4 unit/hal (grid 2×2). Desktop: 6 unit/hal (grid 3×2).
+  const perPage = useMediaQuery('(max-width: 767px)') ? 4 : 6
   const [panel, setPanel] = useState(EMPTY_PANEL)
   const [sort, setSort] = useState('newest')
   const [q, setQ] = useState('')
@@ -3947,8 +3972,10 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
   const [playIntro] = useState(() => !heroIntroSeen && !prefersReduced())
   useEffect(() => { heroIntroSeen = true }, [])
   // Total durasi ~1.8s (teks 1.1s → model mulai 1.2s, selesai 1.8s) — di bawah 2s.
+  // Teks meluncur DARI KIRI (x -100% → 0). body{overflow-x:hidden} + .hero{overflow:hidden}
+  // menahan luapan horizontal selama elemen di luar layar kiri.
   const heroTextAnim = playIntro
-    ? { initial: { x: '100%', opacity: 0 }, animate: { x: 0, opacity: 1 },
+    ? { initial: { x: '-100%', opacity: 0 }, animate: { x: 0, opacity: 1 },
         transition: { duration: 1.1, ease: 'easeOut' } }
     : {}
   // Fade-in model lebih elegan: opacity + sedikit scale (0.92→1) + naik halus
