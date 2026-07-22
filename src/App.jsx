@@ -683,6 +683,30 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   transition:opacity .5s ease}
 .hero-embed-frame model-viewer:active{cursor:grabbing}
 .hero-embed-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+
+/* ---------- hero ambient: model 3D jadi LATAR di belakang teks ---------- */
+.hero-ambient .hero-bg{position:absolute;inset:0;z-index:1;pointer-events:none}
+.hero-ambient .hero-bg .hero-embed,
+.hero-ambient .hero-bg .hero-embed-frame{position:absolute;inset:0;width:100%;height:100%;
+  aspect-ratio:auto;min-height:0;flex:none;display:block}
+/* Motor ~40% lebih besar + tint biru (hue-rotate dari merah). CATATAN: navy
+   hanya APPROX via CSS filter — GLB-nya bermaterial merah tetap. */
+.hero-ambient .hero-bg model-viewer,
+.hero-ambient .hero-bg .hero-embed-fallback{transform:scale(1.4);transform-origin:center 60%;
+  filter:hue-rotate(200deg) saturate(1.15)}
+/* Selubung: putih pekat di KIRI (area teks) → transparan ke KANAN (motor tampil). */
+.hero-ambient .hero-bg-shade{position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:linear-gradient(100deg, rgba(255,255,255,.9) 0%, rgba(255,255,255,.64) 33%,
+    rgba(255,255,255,.2) 63%, rgba(255,255,255,.03) 100%)}
+.hero-ambient .hero-inner{position:relative;z-index:3}
+.hero-ambient .hero-main{grid-template-columns:1fr}
+@media(max-width:1020px){
+  /* Mobile: teks menutupi lebar penuh di atas model → selubung dari ATAS. */
+  .hero-ambient .hero-bg-shade{background:linear-gradient(180deg, rgba(255,255,255,.88) 0%,
+    rgba(255,255,255,.58) 44%, rgba(255,255,255,.12) 100%)}
+  .hero-ambient .hero-bg model-viewer,
+  .hero-ambient .hero-bg .hero-embed-fallback{transform:scale(1.3);transform-origin:center 72%}
+}
 .hero-embed-ph{position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:13px;font-family:var(--mono);
   font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
@@ -4027,8 +4051,14 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
           </motion.div>
         )}
       </AnimatePresence>
-      <section className="hero">
+      <section className="hero hero-ambient">
         <div className="hero-grid-lines" aria-hidden="true" />
+        {/* Model 3D sebagai LATAR ambient di belakang teks (fade-in halus). */}
+        <motion.div className="hero-bg" aria-hidden="true" {...heroModelAnim}>
+          <HeroModel fallbackPhoto={introPhoto} />
+        </motion.div>
+        {/* Selubung putih: menjaga teks tetap terbaca di atas model. */}
+        <div className="hero-bg-shade" aria-hidden="true" />
         <div className="container hero-inner">
           <div className="hero-main">
             <motion.div className="hero-copy" {...heroTextAnim}>
@@ -4040,9 +4070,6 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
                 <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
               </div>
-            </motion.div>
-            <motion.div className="hero-model-slot" {...heroModelAnim}>
-              <HeroModel fallbackPhoto={introPhoto} />
             </motion.div>
           </div>
           <div className="spec-rail">
