@@ -829,11 +829,21 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* ---------- kepala etalase: hitungan + urutan + tombol filter ---------- */
 .et-layout{display:grid;grid-template-columns:1fr;gap:26px;align-items:start}
 /* Tanpa sidebar (memuat/gagal/kosong), grid memakai lebar penuh — kalau tidak,
-   kolom 230px milik sidebar tetap dipesan dan menyisakan lubang kosong.
+   kolom 250px milik sidebar tetap dipesan dan menyisakan lubang kosong.
    Specificity 0,0,2,0 sengaja mengalahkan .et-layout di @media di bawah. */
 .et-layout.bare{grid-template-columns:1fr}
 /* Mobile-first: sidebar mati, filter dijangkau lewat tombol → drawer. */
 .et-side{display:none}
+/* min-width:0 mencegah kolom konten melar oleh carousel di dalamnya (grid blowout). */
+.et-content{min-width:0}
+/* Desktop ≥1024: hidupkan sidebar filter (sticky) di kiri, konten di kanan.
+   Tombol "Filter" disembunyikan karena panel sudah tampil permanen. */
+@media(min-width:1024px){
+  .et-layout:not(.bare){grid-template-columns:250px minmax(0,1fr);gap:32px}
+  .et-side{display:block;position:sticky;top:90px;align-self:start;
+    max-height:calc(100vh - 110px);overflow-y:auto}
+  .et-content .et-filter-btn{display:none}
+}
 .et-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;
   flex-wrap:wrap;margin-bottom:18px}
 .et-count{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--muted)}
@@ -1063,6 +1073,8 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* ---------- feature editorial (foto besar + teks berselang-seling) ---------- */
 .reveal{opacity:0;transform:translateY(28px);
   transition:opacity .6s ease,transform .7s cubic-bezier(.2,.7,.25,1)}
+/* reveal-down: meluncur turun DARI ATAS (dipakai Galeri Titip Jual). */
+.reveal.reveal-down{transform:translateY(-28px)}
 .reveal.shown{opacity:1;transform:none}
 .feature{display:grid;grid-template-columns:1fr;gap:28px;align-items:center}
 .feature + .feature{margin-top:clamp(64px,10vw,120px)}
@@ -2953,7 +2965,8 @@ function TiltMedia({ children, className = '' }) {
 // viewport lagi (dipakai section fitur/lokasi yang memang ingin re-trigger).
 // once=true = muncul SEKALI lalu tetap tampil selamanya — dipakai etalase, di
 // mana kartu yang "hilang lalu muncul lagi" saat scroll naik-turun mengganggu.
-function Reveal({ children, className = '', style, once = false }) {
+// dir='down' → muncul meluncur dari ATAS (translateY negatif); default dari bawah.
+function Reveal({ children, className = '', style, once = false, dir = 'up' }) {
   const ref = useRef(null)
   const [shown, setShown] = useState(false)
   useEffect(() => {
@@ -2970,8 +2983,9 @@ function Reveal({ children, className = '', style, once = false }) {
     io.observe(el)
     return () => io.disconnect()
   }, [once])
+  const cls = (className + ' reveal' + (dir === 'down' ? ' reveal-down' : '') + (shown ? ' shown' : '')).trim()
   return (
-    <div ref={ref} className={(className + ' reveal' + (shown ? ' shown' : '')).trim()} style={style}>
+    <div ref={ref} className={cls} style={style}>
       {children}
     </div>
   )
@@ -3841,71 +3855,84 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
               <RecentlyViewed listings={listings} recent={recent} nav={nav} onClear={clearRecent} />
             )}
 
-            {/* Filter + sort — berlaku ke KEDUA galeri di bawah. */}
-            {showTools && (
-              <div className="et-bar et-bar-top">
-                <div className="et-tools">
-                  <button className="et-filter-btn always" onClick={() => setDrawer(true)}>
-                    Filter{nFilter > 0 && <span className="n">{nFilter}</span>}
-                  </button>
-                  <select className="et-sort" value={sort} aria-label="Urutkan unit"
-                    onChange={(e) => setSort(e.target.value)}>
-                    {SORT_OPTIONS.map((o) => (
-                      <option key={o.code} value={o.code}>{o.label}</option>))}
-                  </select>
-                </div>
-              </div>
-            )}
+            {/* Desktop (≥1024px): sidebar filter kiri (sticky) + konten kanan.
+                Mobile/tablet: sidebar disembunyikan; filter lewat tombol → drawer. */}
+            <div className={'et-layout' + (showTools ? '' : ' bare')}>
+              {showTools && (
+                <aside className="et-side">
+                  <FilterPanel facets={facets} panel={panel} setPanel={setPanel} onReset={resetPanel} />
+                </aside>
+              )}
+              <div className="et-content">
+                {/* Tombol filter (mobile/tablet) + sort (semua ukuran). */}
+                {showTools && (
+                  <div className="et-bar et-bar-top">
+                    <div className="et-tools">
+                      <button className="et-filter-btn always" onClick={() => setDrawer(true)}>
+                        Filter{nFilter > 0 && <span className="n">{nFilter}</span>}
+                      </button>
+                      <select className="et-sort" value={sort} aria-label="Urutkan unit"
+                        onChange={(e) => setSort(e.target.value)}>
+                        {SORT_OPTIONS.map((o) => (
+                          <option key={o.code} value={o.code}>{o.label}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
-            {/* ---- Galeri Motorell (unit resmi) ---- */}
-            {error ? (
-              <div className="empty">
-                Gagal memuat etalase — {error}.<br />
-                <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
-                  onClick={() => window.location.reload()}>Coba lagi</button>
-              </div>
-            ) : loading ? (
-              <Gallery title="Galeri Motorell" subtitle="Unit resmi hasil kurasi tim Motorell"
-                units={[]} nav={nav} loading />
-            ) : officialAll.length === 0 ? (
-              <div className="empty">Etalase sedang kosong, unit baru sedang dalam proses kurasi.</div>
-            ) : officialShown.length === 0 ? (
-              <div className="gal">
-                <div className="gal-head"><div>
-                  <h3 className="gal-title">Galeri Motorell</h3>
-                  <p className="gal-sub">Unit resmi hasil kurasi tim Motorell</p>
-                </div></div>
-                <div className="empty">
-                  {searchActive
-                    ? <>Tidak ada unit resmi yang cocok dengan pencarian "{query.trim()}".</>
-                    : <>Tidak ada unit resmi yang cocok dengan filter ini.</>}
-                  {panelActive(panel) && (
-                    <><br /><button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
-                      onClick={resetPanel}>Reset filter</button></>)}
-                </div>
-              </div>
-            ) : (
-              <Gallery title="Galeri Motorell" subtitle="Unit resmi hasil kurasi tim Motorell"
-                units={officialShown} nav={nav} searchActive={searchActive}
-                variant="showcase" cap={6} localSearch onSeeAll={() => nav('#/etalase')} />
-            )}
+                {/* ---- Galeri Motorell (unit resmi) ---- */}
+                {error ? (
+                  <div className="empty">
+                    Gagal memuat etalase — {error}.<br />
+                    <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+                      onClick={() => window.location.reload()}>Coba lagi</button>
+                  </div>
+                ) : loading ? (
+                  <Gallery title="Galeri Motorell" subtitle="Unit resmi hasil kurasi tim Motorell"
+                    units={[]} nav={nav} loading />
+                ) : officialAll.length === 0 ? (
+                  <div className="empty">Etalase sedang kosong, unit baru sedang dalam proses kurasi.</div>
+                ) : officialShown.length === 0 ? (
+                  <div className="gal">
+                    <div className="gal-head"><div>
+                      <h3 className="gal-title">Galeri Motorell</h3>
+                      <p className="gal-sub">Unit resmi hasil kurasi tim Motorell</p>
+                    </div></div>
+                    <div className="empty">
+                      {searchActive
+                        ? <>Tidak ada unit resmi yang cocok dengan pencarian "{query.trim()}".</>
+                        : <>Tidak ada unit resmi yang cocok dengan filter ini.</>}
+                      {panelActive(panel) && (
+                        <><br /><button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+                          onClick={resetPanel}>Reset filter</button></>)}
+                    </div>
+                  </div>
+                ) : (
+                  <Gallery title="Galeri Motorell" subtitle="Unit resmi hasil kurasi tim Motorell"
+                    units={officialShown} nav={nav} searchActive={searchActive}
+                    variant="showcase" cap={6} localSearch onSeeAll={() => nav('#/etalase')} />
+                )}
 
-            {/* ---- CTA di ANTARA kedua galeri ---- */}
-            <div className="gal-cta">
-              <div>
-                <h3>Punya Motor yang Ingin Dijual?</h3>
-                <p>Titip motor Anda di Motorell Market dan jangkau lebih banyak pembeli.</p>
+                {/* ---- CTA di ANTARA kedua galeri ---- */}
+                <div className="gal-cta">
+                  <div>
+                    <h3>Punya Motor yang Ingin Dijual?</h3>
+                    <p>Titip motor Anda di Motorell Market dan jangkau lebih banyak pembeli.</p>
+                  </div>
+                  <a className="btn btn-accent" href="#/titip-jual"
+                    onClick={(e) => { e.preventDefault(); nav('#/titip-jual') }}>Titip Jual Sekarang</a>
+                </div>
+
+                {/* ---- Galeri Titip Jual (approved & lolos filter) — reveal dari ATAS ---- */}
+                {!loading && !error && titipShown.length > 0 && (
+                  <Reveal once dir="down">
+                    <Gallery title="Galeri Titip Jual" subtitle="Unit titipan dari masyarakat"
+                      units={titipShown} nav={nav} searchActive={searchActive}
+                      variant="showcase" cap={6} localSearch onSeeAll={() => nav('#/etalase')} />
+                  </Reveal>
+                )}
               </div>
-              <a className="btn btn-accent" href="#/titip-jual"
-                onClick={(e) => { e.preventDefault(); nav('#/titip-jual') }}>Titip Jual Sekarang</a>
             </div>
-
-            {/* ---- Galeri Titip Jual (approved & lolos filter) ---- */}
-            {!loading && !error && titipShown.length > 0 && (
-              <Gallery title="Galeri Titip Jual" subtitle="Unit titipan dari masyarakat"
-                units={titipShown} nav={nav} searchActive={searchActive}
-                variant="showcase" cap={6} localSearch onSeeAll={() => nav('#/etalase')} />
-            )}
 
             <AnimatePresence>
               {drawer && (
@@ -4239,6 +4266,10 @@ function stateToQuery(q, panel, sort) {
   if (sort !== 'newest') sp.set('sort', sort)
   return sp.toString()
 }
+
+// Kunci posisi scroll per-halaman = path hash tanpa query (mis. '#/', '#/etalase',
+// '#/unit/xxx'). Query (?q=…&sort=…) tidak mengubah "halaman"-nya.
+const scrollKey = (hash) => String(hash || '#/').split('?')[0]
 
 function parseHash() {
   const raw = window.location.hash || '#/'
@@ -4811,8 +4842,34 @@ export default function App() {
     }
   }, [active, results.length, route.name, scrollToEtalase])
 
+  // Ingat posisi scroll per-halaman (pola marketplace): buka unit dari etalase
+  // yang sudah tergulir, lalu Back → kembali ke posisi semula, bukan ke atas.
+  // Halaman detail unit selalu mulai dari atas. Simpan di sessionStorage (bersih
+  // tiap sesi browser). Saat hashchange, window belum tergulir — jadi scrollY
+  // masih posisi halaman LAMA dan aman disimpan.
+  const prevHashRef = useRef(scrollKey(window.location.hash))
   useEffect(() => {
-    const onHash = () => { setRoute(parseHash()); window.scrollTo(0, 0) }
+    const SS = 'etalase_scroll'
+    const readMap = () => { try { return JSON.parse(sessionStorage.getItem(SS) || '{}') } catch { return {} } }
+    const writePos = (k, y) => {
+      try { const m = readMap(); m[k] = y; sessionStorage.setItem(SS, JSON.stringify(m)) } catch { /* mode privat */ }
+    }
+    const onHash = () => {
+      writePos(prevHashRef.current, window.scrollY)   // simpan scroll halaman lama
+      const r = parseHash()
+      const nextKey = scrollKey(window.location.hash)
+      prevHashRef.current = nextKey
+      setRoute(r)
+      // behavior:'instant' mengalahkan html{scroll-behavior:smooth} — pindah/pulih
+      // scroll harus LANGSUNG (seperti Back native), bukan animasi meluncur.
+      if (r.name === 'unit') { window.scrollTo({ top: 0, behavior: 'instant' }); return }
+      const saved = readMap()[nextKey]
+      if (saved == null) { window.scrollTo({ top: 0, behavior: 'instant' }); return }
+      // Pulihkan SETELAH konten render (data etalase sudah di state → tinggi siap).
+      const restore = () => window.scrollTo({ top: saved, behavior: 'instant' })
+      requestAnimationFrame(() => requestAnimationFrame(restore))
+      setTimeout(restore, 160)   // jaring pengaman bila render telat
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
