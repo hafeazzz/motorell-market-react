@@ -1217,6 +1217,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .lightbox .g-arrow.next{right:20px}
 .lightbox .g-count{top:auto;bottom:20px;left:50%;right:auto;transform:translateX(-50%);
   background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.25);color:#fff}
+/* Indikator level zoom (muncul saat diperbesar). */
+.lb-zoom{position:absolute;top:16px;left:16px;z-index:4;font-family:var(--mono);font-size:12px;
+  font-weight:700;letter-spacing:.04em;color:#fff;background:rgba(0,0,0,.55);
+  padding:6px 11px;border-radius:999px;pointer-events:none}
 .lb-close{position:absolute;top:16px;right:16px;z-index:4;width:44px;height:44px;border-radius:50%;
   border:1.5px solid rgba(255,255,255,.4);color:#fff;font-size:16px;
   display:flex;align-items:center;justify-content:center;transition:border-color .2s}

@@ -47,17 +47,35 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 const mod = (v, n) => ((v % n) + n) % n
 
 // ---------- Lightbox: perbesar & geser, dibuka HANYA lewat klik foto ----------
+// Gesture pointer NATIVE (tanpa library): 1 jari geser = swipe ganti foto (saat
+// belum di-zoom) / seret pan (saat di-zoom); 2 jari = pinch zoom; dobel-ketuk =
+// toggle zoom; roda mouse / Ctrl+scroll = zoom (desktop). Swipe hanya di lightbox
+// (overlay penuh) — aman dari scroll halaman & tak bentrok dengan pinch, itulah
+// sebabnya carousel inline sengaja tanpa swipe (lihat catatan di MotorCarousel).
+const SWIPE_MIN = 55        // jarak min (px) agar dianggap swipe ganti foto
+const TAP_SLOP = 8          // gerak < ini = ketukan (bukan seret)
+
 function Lightbox({ photos, i, n, title, angle, spinnable, onGo, onClose }) {
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const imgRef = useRef(null)
-  const drag = useRef(null)
+  // Ref cermin state supaya handler pointer selalu baca nilai TERKINI (bukan nilai
+  // tertangkap saat render) selama satu gesture berlangsung.
+  const zoomRef = useRef(1)
+  const panRef = useRef({ x: 0, y: 0 })
+  const pointers = useRef(new Map())   // pointerId → {x,y} yang sedang aktif
+  const gesture = useRef(null)         // { mode, ... } gesture berjalan
+  const lastTap = useRef(0)
   const zoomed = zoom > 1.001
 
-  // ganti frame → reset perbesaran
-  useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [i])
+  const setZ = (z) => { zoomRef.current = z; setZoom(z) }
+  const setP = (p) => { panRef.current = p; setPan(p) }
+  const clampPan = (p, z) => { const lim = 220 * (z - 1); return { x: clamp(p.x, -lim, lim), y: clamp(p.y, -lim, lim) } }
 
-  // keyboard: Esc tutup, ←/→ putar
+  // ganti frame → reset perbesaran & gesture
+  useEffect(() => { setZ(1); setP({ x: 0, y: 0 }); pointers.current.clear(); gesture.current = null }, [i])
+
+  // keyboard: Esc tutup, ←/→ ganti foto
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') onClose()
@@ -68,38 +86,92 @@ function Lightbox({ photos, i, n, title, angle, spinnable, onGo, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, onGo])
 
-  // roda mouse = perbesar. Di sini aman: lightbox overlay penuh, tidak ada
-  // konten halaman yang perlu di-scroll di baliknya.
+  // roda mouse / Ctrl+scroll = perbesar. Aman: overlay penuh, tak ada konten di
+  // baliknya yang perlu di-scroll.
   useEffect(() => {
     const el = imgRef.current
     if (!el) return
     const onWheel = (e) => {
       e.preventDefault()
-      setZoom((z) => {
-        const next = clamp(z - e.deltaY * ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
-        if (next <= ZOOM_MIN + 0.001) setPan({ x: 0, y: 0 })
-        return next
-      })
+      const next = clamp(zoomRef.current - e.deltaY * ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
+      setZ(next)
+      setP(next <= ZOOM_MIN + 0.001 ? { x: 0, y: 0 } : clampPan(panRef.current, next))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
+  const twoDist = () => {
+    const p = [...pointers.current.values()]
+    return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y)
+  }
+
   const onPointerDown = (e) => {
-    if (!zoomed) return
-    drag.current = { x: e.clientX, y: e.clientY, startPan: pan }
-    e.currentTarget.setPointerCapture?.(e.pointerId)
+    // setPointerCapture bisa melempar (mis. pointer sudah tak aktif) — jangan
+    // biarkan itu membatalkan sisa logika gesture.
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* abaikan */ }
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointers.current.size === 2) {
+      gesture.current = { mode: 'pinch', startDist: twoDist() || 1, startZoom: zoomRef.current }
+    } else {
+      // 1 jari: pan bila sudah di-zoom, selain itu kandidat swipe/ketuk.
+      gesture.current = { mode: zoomRef.current > 1.001 ? 'pan' : 'swipe',
+        startX: e.clientX, startY: e.clientY, startPan: panRef.current }
+    }
   }
+
   const onPointerMove = (e) => {
-    const d = drag.current
-    if (!d) return
-    const lim = 220 * (zoom - 1)
-    setPan({
-      x: clamp(d.startPan.x + (e.clientX - d.x), -lim, lim),
-      y: clamp(d.startPan.y + (e.clientY - d.y), -lim, lim),
-    })
+    if (!pointers.current.has(e.pointerId)) return
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const g = gesture.current
+    if (!g) return
+    if (g.mode === 'pinch' && pointers.current.size >= 2) {
+      const z = clamp(g.startZoom * (twoDist() / g.startDist), ZOOM_MIN, ZOOM_MAX)
+      setZ(z); setP(clampPan(panRef.current, z))
+    } else if (g.mode === 'pan') {
+      const lim = 220 * (zoomRef.current - 1)
+      setP({ x: clamp(g.startPan.x + (e.clientX - g.startX), -lim, lim),
+        y: clamp(g.startPan.y + (e.clientY - g.startY), -lim, lim) })
+    }
+    // mode 'swipe': cukup dinilai saat pointer-up (dx/dy dari start).
   }
-  const onPointerUp = () => { drag.current = null }
+
+  const onPointerUp = (e) => {
+    const g = gesture.current
+    pointers.current.delete(e.pointerId)
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* abaikan */ }
+    if (g && (g.mode === 'swipe' || g.mode === 'pan')) {
+      const dx = e.clientX - g.startX, dy = e.clientY - g.startY
+      const moved = Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP
+      if (!moved) {
+        // ketukan: dua ketukan cepat = toggle zoom (dobel-tap)
+        const now = Date.now()
+        if (now - lastTap.current < 300) {
+          const nz = zoomRef.current > 1.001 ? 1 : 2
+          setZ(nz); setP({ x: 0, y: 0 }); lastTap.current = 0
+        } else { lastTap.current = now }
+      } else if (g.mode === 'swipe' && spinnable &&
+        Math.abs(dx) > SWIPE_MIN && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        onGo(dx < 0 ? 1 : -1)   // swipe kiri → foto berikutnya
+      }
+    } else if (g && g.mode === 'pinch' && zoomRef.current <= ZOOM_MIN + 0.02) {
+      setZ(1); setP({ x: 0, y: 0 })
+    }
+    // Sisa jari (mis. angkat 1 dari 2): siapkan ulang mode-nya.
+    if (pointers.current.size === 1) {
+      const pt = [...pointers.current.values()][0]
+      gesture.current = zoomRef.current > 1.001
+        ? { mode: 'pan', startX: pt.x, startY: pt.y, startPan: panRef.current }
+        : { mode: null, startX: pt.x, startY: pt.y }
+    } else if (pointers.current.size === 0) {
+      gesture.current = null
+    }
+  }
+
+  const onPointerCancel = (e) => {
+    pointers.current.delete(e.pointerId)
+    if (pointers.current.size === 0) gesture.current = null
+  }
 
   return (
     <motion.div className="lightbox" role="dialog" aria-modal="true" aria-label={'Foto ' + title}
@@ -111,18 +183,20 @@ function Lightbox({ photos, i, n, title, angle, spinnable, onGo, onClose }) {
         animate={{ scale: zoom, x: pan.x, y: pan.y }}
         transition={{ type: 'spring', stiffness: 260, damping: 30 }}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-        onDoubleClick={() => { setZoom((z) => (z > 1.001 ? 1 : 2)); setPan({ x: 0, y: 0 }) }} />
+        onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} />
+      {zoomed && <span className="lb-zoom" aria-hidden="true">{Math.round(zoom * 100)}%</span>}
       {spinnable && (
         <>
           <button type="button" className="g-arrow prev" onClick={() => onGo(-1)}
-            aria-label="Sudut sebelumnya">←</button>
+            aria-label="Foto sebelumnya">←</button>
           <button type="button" className="g-arrow next" onClick={() => onGo(1)}
-            aria-label="Sudut berikutnya">→</button>
+            aria-label="Foto berikutnya">→</button>
           <span className="g-count">{i + 1} / {n}</span>
         </>
       )}
-      <span className="lb-hint">Gulir untuk perbesar · seret saat diperbesar · dobel-klik reset</span>
+      <span className="lb-hint">
+        {spinnable ? 'Geser untuk ganti foto · ' : ''}Cubit / gulir untuk perbesar · dobel-ketuk reset
+      </span>
       <button type="button" className="lb-close" onClick={onClose} aria-label="Tutup">✕</button>
     </motion.div>
   )
@@ -281,7 +355,7 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
       {spinnable && (
         <div className="thumbs">
           {photos.map((url, k) => (
-            <button key={url} type="button" className={k === i ? 'on' : ''}
+            <button key={url + '-' + k} type="button" className={k === i ? 'on' : ''}
               onClick={() => { stopAuto(); setI(k) }} aria-label={'Foto ' + (k + 1)}>
               <img src={url} alt="" loading="lazy" />
             </button>
