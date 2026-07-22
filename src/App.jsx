@@ -861,13 +861,14 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   background:linear-gradient(90deg,transparent,var(--bg));opacity:0;transition:opacity .25s;z-index:2}
 .gal-wrap.more::after{opacity:1}
 .gal-rail{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;
-  padding-bottom:14px;scrollbar-width:thin}
+  padding-bottom:14px;scrollbar-width:thin;
+  -webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
 .gal-rail::-webkit-scrollbar{height:6px}
 .gal-rail::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:9px}
 /* Lebar kartu: mobile ~70vw (kecil, terlihat sekilas kartu berikutnya — Tugas 3);
    ≥768 empat sekaligus; ≥1100 ENAM sekaligus (maks 6 — Tugas 2). Semua unit
    tetap dirender, sisanya lewat geser. */
-.gal-item{flex:0 0 70vw;max-width:320px;scroll-snap-align:start}
+.gal-item{flex:0 0 70vw;max-width:320px;scroll-snap-align:start;scroll-snap-stop:always}
 .gal-item > .card-wrap{width:100%}
 @media(min-width:520px){ .gal-item{flex-basis:46vw;max-width:300px} }
 @media(min-width:768px){
@@ -893,6 +894,65 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   .gal-item .card-wa{padding:9px;gap:0}
   .gal-item .card-wa span{display:none}
   .gal-item .card-wa svg{width:16px;height:16px}
+}
+
+/* ---------- searchbar per-galeri ---------- */
+.gal-search{position:relative;margin:0 0 16px;max-width:420px}
+.gal-search input{width:100%;border:1px solid var(--line-2);background:var(--panel);
+  border-radius:999px;padding:11px 40px 11px 40px;font-size:13.5px;color:var(--ink);
+  -webkit-appearance:none;appearance:none}
+.gal-search input:focus{outline:none;border-color:var(--ink)}
+.gal-search input::placeholder{color:var(--muted)}
+.gal-search input::-webkit-search-cancel-button{display:none}
+.gal-search .gal-search-ic{position:absolute;left:15px;top:50%;transform:translateY(-50%);
+  width:15px;height:15px;color:var(--muted);pointer-events:none}
+.gal-search .gal-search-clr{position:absolute;right:9px;top:50%;transform:translateY(-50%);
+  width:23px;height:23px;border-radius:50%;border:none;background:var(--line);color:var(--muted);
+  font-size:15px;line-height:1;display:grid;place-items:center;cursor:pointer}
+.gal-search .gal-search-clr:hover{background:var(--line-2);color:var(--ink)}
+.gal-empty{padding:34px 18px;text-align:center;color:var(--muted);font-size:14px;
+  border:1px dashed var(--line-2);border-radius:16px;margin-bottom:14px}
+
+/* ---------- tombol "Lihat Semua Unit" ---------- */
+.gal-more{margin-top:6px;text-align:center}
+.gal-more-btn{display:inline-flex;align-items:center;gap:9px}
+.gal-more-btn span{display:inline-block;transition:transform .2s}
+.gal-more-btn:hover span{transform:translateX(4px)}
+
+/* ---------- showcase: carousel di mobile, GRID 3×2 di desktop (≥1024) ---------- */
+@media(min-width:1024px){
+  .gal--showcase .gal-rail{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;
+    overflow:visible;scroll-snap-type:none;padding-bottom:0}
+  .gal--showcase .gal-item{flex:none;max-width:none;width:auto}
+  .gal--showcase .gal-arrows{display:none}
+  .gal--showcase .gal-wrap::after{display:none}
+}
+
+/* ---------- full (#/etalase): grid membungkus, semua unit, tanpa carousel ---------- */
+.gal--full .gal-rail{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;
+  overflow:visible;scroll-snap-type:none;padding-bottom:0}
+.gal--full .gal-item{flex:none;max-width:none;width:auto}
+.gal--full .gal-arrows{display:none}
+.gal--full .gal-wrap::after{display:none}
+@media(min-width:640px){ .gal--full .gal-rail{grid-template-columns:repeat(3,1fr);gap:16px} }
+@media(min-width:1024px){ .gal--full .gal-rail{grid-template-columns:repeat(4,1fr);gap:18px} }
+
+/* ---------- halaman etalase lengkap ---------- */
+.etalase-page{padding-top:clamp(88px,12vw,116px)}
+.etalase-page-title{font-size:clamp(28px,5vw,46px);font-weight:760;letter-spacing:-.03em;margin-top:8px}
+.et-tabs{display:inline-flex;gap:4px;background:var(--panel);border:1px solid var(--line-2);
+  border-radius:999px;padding:4px}
+.et-tab{border:none;background:transparent;border-radius:999px;padding:8px 15px;font-size:13px;
+  font-weight:600;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:7px;
+  transition:color .18s,background .18s}
+.et-tab:hover{color:var(--ink)}
+.et-tab.on{background:var(--ink);color:var(--bg)}
+.et-tab-n{font-family:var(--mono);font-size:10px;opacity:.65}
+.et-tab.on .et-tab-n{opacity:.85}
+@media(max-width:520px){
+  .etalase-page .et-bar-top{flex-direction:column;align-items:stretch;gap:12px}
+  .et-tabs{width:100%;justify-content:space-between}
+  .et-tab{flex:1;justify-content:center;padding:9px 6px}
 }
 
 /* CTA di antara kedua galeri */
@@ -3464,15 +3524,48 @@ function RecentlyViewed({ listings, recent, nav, onClear }) {
 // Dipakai IDENTIK untuk Galeri Motorell & Galeri Titip Jual (Tugas 4). Semua
 // unit dirender; hanya ~6 yang terlihat sekaligus, sisanya lewat geser/scroll.
 // Bukan membatasi query — pembatasan murni tampilan (lebar kartu + overflow-x).
-function Gallery({ title, subtitle, units, nav, searchActive, loading = false }) {
+// Pencarian LOKAL per-galeri (independen dari smart-search navbar): tiap kata
+// harus cocok di merek/model/judul/warna/tahun/harga.
+function galMatch(l, term) {
+  const hay = [l.brand, l.model, l.title, l.color, l.year, l.price]
+    .filter((v) => v != null && v !== '').join(' ').toLowerCase()
+  return term.split(/\s+/).filter(Boolean).every((w) => hay.includes(w))
+}
+
+// Galeri kartu. Dua variant:
+//  - 'showcase' (beranda): carousel di mobile, GRID 3×2 di desktop, dibatasi
+//    `cap` unit + tombol "Lihat Semua Unit" (onSeeAll) bila total > cap.
+//  - 'full' (#/etalase): grid responsif membungkus, semua unit, tanpa cap.
+// `localSearch` menambah kolom cari khusus galeri ini.
+function Gallery({ title, subtitle, units, nav, searchActive, loading = false,
+  variant = 'showcase', cap = Infinity, onSeeAll = null, localSearch = false }) {
   const railRef = useRef(null)
+  const rafRef = useRef(0)
   const [edges, setEdges] = useState({ l: false, r: false })
-  // Update penanda tepi (untuk fade & mengaktifkan panah) saat scroll/resize.
+  const [q, setQ] = useState('')
+
+  // Cari lokal → lalu batasi tampil ke `cap`. "Lihat Semua" memakai jumlah
+  // TOTAL (sebelum cari), bukan hasil cari — jadi tetap muncul walau pencarian
+  // menyempitkan hasil.
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    return term ? units.filter((l) => galMatch(l, term)) : units
+  }, [units, q])
+  const shown = cap === Infinity ? filtered : filtered.slice(0, cap)
+  const hasMore = Boolean(onSeeAll) && units.length > cap
+
+  // Penanda tepi (fade & panah) di-throttle lewat rAF + hanya set-state saat
+  // NILAINYA berubah → mencegah badai re-render tiap piksel scroll (sumber jank).
   const sync = useCallback(() => {
-    const el = railRef.current
-    if (!el) return
-    const max = el.scrollWidth - el.clientWidth
-    setEdges({ l: el.scrollLeft > 4, r: el.scrollLeft < max - 4 })
+    if (rafRef.current) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0
+      const el = railRef.current
+      if (!el) return
+      const max = el.scrollWidth - el.clientWidth
+      const next = { l: el.scrollLeft > 4, r: el.scrollLeft < max - 4 }
+      setEdges((prev) => (prev.l === next.l && prev.r === next.r ? prev : next))
+    })
   }, [])
   useEffect(() => {
     const el = railRef.current
@@ -3480,38 +3573,71 @@ function Gallery({ title, subtitle, units, nav, searchActive, loading = false })
     sync()
     el.addEventListener('scroll', sync, { passive: true })
     window.addEventListener('resize', sync)
-    return () => { el.removeEventListener('scroll', sync); window.removeEventListener('resize', sync) }
-  }, [sync, units.length, loading])
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      el.removeEventListener('scroll', sync); window.removeEventListener('resize', sync)
+    }
+  }, [sync, shown.length, loading])
   const nudge = (dir) => {
     const el = railRef.current
     if (el) el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: 'smooth' })
   }
 
   return (
-    <div className="gal">
+    <div className={'gal gal--' + variant}>
       <div className="gal-head">
         <div>
           <h3 className="gal-title">{title}</h3>
           <p className="gal-sub">{subtitle}{!loading && units.length > 0 ? ' · ' + units.length + ' unit' : ''}</p>
         </div>
-        {!loading && units.length > 0 && (
+        {!loading && shown.length > 0 && (
           <div className="gal-arrows">
             <button type="button" aria-label="Geser kiri" disabled={!edges.l} onClick={() => nudge(-1)}>←</button>
             <button type="button" aria-label="Geser kanan" disabled={!edges.r} onClick={() => nudge(1)}>→</button>
           </div>
         )}
       </div>
-      <div className={'gal-wrap' + (edges.r ? ' more' : '')}>
-        <div className="gal-rail" ref={railRef}>
-          {loading
-            ? Array.from({ length: SKELETON_COUNT }, (_, i) => (
-                <div className="gal-item" key={i}><SkeletonCard /></div>))
-            : units.map((l, i) => (
-                <div className="gal-item" key={l.id}>
-                  <Card l={l} nav={nav} index={i} highlight={searchActive} />
-                </div>))}
+
+      {localSearch && !loading && units.length > 0 && (
+        <div className="gal-search">
+          <svg className="gal-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+          </svg>
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={'Cari di ' + title + '…'} aria-label={'Cari di ' + title} />
+          {q && (
+            <button type="button" className="gal-search-clr" aria-label="Hapus pencarian"
+              onClick={() => setQ('')}>×</button>)}
         </div>
-      </div>
+      )}
+
+      {!loading && shown.length === 0 ? (
+        <div className="gal-empty">
+          {q ? <>Tidak ada motor yang cocok dengan "{q.trim()}".</>
+            : <>Belum ada unit di galeri ini.</>}
+        </div>
+      ) : (
+        <div className={'gal-wrap' + (edges.r ? ' more' : '')}>
+          <div className="gal-rail" ref={railRef}>
+            {loading
+              ? Array.from({ length: SKELETON_COUNT }, (_, i) => (
+                  <div className="gal-item" key={i}><SkeletonCard /></div>))
+              : shown.map((l, i) => (
+                  <div className="gal-item" key={l.id}>
+                    <Card l={l} nav={nav} index={i} highlight={searchActive} />
+                  </div>))}
+          </div>
+        </div>
+      )}
+
+      {hasMore && (
+        <div className="gal-more">
+          <button type="button" className="btn btn-ghost gal-more-btn" onClick={onSeeAll}>
+            Lihat Semua Unit<span aria-hidden="true">→</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -3708,7 +3834,8 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
               </div>
             ) : (
               <Gallery title="Galeri Motorell" subtitle="Unit resmi hasil kurasi tim Motorell"
-                units={officialShown} nav={nav} searchActive={searchActive} />
+                units={officialShown} nav={nav} searchActive={searchActive}
+                variant="showcase" cap={6} localSearch onSeeAll={() => nav('#/etalase')} />
             )}
 
             {/* ---- CTA di ANTARA kedua galeri ---- */}
@@ -3724,7 +3851,8 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             {/* ---- Galeri Titip Jual (approved & lolos filter) ---- */}
             {!loading && !error && titipShown.length > 0 && (
               <Gallery title="Galeri Titip Jual" subtitle="Unit titipan dari masyarakat"
-                units={titipShown} nav={nav} searchActive={searchActive} />
+                units={titipShown} nav={nav} searchActive={searchActive}
+                variant="showcase" cap={6} localSearch onSeeAll={() => nav('#/etalase')} />
             )}
 
             <AnimatePresence>
@@ -4071,9 +4199,143 @@ function parseHash() {
   const unit = path.match(/^#\/unit\/(.+)$/)
   if (unit) return { name: 'unit', slug: decodeURIComponent(unit[1]), q, panel, sort }
   if (path === '#/admin') return { name: 'admin', q, panel, sort }
+  if (path === '#/etalase') return { name: 'etalase', q, panel, sort }
   if (path === '#/kebijakan') return { name: 'kebijakan', q, panel, sort }
   if (path === '#/titip-jual') return { name: 'titip', q, panel, sort }
   return { name: 'home', q, panel, sort }
+}
+
+// ---------- Halaman etalase lengkap (route #/etalase) ----------
+// Semua unit tanpa batas, tetap dipisah Galeri Motorell & Titip Jual, dengan
+// tab view + filter + sort. State-nya LOKAL (tidak ikut URL) supaya mandiri dari
+// beranda. Pencarian dilakukan per-galeri (lihat Gallery localSearch).
+const ETALASE_TABS = [
+  { code: 'all', label: 'Semua' },
+  { code: 'official', label: 'Motorell' },
+  { code: 'titip', label: 'Titip Jual' },
+]
+
+function EtalaseView({ listings, nav, loading = false, error = '' }) {
+  const [view, setView] = useState('all')
+  const [sort, setSort] = useState('newest')
+  const [panel, setPanel] = useState(EMPTY_PANEL)
+  const [drawer, setDrawer] = useState(false)
+  const resetPanel = useCallback(() => setPanel(EMPTY_PANEL), [])
+  const facets = useMemo(() => facetsOf(listings), [listings])
+
+  const { official, titip } = useMemo(() => {
+    const pass = (l) => matchPanel(l, panel)
+    return {
+      official: sortListings(listings.filter((l) => !isTitip(l) && pass(l)), sort),
+      titip: sortListings(listings.filter((l) => isTitip(l) && pass(l)), sort),
+    }
+  }, [listings, panel, sort])
+
+  const nFilter = (panel.brands.length + panel.grades.length +
+    (panel.year ? 1 : 0) + (panel.priceMin || panel.priceMax ? 1 : 0))
+  const counts = { all: official.length + titip.length, official: official.length, titip: titip.length }
+  const showOfficial = view !== 'titip'
+  const showTitip = view !== 'official'
+  const visOfficial = showOfficial ? official : []
+  const visTitip = showTitip ? titip : []
+  const nothing = visOfficial.length === 0 && visTitip.length === 0
+
+  // Drawer mobile mengunci scroll body & Esc menutupnya (sama seperti beranda).
+  useEffect(() => {
+    if (!drawer) return
+    const onKey = (e) => { if (e.key === 'Escape') setDrawer(false) }
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
+  }, [drawer])
+
+  return (
+    <section className="section etalase-page">
+      <div className="container">
+        <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke beranda</a>
+        <div className="sec-head">
+          <div>
+            <p className="kicker">Etalase lengkap</p>
+            <h1 className="etalase-page-title">Semua Unit.</h1>
+          </div>
+          <p className="aside">Jelajahi seluruh koleksi Motorell Market beserta unit titipan
+            masyarakat. Cari di tiap galeri, saring, dan urutkan sesukamu.</p>
+        </div>
+
+        {!loading && !error && counts.all > 0 && (
+          <div className="et-bar et-bar-top">
+            <div className="et-tabs" role="tablist" aria-label="Pilih galeri">
+              {ETALASE_TABS.map((t) => (
+                <button key={t.code} type="button" role="tab" aria-selected={view === t.code}
+                  className={'et-tab' + (view === t.code ? ' on' : '')} onClick={() => setView(t.code)}>
+                  {t.label}<span className="et-tab-n">{counts[t.code]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="et-tools">
+              <button className="et-filter-btn always" onClick={() => setDrawer(true)}>
+                Filter{nFilter > 0 && <span className="n">{nFilter}</span>}
+              </button>
+              <select className="et-sort" value={sort} aria-label="Urutkan unit"
+                onChange={(e) => setSort(e.target.value)}>
+                {SORT_OPTIONS.map((o) => (<option key={o.code} value={o.code}>{o.label}</option>))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {error ? (
+          <div className="empty">
+            Gagal memuat etalase — {error}.<br />
+            <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+              onClick={() => window.location.reload()}>Coba lagi</button>
+          </div>
+        ) : loading ? (
+          <Gallery variant="full" title="Galeri Motorell"
+            subtitle="Unit resmi hasil kurasi tim Motorell" units={[]} nav={nav} loading />
+        ) : counts.all === 0 && !panelActive(panel) ? (
+          <div className="empty">Etalase sedang kosong, unit baru sedang dalam proses kurasi.</div>
+        ) : nothing ? (
+          <div className="empty">
+            Tidak ada unit yang cocok dengan filter ini.
+            {panelActive(panel) && (
+              <><br /><button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }}
+                onClick={resetPanel}>Reset filter</button></>)}
+          </div>
+        ) : (
+          <>
+            {visOfficial.length > 0 && (
+              <Gallery variant="full" localSearch title="Galeri Motorell"
+                subtitle="Unit resmi hasil kurasi tim Motorell" units={visOfficial} nav={nav} />
+            )}
+            {visTitip.length > 0 && (
+              <Gallery variant="full" localSearch title="Galeri Titip Jual"
+                subtitle="Unit titipan dari masyarakat" units={visTitip} nav={nav} />
+            )}
+          </>
+        )}
+
+        <AnimatePresence>
+          {drawer && (
+            <>
+              <motion.div className="fp-backdrop" onClick={() => setDrawer(false)}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }} />
+              <motion.div className="fp-drawer" role="dialog" aria-label="Filter unit"
+                initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
+                transition={{ type: 'tween', duration: 0.26, ease: [0.2, 0.7, 0.25, 1] }}>
+                <div className="fp-close">
+                  <button onClick={() => setDrawer(false)} aria-label="Tutup filter">×</button>
+                </div>
+                <FilterPanel facets={facets} panel={panel} setPanel={setPanel} onReset={resetPanel} />
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    </section>
+  )
 }
 
 // ---------- Halaman kebijakan / FAQ (route #/kebijakan) ----------
@@ -4784,6 +5046,9 @@ export default function App() {
             panel={panel} setPanel={setPanel} resetPanel={resetPanel}
             sort={sort} setSort={setSort}
             recent={recent} clearRecent={clearRecent} />)}
+
+        {route.name === 'etalase' && (
+          <EtalaseView listings={units} nav={nav} loading={listLoading} error={listError} />)}
 
         {route.name === 'kebijakan' && <KebijakanView nav={nav} />}
 
