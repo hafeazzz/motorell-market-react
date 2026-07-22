@@ -956,32 +956,47 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   .et-tab{flex:1;justify-content:center;padding:9px 6px}
 }
 
-/* ---------- galeri PAGINASI (filter inline per-galeri, grid 3×2, no carousel) ---------- */
+/* ---------- galeri PAGINASI (filter kiri desktop, grid 3×2, no carousel) ---------- */
 .pg{margin-bottom:clamp(34px,5vw,52px)}
-/* Bar: cari (kiri) + tombol filter & urutan (kanan); membungkus di mobile. */
+/* Kolom tunggal di mobile; sidebar filter kiri + konten kanan di desktop. */
+.pg-body{display:grid;grid-template-columns:1fr;gap:0}
+.pg-main{min-width:0}
+.pg-side{display:none}
+@media(min-width:1024px){
+  .pg-body{grid-template-columns:248px minmax(0,1fr);gap:30px}
+  .pg-side{display:block;position:sticky;top:90px;align-self:start;
+    max-height:calc(100vh - 110px);overflow-y:auto}
+  .pg-filter-toggle{display:none}   /* desktop: sidebar permanen, tombol tak perlu */
+}
+/* Bar: cari (kiri) + tombol filter (mobile) & urutan (kanan). */
 .pg-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;
   flex-wrap:wrap;margin-bottom:14px}
-.pg-tools .gal-search{margin:0;flex:1 1 240px;max-width:420px}
+.pg-tools .gal-search{margin:0;flex:1 1 220px;max-width:460px}
 .pg-tools-r{display:flex;align-items:center;gap:10px;flex:none}
 .pg-tools-r .et-filter-btn.on{border-color:var(--ink);background:var(--panel-2)}
-/* Filter inline: muncul di aliran normal (bukan sidebar/overlay), scroll unified. */
+/* Panel filter inline (mobile toggle) — aliran normal, scroll unified. */
 .pg-filter{margin-bottom:18px;animation:pgFilterIn .22s ease}
 @keyframes pgFilterIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 /* Grid responsif: 1 kolom → 2 (≥640) → 3 (≥1024). 6/hal = 3×2 di desktop. */
 .pg-grid{display:grid;grid-template-columns:1fr;gap:16px}
 @media(min-width:640px){ .pg-grid{grid-template-columns:repeat(2,1fr)} }
-@media(min-width:1024px){ .pg-grid{grid-template-columns:repeat(3,1fr);gap:20px} }
+@media(min-width:1024px){ .pg-grid{grid-template-columns:repeat(3,1fr);gap:18px} }
 
-/* ---------- kontrol paginasi ---------- */
+/* ---------- kontrol paginasi (tombol SELALU tampil) ---------- */
 .pgn{display:flex;align-items:center;justify-content:center;gap:6px;
   flex-wrap:wrap;margin-top:clamp(22px,3vw,32px)}
 .pgn-btn{min-width:38px;height:38px;padding:0 10px;border:1px solid var(--line-2);
   background:var(--panel);border-radius:10px;font-size:14px;font-weight:600;color:var(--ink);
   cursor:pointer;transition:border-color .18s,background .18s,color .18s}
-.pgn-btn:hover:not(:disabled):not(.on){border-color:var(--ink)}
+.pgn-btn:hover:not(.on){border-color:var(--ink)}
 .pgn-btn.on{background:var(--ink);color:var(--bg);border-color:var(--ink);cursor:default}
-.pgn-btn:disabled{opacity:.4;cursor:not-allowed}
+/* Tombol di tepi (Prev di hal 1 / Next di hal akhir): tampak "redup" tapi tetap
+   bisa diklik untuk memunculkan pesan. */
+.pgn-btn.edge{opacity:.45}
 .pgn-gap{padding:0 4px;color:var(--muted);align-self:flex-end}
+/* Pesan tepi paginasi. */
+.pg-edge{text-align:center;margin-top:12px;font-size:13px;color:var(--muted);
+  font-family:var(--mono);letter-spacing:.02em;animation:pgFilterIn .2s ease}
 
 /* CTA di antara kedua galeri */
 .gal-cta{display:flex;flex-direction:column;gap:15px;align-items:flex-start;
@@ -3734,26 +3749,29 @@ function pageWindow(cur, total) {
   return out
 }
 
-function Pagination({ page, total, onGo }) {
-  if (total <= 1) return null
+// Tombol paginasi SELALU tampil (walau cuma 1 halaman). Di tepi tidak di-disable:
+// klik Prev di hal 1 / Next di hal terakhir memicu onEdge (pesan, bukan pindah).
+function Pagination({ page, total, onGo, onEdge }) {
   return (
     <nav className="pgn" aria-label="Navigasi halaman">
-      <button type="button" className="pgn-btn" onClick={() => onGo(page - 1)}
-        disabled={page === 1} aria-label="Halaman sebelumnya">←</button>
+      <button type="button" className={'pgn-btn' + (page === 1 ? ' edge' : '')}
+        onClick={() => (page === 1 ? onEdge('prev') : onGo(page - 1))}
+        aria-label="Halaman sebelumnya">←</button>
       {pageWindow(page, total).map((p, i) => (p === '…'
         ? <span key={'e' + i} className="pgn-gap" aria-hidden="true">…</span>
         : <button type="button" key={p} className={'pgn-btn' + (p === page ? ' on' : '')}
             aria-current={p === page ? 'page' : undefined} onClick={() => onGo(p)}>{p}</button>))}
-      <button type="button" className="pgn-btn" onClick={() => onGo(page + 1)}
-        disabled={page === total} aria-label="Halaman berikutnya">→</button>
+      <button type="button" className={'pgn-btn' + (page === total ? ' edge' : '')}
+        onClick={() => (page === total ? onEdge('next') : onGo(page + 1))}
+        aria-label="Halaman berikutnya">→</button>
     </nav>
   )
 }
 
-// Galeri dengan filter INLINE per-galeri (bukan sidebar) + urutan + pencarian +
-// PAGINASI (default 6/halaman, grid 3×2 desktop). State-nya LOKAL: filter Motorell
-// tidak menyentuh filter Titip Jual. Tiap perubahan filter/urut/cari → balik ke
-// halaman 1; jumlah halaman menyusut → halaman aktif dijepit otomatis.
+// Galeri per-galeri dengan: filter di SIDEBAR KIRI (desktop ≥1024) / toggle inline
+// (mobile), urutan, pencarian, dan PAGINASI (6/halaman, tombol SELALU tampil).
+// State LOKAL: filter Motorell tidak menyentuh Titip Jual. Ubah filter/urut/cari →
+// balik ke halaman 1; halaman menyusut → dijepit otomatis.
 function PagedGallery({ title, subtitle, units, nav, perPage = 6, loading = false }) {
   const ref = useRef(null)
   const [panel, setPanel] = useState(EMPTY_PANEL)
@@ -3761,6 +3779,8 @@ function PagedGallery({ title, subtitle, units, nav, perPage = 6, loading = fals
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [openFilter, setOpenFilter] = useState(false)
+  const [edgeMsg, setEdgeMsg] = useState('')
+  const edgeTimer = useRef(null)
   const facets = useMemo(() => facetsOf(units), [units])
 
   const filtered = useMemo(() => {
@@ -3769,9 +3789,8 @@ function PagedGallery({ title, subtitle, units, nav, perPage = 6, loading = fals
     return sortListings(arr, sort)
   }, [units, panel, sort, q])
 
-  // Filter/urut/cari berubah → kembali ke halaman 1 (data baru dari realtime
-  // TIDAK mereset; halaman aktif cukup dijepit di bawah).
   useEffect(() => { setPage(1) }, [panel, sort, q])
+  useEffect(() => () => clearTimeout(edgeTimer.current), [])
 
   const total = Math.max(1, Math.ceil(filtered.length / perPage))
   const cur = Math.min(page, total)
@@ -3780,28 +3799,53 @@ function PagedGallery({ title, subtitle, units, nav, perPage = 6, loading = fals
     (panel.year ? 1 : 0) + (panel.priceMin || panel.priceMax ? 1 : 0)
   const reset = () => { setQ(''); setPanel(EMPTY_PANEL) }
 
+  const flashEdge = (msg) => {
+    setEdgeMsg(msg)
+    clearTimeout(edgeTimer.current)
+    edgeTimer.current = setTimeout(() => setEdgeMsg(''), 2600)
+  }
   const goPage = (p) => {
     const np = Math.min(Math.max(1, p), total)
     if (np === cur) return
-    setPage(np)
+    setEdgeMsg(''); setPage(np)
     if (ref.current) {
       const y = ref.current.getBoundingClientRect().top + window.scrollY - 76
       window.scrollTo({ top: y, behavior: 'smooth' })
     }
   }
+  const onEdge = (dir) => flashEdge(dir === 'next'
+    ? 'Hanya ini motor yang tersedia.'
+    : 'Ini halaman paling awal.')
+
+  if (loading) {
+    return (
+      <div className="pg" ref={ref}>
+        <div className="gal-head"><div>
+          <h3 className="gal-title">{title}</h3>
+          <p className="gal-sub">{subtitle}</p>
+        </div></div>
+        <div className="pg-grid">
+          {Array.from({ length: perPage }, (_, i) => <SkeletonCard key={i} />)}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="pg" ref={ref}>
-      <div className="gal-head">
-        <div>
-          <h3 className="gal-title">{title}</h3>
-          <p className="gal-sub">{subtitle}{!loading && units.length > 0 ? ' · ' + filtered.length + ' unit' : ''}</p>
-        </div>
-      </div>
+      <div className="gal-head"><div>
+        <h3 className="gal-title">{title}</h3>
+        <p className="gal-sub">{subtitle}{units.length > 0 ? ' · ' + filtered.length + ' unit' : ''}</p>
+      </div></div>
 
-      {/* Bar filter INLINE (bukan sidebar) + urutan + cari — per galeri. */}
-      {!loading && units.length > 0 && (
-        <>
+      <div className="pg-body">
+        {/* Sidebar filter kiri — hanya desktop (≥1024). */}
+        <aside className="pg-side">
+          <FilterPanel facets={facets} panel={panel} setPanel={setPanel} onReset={reset} showSource={false} />
+        </aside>
+
+        <div className="pg-main">
+          {/* Cari + (tombol Filter khusus mobile) + urutan. */}
           <div className="pg-tools">
             <div className="gal-search">
               <svg className="gal-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -3815,7 +3859,7 @@ function PagedGallery({ title, subtitle, units, nav, perPage = 6, loading = fals
                   onClick={() => setQ('')}>×</button>)}
             </div>
             <div className="pg-tools-r">
-              <button type="button" className={'et-filter-btn' + (openFilter ? ' on' : '')}
+              <button type="button" className={'et-filter-btn pg-filter-toggle' + (openFilter ? ' on' : '')}
                 aria-expanded={openFilter} onClick={() => setOpenFilter((o) => !o)}>
                 Filter{nFilter > 0 && <span className="n">{nFilter}</span>}
               </button>
@@ -3825,30 +3869,31 @@ function PagedGallery({ title, subtitle, units, nav, perPage = 6, loading = fals
               </select>
             </div>
           </div>
+
+          {/* Panel filter inline — hanya MOBILE (toggle); desktop pakai sidebar kiri. */}
           {openFilter && (
             <div className="pg-filter">
               <FilterPanel facets={facets} panel={panel} setPanel={setPanel} onReset={reset} showSource={false} />
             </div>
           )}
-        </>
-      )}
 
-      <div className="pg-grid">
-        {loading
-          ? Array.from({ length: perPage }, (_, i) => <SkeletonCard key={i} />)
-          : shown.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
-      </div>
+          {shown.length > 0 ? (
+            <div className="pg-grid">
+              {shown.map((l, i) => <Card key={l.id} l={l} nav={nav} index={i} />)}
+            </div>
+          ) : (
+            <div className="gal-empty">
+              {q || nFilter ? <>Tidak ada motor yang sesuai dengan filter.</> : <>Belum ada unit di galeri ini.</>}
+              {(q || panelActive(panel)) && (
+                <><br /><button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 12 }}
+                  onClick={reset}>Reset filter</button></>)}
+            </div>
+          )}
 
-      {!loading && shown.length === 0 && (
-        <div className="gal-empty">
-          {q || nFilter ? <>Tidak ada motor yang sesuai dengan filter.</> : <>Belum ada unit di galeri ini.</>}
-          {(q || panelActive(panel)) && (
-            <><br /><button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 12 }}
-              onClick={reset}>Reset filter</button></>)}
+          <Pagination page={cur} total={total} onGo={goPage} onEdge={onEdge} />
+          {edgeMsg && <p className="pg-edge" role="status">{edgeMsg}</p>}
         </div>
-      )}
-
-      <Pagination page={cur} total={total} onGo={goPage} />
+      </div>
     </div>
   )
 }
