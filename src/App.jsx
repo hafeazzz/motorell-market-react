@@ -4844,6 +4844,29 @@ export default function App() {
     return () => document.removeEventListener('click', onClick)
   }, [])
 
+  // Balik dari Google dengan GAGAL: Supabase menaruh error di URL (query saat
+  // PKCE, kadang di fragment) alih-alih sesi. Tanpa ini, kegagalan (mis. provider
+  // Google belum diaktifkan di Supabase) hanya diam — pengguna balik ke beranda
+  // tanpa penjelasan. Tangkap, tampilkan jelas, lalu bersihkan URL.
+  useEffect(() => {
+    if (!supabase) return
+    const qp = new URLSearchParams(window.location.search.replace(/^\?/, ''))
+    const rawHash = window.location.hash || ''
+    // Hash normal app = '#/...'; kalau BUKAN itu, mungkin fragment berisi error OAuth.
+    const hp = rawHash.startsWith('#/') ? new URLSearchParams() : new URLSearchParams(rawHash.replace(/^#/, ''))
+    const desc = qp.get('error_description') || hp.get('error_description')
+    const code = qp.get('error') || qp.get('error_code') || hp.get('error')
+    if (desc || code) {
+      localStorage.removeItem('oauth_pending')
+      const human = desc ? decodeURIComponent(desc).replace(/\+/g, ' ') : code
+      console.error('[OAUTH] gagal dari redirect:', code || '(tanpa kode)', '—', desc || '')
+      toast('Login Google gagal: ' + human)
+      // Buang param error dari URL, pertahankan route hash yang valid.
+      const clean = window.location.pathname + (rawHash.startsWith('#/') ? rawHash : '#/')
+      window.history.replaceState({}, '', clean)
+    }
+  }, [toast])
+
   useEffect(() => {
     if (!supabase) return
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
