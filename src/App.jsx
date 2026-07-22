@@ -589,7 +589,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   transition:background .3s,border-color .3s,backdrop-filter .3s}
 .nav.scrolled{background:rgba(255,255,255,.86);backdrop-filter:blur(16px);
   border-color:var(--line)}
-.nav-in{display:flex;align-items:center;justify-content:space-between;
+.nav-in{position:relative;display:flex;align-items:center;justify-content:space-between;
   padding-block:calc(16px + env(safe-area-inset-top)) 16px}
 .logo{font-weight:800;font-size:19px;letter-spacing:.01em;display:flex;
   align-items:center;gap:8px}
@@ -597,8 +597,16 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .logo small{font-family:var(--mono);font-weight:500;font-size:10px;
   letter-spacing:.22em;color:var(--dim)}
 .nav-actions{display:flex;align-items:center;gap:10px}
+.nav-links{display:flex;align-items:center;gap:10px}
 .nav-loc{display:inline-flex;align-items:center;gap:6px}
 .nav-loc-ic{width:15px;height:15px;color:var(--accent)}
+/* Hamburger hanya tampil di mobile (lihat media query) — di desktop tombol
+   aksi inline. */
+.nav-burger{display:none;width:44px;height:44px;border-radius:999px;flex:none;
+  border:1px solid var(--line-2);background:var(--panel);align-items:center;justify-content:center}
+.nav-burger:active{transform:scale(.94)}
+.nav-burger svg{width:21px;height:21px;color:var(--ink)}
+.nav-menu-backdrop{display:none}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
   font-weight:600;font-size:14.5px;padding:12px 24px;border-radius:999px;
   transition:transform .15s,background .18s,color .18s,border-color .18s,opacity .18s}
@@ -1088,23 +1096,18 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .thumbs img{width:100%;height:100%;object-fit:cover}
 /* tab switcher detail teknis (pola Engine/Chassis ala lembar spek) */
 .dtabs-wrap{margin-top:40px}
-/* Di layar sempit ketiga tab tidak muat (butuh ~434px, tersedia ~335px) dan
-   barisnya menggulung — lihat catatan min-width:0 di .detail-grid.
-   Bayangan tepi memberi tahu masih ada tab di luar layar, dan padam sendiri
-   saat sudah mentok: lapisan "local" (sewarna latar) ikut bergeser bersama isi
-   dan menutupi bayangan "scroll" yang diam di tepinya. Murni CSS — tanpa
-   listener scroll. Scrollbar-nya sendiri disembunyikan karena di desktop
-   barisnya muat dan garis abu-abunya cuma jadi kotoran di bawah tab. */
-.dtabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;
-  scrollbar-width:none;-webkit-overflow-scrolling:touch;
-  background:
-    linear-gradient(90deg,var(--bg) 45%,rgba(255,255,255,0)) 0 0/28px 100% no-repeat local,
-    linear-gradient(270deg,var(--bg) 45%,rgba(255,255,255,0)) 100% 0/28px 100% no-repeat local,
-    radial-gradient(farthest-side at 0 50%,rgba(17,17,20,.17),rgba(17,17,20,0)) 0 0/14px 100% no-repeat scroll,
-    radial-gradient(farthest-side at 100% 50%,rgba(17,17,20,.17),rgba(17,17,20,0)) 100% 0/14px 100% no-repeat scroll}
-.dtabs::-webkit-scrollbar{display:none}
+/* Tab detail: cukup lebar untuk muat SEMUA tab tanpa gulir horizontal. Dulu
+   di HP baris ini meluber (~434px di layar 335px) sehingga tab terakhir
+   ("Perlindungan") terpotong dan butuh geser + bayangan tepi (terasa
+   "floating"). Sekarang di ≤560px tab dibagi rata (flex:1) dengan font lebih
+   kecil → ketiganya muat rapi dalam satu baris, tanpa gulir. */
+.dtabs{display:flex;gap:2px;border-bottom:1px solid var(--line)}
 .dtabs button{padding:13px 16px;font-size:14px;font-weight:600;color:var(--muted);
-  position:relative;white-space:nowrap;flex:none;transition:color .2s}
+  position:relative;white-space:nowrap;transition:color .2s}
+@media(max-width:560px){
+  .dtabs button{flex:1 1 0;min-width:0;padding:11px 6px;font-size:12px;
+    white-space:normal;text-align:center;line-height:1.25;letter-spacing:.02em}
+}
 .dtabs button:hover{color:var(--ink)}
 .dtabs button.on{color:var(--ink)}
 .dtabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
@@ -1434,9 +1437,20 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .foot-base{flex-direction:column;align-items:flex-start;gap:14px}
   .foot-brand{text-align:left}
 }
-/* Nav penuh di layar sempit — tombol "Titip Jual" disembunyikan dari nav supaya
-   tak meluber; discoverability mobile ditangani band CTA di homepage. */
-@media(max-width:720px){ .nav-titip{display:none} }
+/* Mobile (≤720px): deretan tombol aksi dilipat ke menu dropdown yang dibuka
+   lewat hamburger — supaya nav tidak meluber/terpotong (mis. tombol "Keluar ·
+   Nama" yang dulu terpotong). Logo + search + hamburger tetap di bar. */
+@media(max-width:720px){
+  .nav-burger{display:inline-flex}
+  .nav-links{display:none}
+  .nav-links.open{display:flex;flex-direction:column;align-items:stretch;gap:8px;
+    position:absolute;top:calc(100% + 6px);right:0;width:min(258px,74vw);
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px;
+    box-shadow:0 18px 46px rgba(17,17,20,.18);z-index:80}
+  .nav-links.open .btn{width:100%;justify-content:flex-start;padding:13px 16px;font-size:14.5px}
+  .nav-links.open .nav-loc{gap:10px}
+  .nav-menu-backdrop{display:block;position:fixed;inset:0;z-index:55}
+}
 .toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,16px);z-index:120;
   background:var(--ink);color:#fff;font-size:13.5px;font-weight:500;padding:12px 20px;
   border-radius:999px;opacity:0;pointer-events:none;transition:.3s;max-width:88vw;
@@ -1726,9 +1740,8 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 @media(max-width:560px){
   .logo small{display:none}
   .nav-search{margin:0 10px}
-  /* layar sempit: tombol Lokasi jadi ikon saja supaya navbar tidak sesak */
-  .nav-loc-label{display:none}
-  .nav-loc{gap:0;padding-left:11px;padding-right:11px}
+  /* Lokasi kini di dalam menu dropdown dengan label penuh — jadi TIDAK lagi
+     dijadikan ikon saja seperti dulu (nav sudah lega berkat hamburger). */
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -4388,6 +4401,7 @@ export default function App() {
   const [booking, setBooking] = useState(null) // {listing, warranty}
   const [pending, setPending] = useState(null) // {slug, wcode} nunggu login
   const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)  // menu hamburger mobile
   const [toastMsg, setToastMsg] = useState('')
   const toastRef = useRef(null)
   const [waHandoff, setWaHandoff] = useState(false)
@@ -4498,6 +4512,15 @@ export default function App() {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+
+  // Menu hamburger mobile: tutup saat pindah route atau tekan Escape.
+  useEffect(() => { setMenuOpen(false) }, [route])
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24)
@@ -4724,29 +4747,43 @@ export default function App() {
             onPick={(l) => { setQuery(''); nav('#/unit/' + l.slug) }}
             onQuick={(text) => { setQuery(text); if (route.name !== 'home') nav('#/') }} />
           <div className="nav-actions">
-            {isStaff && route.name !== 'admin' && (
-              <button className="btn btn-quiet btn-sm" onClick={() => nav('#/admin')}>Panel admin</button>)}
-            {route.name !== 'titip' && (
-              <button className="btn btn-ghost btn-sm nav-titip" onClick={() => nav('#/titip-jual')}
-                title="Titip jual motor Anda di Motorell">Titip Jual</button>)}
-            <button className="btn btn-ghost btn-sm nav-loc" onClick={goLokasi} title="Lokasi showroom Motorell">
-              <svg className="nav-loc-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" />
-                <circle cx="12" cy="11" r="2.2" />
-              </svg>
-              <span className="nav-loc-label">Lokasi</span>
-            </button>
-            {session ? (
-              <button className="btn btn-ghost btn-sm"
-                onClick={async () => { await supabase.auth.signOut(); toast('Kamu sudah keluar'); if (route.name === 'admin') nav('#/') }}>
-                Keluar{profile ? ' · ' + (profile.full_name || '').split(' ')[0] : ''}
+            {/* Di mobile deretan tombol ini dilipat ke menu dropdown (buka lewat
+                hamburger) supaya tak meluber/terpotong. Di desktop tetap inline. */}
+            <div className={'nav-links' + (menuOpen ? ' open' : '')}>
+              {isStaff && route.name !== 'admin' && (
+                <button className="btn btn-quiet btn-sm" onClick={() => { nav('#/admin'); setMenuOpen(false) }}>Panel admin</button>)}
+              {route.name !== 'titip' && (
+                <button className="btn btn-ghost btn-sm" onClick={() => { nav('#/titip-jual'); setMenuOpen(false) }}
+                  title="Titip jual motor Anda di Motorell">Titip Jual</button>)}
+              <button className="btn btn-ghost btn-sm nav-loc" onClick={() => { setMenuOpen(false); goLokasi() }} title="Lokasi showroom Motorell">
+                <svg className="nav-loc-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" />
+                  <circle cx="12" cy="11" r="2.2" />
+                </svg>
+                <span className="nav-loc-label">Lokasi</span>
               </button>
-            ) : (
-              <button className="btn btn-dark btn-sm" onClick={() => setAuthOpen(true)}>Masuk</button>
-            )}
+              {session ? (
+                <button className="btn btn-ghost btn-sm"
+                  onClick={async () => { setMenuOpen(false); await supabase.auth.signOut(); toast('Kamu sudah keluar'); if (route.name === 'admin') nav('#/') }}>
+                  Keluar{profile ? ' · ' + (profile.full_name || '').split(' ')[0] : ''}
+                </button>
+              ) : (
+                <button className="btn btn-dark btn-sm" onClick={() => { setMenuOpen(false); setAuthOpen(true) }}>Masuk</button>
+              )}
+            </div>
+            <button className="nav-burger" aria-label={menuOpen ? 'Tutup menu' : 'Buka menu'}
+              aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" aria-hidden="true">
+                {menuOpen
+                  ? <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>
+                  : <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>}
+              </svg>
+            </button>
           </div>
         </div>
+        {menuOpen && <div className="nav-menu-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
       </header>
 
       <main>
