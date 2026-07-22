@@ -49,8 +49,11 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
+  -- full_name: email/password signup mengirim 'full_name'; login Google (OAuth)
+  -- mengisi 'full_name' atau 'name' di metadata. Coba keduanya sebelum fallback.
   insert into public.profiles (id, full_name, role)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', 'Pengguna'), null)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'name', 'Pengguna'), null)
   on conflict (id) do nothing;
   return new;
 end;

@@ -21,7 +21,15 @@ import { openSocialApp } from './utils/deepLink';
 // ---------- Konfigurasi ----------
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-const supabase = SUPA_URL && SUPA_KEY ? createClient(SUPA_URL, SUPA_KEY) : null
+// flowType 'pkce': login OAuth (Google) kembali dengan `?code=...` di QUERY —
+// tidak bentrok dengan hash-router (#/…) yang dipakai app ini. detectSessionInUrl
+// membuat kode itu otomatis ditukar jadi sesi saat halaman balik dari Google,
+// tanpa perlu route /auth/callback khusus.
+const supabase = SUPA_URL && SUPA_KEY
+  ? createClient(SUPA_URL, SUPA_KEY, {
+      auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
+    })
+  : null
 
 // Status koneksi dilog sekali saat modul dimuat — cukup untuk memastikan env
 // var terbaca tanpa membanjiri console tiap render.
@@ -1292,6 +1300,16 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   border-radius:999px;padding:4px;margin-bottom:18px}
 .switcher button{flex:1;padding:9px;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--muted)}
 .switcher button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(17,17,20,.08)}
+/* pemisah "atau" + tombol Google OAuth */
+.auth-or{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--muted);
+  font-size:12px;font-family:var(--mono);letter-spacing:.08em}
+.auth-or::before,.auth-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.btn-google{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:12px;border-radius:12px;border:1px solid var(--line-2);background:var(--panel);
+  color:var(--ink);font-size:14px;font-weight:600;cursor:pointer;transition:border-color .18s,background .18s}
+.btn-google:hover:not(:disabled){border-color:var(--ink);background:var(--panel-2)}
+.btn-google:disabled{opacity:.6;cursor:not-allowed}
+.btn-google svg{flex:none}
 
 /* ---------- admin ---------- */
 .admin{padding:120px 0 90px}
@@ -1956,6 +1974,29 @@ function AuthModal({ onClose, onDone, toast }) {
     } finally { setBusy(false) }
   }
 
+  // OAuth Google. Browser di-redirect ke Google lalu balik ke app; sesi ditukar
+  // otomatis (lihat createClient flowType pkce). Flag localStorage dipakai App
+  // untuk memunculkan toast sukses setelah balik.
+  async function google() {
+    setErr(''); setInfo(''); setBusy(true)
+    try {
+      localStorage.setItem('oauth_pending', 'google')
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin + '/',
+          queryParams: { access_type: 'offline', prompt: 'consent' },
+        },
+      })
+      if (error) throw error
+      // Sukses = pindah ke Google; biarkan busy (halaman akan ganti).
+    } catch (ex) {
+      localStorage.removeItem('oauth_pending')
+      setErr(ex.message || 'Gagal masuk dengan Google. Coba lagi.')
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="overlay" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal">
@@ -1994,6 +2035,17 @@ function AuthModal({ onClose, onDone, toast }) {
               </button>
             </div>
           </form>
+
+          <div className="auth-or"><span>atau</span></div>
+          <button type="button" className="btn-google" onClick={google} disabled={busy}>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="#4285F4" d="M23.06 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h6.2a5.3 5.3 0 0 1-2.3 3.48v2.89h3.72c2.18-2 3.44-4.96 3.44-8.38z" />
+              <path fill="#34A853" d="M12 24c3.1 0 5.7-1.03 7.6-2.79l-3.72-2.88c-1.03.69-2.35 1.1-3.88 1.1-2.98 0-5.5-2.01-6.4-4.72H1.76v2.97A11.99 11.99 0 0 0 12 24z" />
+              <path fill="#FBBC05" d="M5.6 14.71a7.2 7.2 0 0 1 0-4.42V7.32H1.76a12 12 0 0 0 0 10.36l3.84-2.97z" />
+              <path fill="#EA4335" d="M12 4.75c1.68 0 3.19.58 4.38 1.72l3.28-3.28C17.7 1.16 15.1 0 12 0 7.32 0 3.28 2.7 1.76 6.62l3.84 2.97C6.5 6.76 9.02 4.75 12 4.75z" />
+            </svg>
+            Masuk dengan Google
+          </button>
         </div>
       </div>
     </div>
@@ -4795,9 +4847,16 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s)
+      // Balik dari Google OAuth: tandai sukses sekali (flag dipasang sebelum redirect).
+      if (event === 'SIGNED_IN' && s && localStorage.getItem('oauth_pending')) {
+        localStorage.removeItem('oauth_pending')
+        toast('Berhasil masuk dengan Google')
+      }
+    })
     return () => sub.subscription.unsubscribe()
-  }, [])
+  }, [toast])
 
   // Muat baris profiles milik user yang login. Dulu error-nya DITELAN
   // (.then(({data}) => setProfile(data))): kalau RLS menolak atau barisnya tidak
