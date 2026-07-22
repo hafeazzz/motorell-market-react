@@ -1701,6 +1701,24 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .lokasi-grid{grid-template-columns:1fr 1fr;gap:56px}
 }
 
+/* ---------- section Lokasi: DARK MODE (satu showroom asli) ---------- */
+.lokasi-dark{background:#13151a;border-block:1px solid rgba(255,255,255,.08)}
+.lokasi-dark .kicker{color:rgba(255,255,255,.5)}
+.lokasi-dark h2{color:#fff}
+.lokasi-dark .aside{color:rgba(255,255,255,.6)}
+/* Peta di-invert jadi gelap; hue-rotate 180 mengembalikan warna alami jalan/air. */
+.lokasi-dark .lokasi-map{background:#0d0f13;box-shadow:0 14px 44px rgba(0,0,0,.5)}
+.lokasi-dark .lokasi-map iframe{filter:invert(0.9) hue-rotate(180deg) saturate(0.85) brightness(0.96)}
+.lokasi-dark .lokasi-map-ring{box-shadow:inset 0 0 0 6px #1c1f26,inset 0 0 0 7px rgba(255,255,255,.14)}
+.lokasi-dark .lokasi-map:hover{box-shadow:0 18px 54px rgba(26,47,94,.5)}
+.lokasi-dark .lokasi-info{background:#1c1f26;border-color:rgba(255,255,255,.09);
+  border-left-color:var(--accent);box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.lokasi-dark .lokasi-info h3{color:#fff}
+.lokasi-dark .lokasi-info > p{color:rgba(255,255,255,.62)}
+.lokasi-dark .lokasi-facts span{color:rgba(255,255,255,.42)}
+.lokasi-dark .lokasi-facts b{color:#f1f2f4}
+.lokasi-dark .lokasi-facts a{color:#7fb0ff}
+
 /* ---------- Tugas 9b: ketentuan unit di halaman detail ---------- */
 .unit-terms{margin-top:36px;border:1px solid var(--line);border-radius:14px;
   padding:20px 22px;background:var(--panel-2)}
@@ -4137,7 +4155,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
       </Reveal>
 
       <Reveal>
-        <section className="section grey lokasi" id="lokasi">
+        <section className="section lokasi lokasi-dark" id="lokasi">
           <div className="container">
             <div className="sec-head">
               <div>
@@ -4605,10 +4623,21 @@ function EtalaseView({ listings, nav, loading = false, error = '' }) {
 // ---------- Halaman kebijakan / FAQ (route #/kebijakan) ----------
 const POLICY = [
   {
-    q: 'DP & Booking',
+    q: 'Booking & DP',
     body: [
-      'DP Rp500.000 mengunci motor selama 3 hari. Waktu ini buat pelunasan dan serah terima. Kalau lewat 3 hari tanpa konfirmasi dari kami, motor bisa ditawarkan lagi ke pembeli lain.',
-      'DP balik 100% kalau kondisi motor ternyata tidak sesuai deskripsi saat kamu terima. Tinggal ajukan lewat WhatsApp maksimal 24 jam setelah serah terima.',
+      'Untuk mengamankan motor pilihanmu, cukup bayar booking sebesar Rp500.000. Begitu masuk, unit langsung kami kunci atas namamu selama 3 hari dan kami berhenti menawarkannya ke calon pembeli lain. Rentang waktu ini memberimu ruang untuk mengecek unit langsung, menyiapkan pembayaran, atau mengatur serah terima tanpa terburu-buru.',
+      'Uang booking bukan biaya tambahan yang hangus begitu saja. Jumlah yang kamu bayar dihitung penuh sebagai bagian dari harga motor, jadi ia memotong total yang harus kamu lunasi, bukan menambahnya.',
+      'Kalau lewat 3 hari belum ada konfirmasi kelanjutan dari kamu, unit kami anggap tersedia kembali dan bisa ditawarkan ke orang lain. Ini kami lakukan supaya motor yang banyak diminati tidak menggantung terlalu lama.',
+      'Prosesnya berjalan lewat WhatsApp bersama tim kami, jadi setiap langkah ada yang memandu. Ada satu jaminan penting untukmu: kalau setelah melihat unit secara langsung ternyata kondisinya tidak sesuai deskripsi yang kami tulis di listing, booking kami kembalikan 100 persen tanpa banyak pertanyaan. Kepuasanmu yang kami utamakan.',
+    ],
+  },
+  {
+    q: 'Garansi mesin',
+    body: [
+      'Setiap paket perlindungan Motorell adalah jaminan atas performa mesin motor yang kamu bawa pulang. Ada tiga pilihan yang bisa kamu ambil saat booking. Avantgard memberi garansi mesin 7 hari, Spectre memperpanjangnya menjadi 21 hari plus satu kali ganti oli gratis, dan Cullinan mencakup 37 hari plus satu kali servis dan tune up gratis. Masa garansi mulai dihitung sejak unit kamu terima.',
+      'Kalau di masa garansi kamu merasa ada yang tidak beres dengan mesin, kabari tim kami lebih dulu sebelum membawa motor ke bengkel lain. Langkah ini penting supaya garansimu tetap berlaku. Tim kami akan memeriksa kondisinya secara menyeluruh, lalu menentukan apakah klaim bisa diproses.',
+      'Yang perlu kamu tahu, perlindungan ini fokus pada mesin dan tidak mencakup kerusakan akibat kecelakaan, banjir, kebakaran, modifikasi, atau pemakaian di luar panduan. Kalau unit dibongkar atau diservis tanpa sepengetahuan kami, garansinya otomatis gugur.',
+      'Hasil pemeriksaan tim Motorell menjadi keputusan akhir. Kami berkomitmen menilainya dengan jujur dan terbuka, supaya kamu paham betul dasar setiap keputusan. Ada yang ingin ditanyakan soal garansi? Hubungi tim kami lewat WhatsApp, kami siap membantu.',
     ],
   },
   {
@@ -4635,8 +4664,8 @@ function KebijakanView({ nav }) {
         <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
         <p className="kicker">Kebijakan &amp; ketentuan</p>
         <h1>Transparan, hitam di atas putih.</h1>
-        <p className="lead">Semua aturan main soal DP, transaksi, dan data pribadimu kami tulis terbuka
-          di sini. Ada pertanyaan lain? Hubungi tim Motorell lewat WhatsApp.</p>
+        <p className="lead">Semua aturan main soal booking, garansi, transaksi, dan data pribadimu
+          kami tulis terbuka di sini. Ada pertanyaan lain? Hubungi tim Motorell lewat WhatsApp.</p>
         {POLICY.map((s, i) => (
           <details className="policy-item" key={s.q} open={i === 0}>
             <summary>{s.q}<span className="pm">+</span></summary>
