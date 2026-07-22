@@ -15,6 +15,7 @@ import MotorCarousel from './MotorCarousel';
 import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
 import { parseCaption } from './captionParser';
+import { uploadPhoto, ALLOWED_PHOTO_TYPES, PHOTO_MAX_MB } from './photoUpload';
 import { openSocialApp } from './utils/deepLink';
 
 // ---------- Konfigurasi ----------
@@ -40,19 +41,10 @@ const DP_FIXED = 500000
 // Batas foto per unit — foto pertama dalam urutan menjadi sampul etalase.
 const MAX_PHOTOS = 10
 
-// Format yang diterima. Dulu filternya cuma `type.startsWith('image/')`, yang
-// juga meloloskan GIF/BMP/SVG — tidak pernah dipakai untuk foto motor, dan SVG
-// di bucket publik membawa risiko script. Dibatasi ke tiga format foto saja.
-const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-
-// Batas ukuran file MENTAH, sekadar penjaga: compressImage() sudah menekan tiap
-// foto ke maks 1600px @ q0.82 (umumnya <500KB) sebelum diunggah, jadi ukuran
-// yang TERSIMPAN sudah aman berapa pun besar aslinya. Batas ini hanya untuk
-// menolak file raksasa/rusak yang bisa membuat createImageBitmap tersedak —
-// dan kalau kompresi gagal, ia mengembalikan file asli, jadi tetap perlu pagar.
-// Sengaja TIDAK 5MB: foto HP kelas atas rutin 8–15MB dan akan tertolak semua
-// padahal hasil kompresinya justru kecil.
-const MAX_PHOTO_MB = 15
+// Validasi format & ukuran, path, klasifikasi error, dan upload dipusatkan di
+// src/photoUpload.js (bisa diuji dengan mock client). ALLOWED_PHOTO_TYPES &
+// PHOTO_MAX_MB (5MB) diimpor dari sana supaya UI, pra-filter, dan upload satu
+// sumber kebenaran.
 
 // Paket perlindungan — HARGA FINAL divalidasi ulang di Edge Function.
 // Kalau mengubah harga di sini, ubah juga di create-dp-payment.
@@ -2166,7 +2158,7 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
       return false
     })
     const okSize = okType.filter((x) => {
-      if (x.size <= MAX_PHOTO_MB * 1024 * 1024) return true
+      if (x.size <= PHOTO_MAX_MB * 1024 * 1024) return true
       skipped.push(x.name + ' (' + (x.size / 1048576).toFixed(1) + 'MB)')
       return false
     })
@@ -2178,7 +2170,7 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     }
     const batch = okSize.slice(0, remaining)
     const notes = []
-    if (skipped.length) notes.push('Dilewati — hanya JPG/PNG/WEBP maks ' + MAX_PHOTO_MB + 'MB: ' + skipped.join(', '))
+    if (skipped.length) notes.push('Dilewati — hanya JPG/PNG/WEBP maks ' + PHOTO_MAX_MB + 'MB: ' + skipped.join(', '))
     if (okSize.length > remaining) {
       notes.push('Maksimal ' + MAX_PHOTOS + ' foto per unit — hanya ' + remaining + ' foto pertama yang diunggah.')
     }
@@ -2189,24 +2181,23 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
       slugRef.current = slugify((f.brand || 'unit') + ' ' + (f.model || '') + ' ' + f.year) + '-' + slugRef.current.slice(-4)
     }
 
-    // Progres dihitung per FILE SELESAI, bukan per byte: supabase-js v2 tidak
-    // memancarkan event progres untuk Storage, jadi bar per-byte hanya akan
-    // jadi animasi bohongan. "foto ke-n dari m" itu jujur dan tetap berguna.
+    // Upload lewat helper terpusat (validasi+kompres+path uuid+klasifikasi error).
+    // Bucket 'unit-photos' (case-sensitive, sama dengan nama di Supabase console);
+    // dir = slug unit supaya foto tiap unit terkelompok. Progres per FILE SELESAI
+    // (supabase-js v2 tak memancarkan progres byte Storage).
     console.info('[UPLOAD] Mulai —', batch.length, 'foto')
     setProg({ done: 0, total: batch.length })
     for (let i = 0; i < batch.length; i++) {
       setUpMsg('Mengunggah foto ' + (i + 1) + ' dari ' + batch.length + '…')
       try {
-        const blob = await compressImage(batch[i])
-        const path = slugRef.current + '/' + Date.now() + '-' + i + '.jpg'
-        const { error } = await supabase.storage.from('unit-photos')
-          .upload(path, blob, { contentType: 'image/jpeg' })
-        if (error) throw error
-        const { data } = supabase.storage.from('unit-photos').getPublicUrl(path)
-        setPhotos((p) => [...p, data.publicUrl])
+        const { url } = await uploadPhoto(batch[i], {
+          client: supabase, bucket: 'unit-photos', dir: slugRef.current, compress: compressImage,
+        })
+        setPhotos((p) => [...p, url])
         setProg({ done: i + 1, total: batch.length })
       } catch (ex) {
-        setErr('Gagal mengunggah foto: ' + (ex.message || 'coba lagi'))
+        // ex.message sudah pesan yang jelas & terklasifikasi dari helper.
+        setErr(ex.message || 'Gagal mengunggah foto.')
         break
       }
     }
@@ -2382,7 +2373,7 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
                 )}
                 {upMsg && <p className="f-info">{upMsg}</p>}
                 <p className="f-info">Foto pertama = sampul di etalase. Seret thumbnail untuk mengubah urutan,
-                  atau jatuhkan file gambar langsung ke area ini. JPG/PNG/WEBP, maks {MAX_PHOTO_MB}MB per foto.</p>
+                  atau jatuhkan file gambar langsung ke area ini. JPG/PNG/WEBP, maks {PHOTO_MAX_MB}MB per foto.</p>
               </div>
             </div>
             <div className="uf-right">
@@ -4135,7 +4126,6 @@ function KebijakanView({ nav }) {
 
 // ---------- Halaman Titip Jual (route #/titip-jual) — form publik ----------
 const TITIP_MIN_PHOTOS = 3
-const TITIP_MAX_MB = 5      // batas per foto (mentah) — lebih ketat dari admin
 const TITIP_STATUS_LABEL = {
   pending: 'Menunggu review', approved: 'Tayang di etalase',
   rejected: 'Ditolak', sold: 'Terjual',
@@ -4191,26 +4181,26 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
     const skipped = []
     const ok = all.filter((x) => {
       if (!ALLOWED_PHOTO_TYPES.includes(x.type)) { skipped.push(x.name + ' (format)'); return false }
-      if (x.size > TITIP_MAX_MB * 1024 * 1024) { skipped.push(x.name + ' (' + (x.size / 1048576).toFixed(1) + 'MB)'); return false }
+      if (x.size > PHOTO_MAX_MB * 1024 * 1024) { skipped.push(x.name + ' (' + (x.size / 1048576).toFixed(1) + 'MB)'); return false }
       return true
     })
     const remaining = MAX_PHOTOS - photos.length
     const batch = ok.slice(0, remaining)
-    if (skipped.length) setErr('Dilewati (hanya JPG/PNG/WEBP maks ' + TITIP_MAX_MB + 'MB): ' + skipped.join(', '))
+    if (skipped.length) setErr('Dilewati (hanya JPG/PNG/WEBP maks ' + PHOTO_MAX_MB + 'MB): ' + skipped.join(', '))
     if (!batch.length) return
     setProg({ done: 0, total: batch.length })
     for (let i = 0; i < batch.length; i++) {
       try {
-        const blob = await compressImage(batch[i])
-        const path = session.user.id + '/' + Date.now() + '-' + i + '.jpg'
-        const { error } = await supabase.storage.from('titip-jual-photos')
-          .upload(path, blob, { contentType: 'image/jpeg' })
-        if (error) throw error
-        const { data } = supabase.storage.from('titip-jual-photos').getPublicUrl(path)
-        setPhotos((p) => [...p, data.publicUrl])
+        // Helper terpusat; bucket 'titip-jual-photos' (case-sensitive), dir =
+        // userId penjual — path {userId}/{uuid}-{namaAsli}.jpg. Kalau bucket
+        // belum ada (migrasi 0003 belum jalan), pesannya jelas menyebutkannya.
+        const { url } = await uploadPhoto(batch[i], {
+          client: supabase, bucket: 'titip-jual-photos', dir: session.user.id, compress: compressImage,
+        })
+        setPhotos((p) => [...p, url])
         setProg({ done: i + 1, total: batch.length })
       } catch (ex) {
-        setErr('Gagal mengunggah foto: ' + (ex.message || 'coba lagi')); break
+        setErr(ex.message || 'Gagal mengunggah foto.'); break
       }
     }
     setProg(null)
@@ -4348,7 +4338,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                 <span className="mono">{prog.done}/{prog.total}</span>
               </div>
             )}
-            <p className="f-info">Foto jelas dari beberapa sudut membantu unitmu cepat laku. JPG/PNG/WEBP, maks {TITIP_MAX_MB}MB per foto.</p>
+            <p className="f-info">Foto jelas dari beberapa sudut membantu unitmu cepat laku. JPG/PNG/WEBP, maks {PHOTO_MAX_MB}MB per foto.</p>
 
             {err && <p className="f-err">{err}</p>}
             <div className="m-actions">
