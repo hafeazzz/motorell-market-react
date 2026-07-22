@@ -203,13 +203,16 @@ async function compressImage(file, maxW = 1600, quality = 0.82) {
 // sampai ke pesannya.
 function buildWaMessage(listing, warranty) {
   const url = window.location.origin + window.location.pathname + '#/unit/' + listing.slug
+  // Tanpa emoji: di sebagian perangkat/versi WhatsApp emoji (apalagi yang pakai
+  // variation selector seperti 🏍️) bisa tampil sebagai kotak/karakter aneh.
+  // Teks polos konsisten di semua perangkat.
   return 'Halo Motorell! Saya tertarik dengan unit ini:\n' +
     // `title` sudah memuat tahun (kolomnya "brand + model + year"), jadi tahun
     // tidak ditempel lagi di sini — lihat catatan yang sama di unitWaLink.
-    '🏍️ ' + listing.title + '\n' +
-    '💰 Harga: ' + rupiah(listing.price) + '\n' +
-    (warranty ? '🛡️ Dengan paket perlindungan ' + warranty.name + '\n' : '') +
-    '📍 Link: ' + url + '\n\n' +
+    'Unit: ' + listing.title + '\n' +
+    'Harga: ' + rupiah(listing.price) + '\n' +
+    (warranty ? 'Paket perlindungan: ' + warranty.name + '\n' : '') +
+    'Link: ' + url + '\n\n' +
     'Apakah unit ini masih tersedia?'
 }
 
@@ -444,9 +447,9 @@ function unitWaLink(l) {
   // `title` SUDAH memuat tahun — kolomnya dibentuk "brand + model + year" di
   // form admin. Menempelkan l.year lagi menghasilkan "XSR 155 2020 2020".
   const msg = 'Halo Motorell! Saya tertarik dengan unit ini:\n' +
-    '🏍️ ' + l.title + '\n' +
-    '💰 Harga: ' + rupiah(l.price) + '\n' +
-    '📍 Link: ' + url + '\n\n' +
+    'Unit: ' + l.title + '\n' +
+    'Harga: ' + rupiah(l.price) + '\n' +
+    'Link: ' + url + '\n\n' +
     'Apakah unit ini masih tersedia?'
   return 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' + encodeURIComponent(msg)
 }
@@ -483,7 +486,9 @@ function normalizeTitip(row) {
     brand: row.merek, model: row.model, year: row.tahun,
     mileage_km: row.odometer || 0, color: row.warna || null,
     price: Number(row.harga_diinginkan) || 0,
-    grade: KONDISI_TO_GRADE[row.kondisi] || null,
+    // Titip jual TIDAK punya grade/kondisi (bukan unit kurasi resmi). grade null
+    // → filter "Kondisi" otomatis absen di galeri titip (facet grades kosong).
+    grade: null,
     description: row.deskripsi || null,
     photos: Array.isArray(row.photos) ? row.photos : [],
     // published_at dipakai sort 'newest'; pakai waktu approve bila ada.
@@ -495,8 +500,8 @@ function normalizeTitip(row) {
 // bisnis), bukan CS Motorell.
 function sellerWaLink(l) {
   const msg = 'Halo, saya lihat motor Anda di Motorell Market:\n' +
-    '🏍️ ' + l.title + '\n' +
-    '💰 ' + rupiah(l.price) + '\n\n' +
+    'Unit: ' + l.title + '\n' +
+    'Harga: ' + rupiah(l.price) + '\n\n' +
     'Apakah masih tersedia?'
   return 'https://wa.me/' + waPhone(l.seller_phone) + '?text=' + encodeURIComponent(msg)
 }
@@ -980,7 +985,14 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* Grid responsif: 1 kolom → 2 (≥640) → 3 (≥1024). 6/hal = 3×2 di desktop. */
 .pg-grid{display:grid;grid-template-columns:1fr;gap:16px}
 @media(min-width:640px){ .pg-grid{grid-template-columns:repeat(2,1fr)} }
-@media(min-width:1024px){ .pg-grid{grid-template-columns:repeat(3,1fr);gap:18px} }
+@media(min-width:1024px){
+  .pg-grid{grid-template-columns:repeat(3,1fr);gap:18px}
+  /* Kartu menyempit (3 kolom + sidebar ~200px): tombol WA jadi IKON saja supaya
+     tidak bertabrakan dengan badge (mis. "TITIP JUAL" yang lebar). */
+  .pg-grid .card-wa{padding:9px;gap:0}
+  .pg-grid .card-wa span{display:none}
+  .pg-grid .card-wa svg{width:16px;height:16px}
+}
 
 /* ---------- kontrol paginasi (tombol SELALU tampil) ---------- */
 .pgn{display:flex;align-items:center;justify-content:center;gap:6px;
@@ -2998,13 +3010,19 @@ function Reveal({ children, className = '', style, once = false, dir = 'up' }) {
     const el = ref.current
     if (!el) return
     if (prefersReduced()) { setShown(true); return }
+    // threshold 0 + rootMargin: kunci untuk elemen SANGAT tinggi (mis. etalase
+    // dengan paginasi) di layar mobile pendek. threshold 0.16 dulu menuntut 16%
+    // elemen terlihat sekaligus — mustahil bila elemen >6× tinggi viewport, jadi
+    // isIntersecting tak pernah true dan seluruh section tetap opacity:0 (layar
+    // putih). threshold 0 memicu begitu tepinya masuk; rootMargin -60px sekadar
+    // menunda sedikit agar animasinya tetap terasa.
     const io = new IntersectionObserver(([entry]) => {
       if (once) {
         if (entry.isIntersecting) { setShown(true); io.disconnect() }
       } else {
         setShown(entry.isIntersecting)
       }
-    }, { threshold: 0.16 })
+    }, { threshold: 0, rootMargin: '0px 0px -60px 0px' })
     io.observe(el)
     return () => io.disconnect()
   }, [once])
@@ -3214,7 +3232,6 @@ function DetailView({ listing, nav, onBook }) {
             <div className="specs">
               <div><small>Tahun</small><b>{listing.year}</b></div>
               <div><small>Odometer</small><b>{listing.mileage_km ? fmt(listing.mileage_km) + ' km' : '—'}</b></div>
-              <div><small>Kondisi</small><b>{listing.kondisi || '—'}</b></div>
               <div><small>Warna</small><b>{listing.color || '—'}</b></div>
             </div>
             <div className="rows">
@@ -4591,7 +4608,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
   const empty = {
     seller_name: '', seller_phone: '', seller_email: '',
     merek: '', model: '', tahun: new Date().getFullYear(), odometer: '',
-    warna: '', plat_nomor: '', kondisi: 'Bagus', harga_diinginkan: '',
+    warna: '', plat_nomor: '', harga_diinginkan: '',
     deskripsi: '', kelengkapan: '',
   }
   const [f, setF] = useState(empty)
@@ -4670,7 +4687,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
       seller_email: f.seller_email.trim() || null,
       merek: f.merek.trim(), model: f.model.trim(), tahun: Number(f.tahun),
       odometer: Number(f.odometer) || null, warna: f.warna.trim() || null,
-      plat_nomor: f.plat_nomor.trim() || null, kondisi: f.kondisi,
+      plat_nomor: f.plat_nomor.trim() || null, kondisi: null,
       harga_diinginkan: Number(f.harga_diinginkan), deskripsi: f.deskripsi.trim() || null,
       kelengkapan: f.kelengkapan.trim() || null, photos, status: 'pending',
     }
@@ -4733,10 +4750,6 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                 <input id="t-warna" value={f.warna} onChange={set('warna')} /></div>
               <div className="field"><label htmlFor="t-plat">Plat nomor</label>
                 <input id="t-plat" value={f.plat_nomor} onChange={set('plat_nomor')} placeholder="B 1234 XYZ" /></div>
-              <div className="field"><label htmlFor="t-kondisi">Kondisi</label>
-                <select id="t-kondisi" value={f.kondisi} onChange={set('kondisi')}>
-                  {KONDISI_OPTS.map((k) => <option key={k} value={k}>{k}</option>)}
-                </select></div>
               <div className="field"><label htmlFor="t-harga">Harga diinginkan (Rp) *</label>
                 <input id="t-harga" type="number" min="0" value={f.harga_diinginkan} onChange={set('harga_diinginkan')} placeholder="18000000" required /></div>
               <div className="field full"><label htmlFor="t-desc">Deskripsi tambahan</label>
