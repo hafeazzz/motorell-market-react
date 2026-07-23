@@ -708,6 +708,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-ambient .hero-inner .btn{pointer-events:auto}
 .hero-ambient .hero-main{grid-template-columns:1fr}
 @media(max-width:1020px){
+  /* Mobile: MATIKAN interaksi model (pointer-events:none) → sentuhan tembus ke
+     halaman sehingga gulir tetap lancar; motor cukup berputar otomatis. Interaksi
+     seret hanya di desktop. */
+  .hero-ambient .hero-bg{pointer-events:none}
   /* Mobile: teks menutupi lebar penuh di atas model → selubung dari ATAS. */
   .hero-ambient .hero-bg-shade{background:linear-gradient(180deg, rgba(255,255,255,.88) 0%,
     rgba(255,255,255,.58) 44%, rgba(255,255,255,.12) 100%)}
