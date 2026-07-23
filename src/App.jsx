@@ -38,8 +38,6 @@ if (!supabase) {
     '[SUPABASE] Env var belum lengkap — app akan menampilkan layar konfigurasi.',
     { VITE_SUPABASE_URL: Boolean(SUPA_URL), VITE_SUPABASE_ANON_KEY: Boolean(SUPA_KEY) },
   )
-} else {
-  console.info('[SUPABASE] Client siap →', SUPA_URL)
 }
 
 // DP dikunci flat Rp500.000 untuk semua unit (bukan persentase).
@@ -218,7 +216,6 @@ function buildWaMessage(listing, warranty) {
 
 function openWhatsAppCS(listing, toast, warranty) {
   toast('Kamu akan diarahkan ke WhatsApp CS kami untuk melanjutkan pembayaran')
-  console.info('[WA] Hubungi CS →', listing.title, '· paket:', warranty ? warranty.name : '(tidak dipilih)')
   const url = 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' +
     encodeURIComponent(buildWaMessage(listing, warranty))
   window.open(url, '_blank', 'noopener,noreferrer')
@@ -542,7 +539,6 @@ function pushRecent(id) {
     // 6 unit BERBEDA, bukan unit yang sama enam kali.
     const next = [String(id), ...readRecent().filter((x) => x !== String(id))].slice(0, RECENT_MAX)
     localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-    console.info('[RECENT] Riwayat unit diperbarui →', next.length + ' unit')
     return next
   } catch {
     return readRecent()
@@ -2415,7 +2411,6 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     // Bucket 'unit-photos' (case-sensitive, sama dengan nama di Supabase console);
     // dir = slug unit supaya foto tiap unit terkelompok. Progres per FILE SELESAI
     // (supabase-js v2 tak memancarkan progres byte Storage).
-    console.info('[UPLOAD] Mulai —', batch.length, 'foto')
     setProg({ done: 0, total: batch.length })
     for (let i = 0; i < batch.length; i++) {
       setUpMsg('Mengunggah foto ' + (i + 1) + ' dari ' + batch.length + '…')
@@ -2431,7 +2426,6 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
         break
       }
     }
-    console.info('[UPLOAD] Selesai')
     setUpMsg('')
     setProg(null)
   }
@@ -2459,7 +2453,6 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     setAutoKeys(new Set(auto))
     setMissKeys(new Set(missing))
     setNett(nett)
-    console.info('[PARSE] terisi:', auto.join(', ') || '(tidak ada)', '| gagal:', missing.join(', ') || '(tidak ada)')
   }
 
   // Kelas penanda: hijau = hasil auto-isi; kuning = gagal dideteksi DAN masih
@@ -3518,8 +3511,7 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
           {/* Chat cepat. Titip jual → langsung ke penjual; resmi → CS Motorell. */}
           <a className="card-wa" href={isTitip(l) ? sellerWaLink(l) : unitWaLink(l)}
             target="_blank" rel="noopener noreferrer"
-            aria-label={'Chat WhatsApp tentang ' + l.title}
-            onClick={() => console.info('[WA] Chat unit →', l.title, isTitip(l) ? '(penjual)' : '(CS)')}>
+            aria-label={'Chat WhatsApp tentang ' + l.title}>
             <WaIcon /><span>Chat Sekarang</span>
           </a>
         </div>
@@ -3574,7 +3566,6 @@ function FilterPanel({ facets, panel, setPanel, onReset, showSource = true }) {
   const toggle = (key, val) => setPanel((p) => {
     const has = p[key].includes(val)
     const next = has ? p[key].filter((x) => x !== val) : [...p[key], val]
-    console.info('[FILTER] ' + key + ' →', next)
     return { ...p, [key]: next }
   })
 
@@ -4005,7 +3996,6 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
     const match = (l) => !searchActive || matchListing(l, filters)
     const off = listings.filter((l) => !isTitip(l) && match(l))
     const tj = listings.filter((l) => isTitip(l) && match(l))
-    console.info('[ETALASE] resmi ' + off.length + ' · titip jual ' + tj.length)
     return { officialUnits: off, titipUnits: tj }
   }, [listings, searchActive, filters])
   const officialAll = useMemo(() => listings.filter((l) => !isTitip(l)), [listings])
@@ -4781,7 +4771,6 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
     const { error } = await supabase.from('titip_jual_units').insert(payload)
     setBusy(false)
     if (error) { setErr('Gagal mengirim: ' + error.message); return }
-    console.info('[TITIP] Submission terkirim — status pending')
     setF(empty); setPhotos([]); setDone(true)
     window.scrollTo(0, 0)
   }
@@ -4958,7 +4947,6 @@ export default function App() {
   const [listError, setListError] = useState('')
 
   const resetPanel = useCallback(() => {
-    console.info('[FILTER] Reset')
     setPanel(EMPTY_PANEL)
   }, [])
 
