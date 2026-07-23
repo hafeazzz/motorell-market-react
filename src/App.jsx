@@ -4690,10 +4690,20 @@ const TITIP_STATUS_LABEL = {
   pending: 'Menunggu review', approved: 'Tayang di etalase',
   rejected: 'Ditolak', sold: 'Terjual',
 }
-// Label angle untuk panduan foto (dipetakan ke foto-foto contoh unit resmi).
+// Label angle untuk panduan foto (sejajar dengan PHOTO_GUIDE_EXAMPLES di bawah).
 const PHOTO_GUIDE_LABELS = [
   'Tampak depan', 'Samping kiri', 'Samping kanan',
   'Tampak belakang', 'Odometer / KM', 'Kondisi mesin',
+]
+// Foto contoh KURASI, aset statis di /public (bukan dari listing) — angle standar
+// sebagai panduan penjual. Urutan HARUS sama dengan PHOTO_GUIDE_LABELS.
+const PHOTO_GUIDE_EXAMPLES = [
+  '/reference-photos/tampak-depan.jpg',
+  '/reference-photos/samping-kiri.jpg',
+  '/reference-photos/samping-kanan.jpg',
+  '/reference-photos/tampak-belakang.jpg',
+  '/reference-photos/odometer.jpg',
+  '/reference-photos/mesin.jpg',
 ]
 
 function TitipJualView({ session, nav, toast, onLoginClick }) {
@@ -4710,7 +4720,6 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
   const [err, setErr] = useState('')
   const [done, setDone] = useState(false)
   const [mine, setMine] = useState(null)        // submission milik user
-  const [guide, setGuide] = useState([])        // foto contoh dari unit resmi
   const fileRef = useRef(null)
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
 
@@ -4722,17 +4731,6 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
       .select('*').eq('seller_id', session.user.id).order('created_at', { ascending: false })
       .then(({ data }) => setMine(data || []))
   }, [session, done])
-
-  // Foto contoh untuk panduan: ambil dari unit resmi yang fotonya PALING lengkap
-  // di etalase. Read-only, murni referensi angle — tidak ikut ter-submit.
-  useEffect(() => {
-    supabase.from('listings').select('photos').eq('status', 'published')
-      .then(({ data }) => {
-        const best = (data || []).map((r) => r.photos).filter((p) => Array.isArray(p) && p.length)
-          .sort((a, b) => b.length - a.length)[0] || []
-        setGuide(best.slice(0, 6))
-      })
-  }, [])
 
   async function handleFiles(picked) {
     const all = Array.from(picked || [])
@@ -4851,24 +4849,22 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                   placeholder="STNK hidup, BPKB ada, faktur, kunci serep…" /></div>
             </div>
 
-            {/* Panduan foto — contoh dari unit resmi (read-only). Membantu
-                penjual mengambil angle yang konsisten dengan standar etalase. */}
-            {guide.length > 0 && (
-              <div className="titip-guide">
-                <h3 className="titip-sec" style={{ marginBottom: 6 }}>Panduan foto — contoh yang baik</h3>
-                <p className="f-info" style={{ marginTop: 0 }}>Ambil foto motormu dengan angle serupa
-                  contoh di bawah (foto dari unit etalase Motorell) untuk hasil terbaik.</p>
-                <div className="titip-guide-grid">
-                  {guide.map((url, i) => (
-                    <figure key={i} className="titip-guide-item">
-                      <img src={url} alt={'Contoh ' + (PHOTO_GUIDE_LABELS[i] || 'foto')} loading="lazy"
-                        draggable={false} />
-                      <figcaption>Contoh: {PHOTO_GUIDE_LABELS[i] || 'Foto ' + (i + 1)}</figcaption>
-                    </figure>
-                  ))}
-                </div>
+            {/* Panduan foto — contoh angle kurasi (aset statis). Membantu penjual
+                mengambil angle yang konsisten dengan standar etalase. */}
+            <div className="titip-guide">
+              <h3 className="titip-sec" style={{ marginBottom: 6 }}>Panduan foto — contoh yang baik</h3>
+              <p className="f-info" style={{ marginTop: 0 }}>Ambil foto motormu dengan angle serupa
+                contoh di bawah untuk hasil terbaik.</p>
+              <div className="titip-guide-grid">
+                {PHOTO_GUIDE_EXAMPLES.map((url, i) => (
+                  <figure key={url} className="titip-guide-item">
+                    <img src={url} alt={'Contoh ' + (PHOTO_GUIDE_LABELS[i] || 'foto')} loading="lazy"
+                      draggable={false} />
+                    <figcaption>Contoh: {PHOTO_GUIDE_LABELS[i] || 'Foto ' + (i + 1)}</figcaption>
+                  </figure>
+                ))}
               </div>
-            )}
+            </div>
 
             <h3 className="titip-sec">Foto motor — {photos.length}/{MAX_PHOTOS} (min {TITIP_MIN_PHOTOS})</h3>
             <div className="photo-strip">
