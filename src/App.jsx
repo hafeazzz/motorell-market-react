@@ -681,7 +681,12 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-embed-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 
 /* ---------- hero ambient: model 3D jadi LATAR di belakang teks ---------- */
-.hero-ambient .hero-bg{position:absolute;inset:0;z-index:1;pointer-events:none}
+/* pointer-events:auto → motor bisa DI-DRAG untuk diputar. Lapisan teks (hero-inner)
+   dibuat tembus (pointer-events:none) supaya seret di mana pun memutar motor,
+   KECUALI tombol/tautan yang di-aktifkan lagi. touch-action:pan-y pada model
+   menjaga gulir vertikal halaman tetap jalan di mobile (hanya seret horizontal
+   yang memutar). */
+.hero-ambient .hero-bg{position:absolute;inset:0;z-index:1;pointer-events:auto}
 .hero-ambient .hero-bg .hero-embed,
 .hero-ambient .hero-bg .hero-embed-frame{position:absolute;inset:0;width:100%;height:100%;
   aspect-ratio:auto;min-height:0;flex:none;display:block}
@@ -690,18 +695,25 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .hero-ambient .hero-bg model-viewer,
 .hero-ambient .hero-bg .hero-embed-fallback{transform:scale(1.4);transform-origin:center 60%;
   filter:hue-rotate(200deg) saturate(1.15)}
+.hero-ambient .hero-bg model-viewer{touch-action:pan-y;cursor:grab}
+.hero-ambient .hero-bg model-viewer:active{cursor:grabbing}
 /* Selubung: putih pekat di KIRI (area teks) → transparan ke KANAN (motor tampil). */
 .hero-ambient .hero-bg-shade{position:absolute;inset:0;z-index:2;pointer-events:none;
   background:linear-gradient(100deg, rgba(255,255,255,.9) 0%, rgba(255,255,255,.64) 33%,
     rgba(255,255,255,.2) 63%, rgba(255,255,255,.03) 100%)}
-.hero-ambient .hero-inner{position:relative;z-index:3}
+/* Lapisan teks tembus untuk gesture, tapi elemen interaktifnya tetap bisa diklik. */
+.hero-ambient .hero-inner{position:relative;z-index:3;pointer-events:none}
+.hero-ambient .hero-inner a,
+.hero-ambient .hero-inner button,
+.hero-ambient .hero-inner .btn{pointer-events:auto}
 .hero-ambient .hero-main{grid-template-columns:1fr}
 @media(max-width:1020px){
   /* Mobile: teks menutupi lebar penuh di atas model → selubung dari ATAS. */
   .hero-ambient .hero-bg-shade{background:linear-gradient(180deg, rgba(255,255,255,.88) 0%,
     rgba(255,255,255,.58) 44%, rgba(255,255,255,.12) 100%)}
+  /* Motor diperkecil di mobile (skala 1.0, bukan 1.3) supaya tak kebesaran/terpotong. */
   .hero-ambient .hero-bg model-viewer,
-  .hero-ambient .hero-bg .hero-embed-fallback{transform:scale(1.3);transform-origin:center 72%}
+  .hero-ambient .hero-bg .hero-embed-fallback{transform:scale(1.0);transform-origin:center 66%}
 }
 .hero-embed-ph{position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:13px;font-family:var(--mono);
@@ -1697,23 +1709,22 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .lokasi-grid{grid-template-columns:1fr 1fr;gap:56px}
 }
 
-/* ---------- section Lokasi: DARK MODE (satu showroom asli) ---------- */
-.lokasi-dark{background:#13151a;border-block:1px solid rgba(255,255,255,.08)}
-.lokasi-dark .kicker{color:rgba(255,255,255,.5)}
-.lokasi-dark h2{color:#fff}
-.lokasi-dark .aside{color:rgba(255,255,255,.6)}
-/* Peta di-invert jadi gelap; hue-rotate 180 mengembalikan warna alami jalan/air. */
-.lokasi-dark .lokasi-map{background:#0d0f13;box-shadow:0 14px 44px rgba(0,0,0,.5)}
-.lokasi-dark .lokasi-map iframe{filter:invert(0.9) hue-rotate(180deg) saturate(0.85) brightness(0.96)}
-.lokasi-dark .lokasi-map-ring{box-shadow:inset 0 0 0 6px #1c1f26,inset 0 0 0 7px rgba(255,255,255,.14)}
-.lokasi-dark .lokasi-map:hover{box-shadow:0 18px 54px rgba(26,47,94,.5)}
-.lokasi-dark .lokasi-info{background:#1c1f26;border-color:rgba(255,255,255,.09);
-  border-left-color:var(--accent);box-shadow:0 12px 40px rgba(0,0,0,.35)}
-.lokasi-dark .lokasi-info h3{color:#fff}
-.lokasi-dark .lokasi-info > p{color:rgba(255,255,255,.62)}
-.lokasi-dark .lokasi-facts span{color:rgba(255,255,255,.42)}
-.lokasi-dark .lokasi-facts b{color:#f1f2f4}
-.lokasi-dark .lokasi-facts a{color:#7fb0ff}
+/* ---------- section Lokasi: latar PUTIH + kartu peta/info GELAP (kontras) ---------- */
+.lokasi-cards-dark{background:#fff;border-block:1px solid var(--line)}
+/* Judul, kicker, dan aside tetap gelap (default) di atas latar putih. */
+/* Peta: kartu gelap, iframe di-invert; hue-rotate 180 mengembalikan warna jalan/air. */
+.lokasi-cards-dark .lokasi-map{background:#0d0f13;box-shadow:0 16px 46px rgba(17,17,20,.24)}
+.lokasi-cards-dark .lokasi-map iframe{filter:invert(0.9) hue-rotate(180deg) saturate(0.85) brightness(0.96)}
+.lokasi-cards-dark .lokasi-map-ring{box-shadow:inset 0 0 0 6px #1c1f26,inset 0 0 0 7px rgba(255,255,255,.14)}
+.lokasi-cards-dark .lokasi-map:hover{box-shadow:0 20px 56px rgba(26,47,94,.32)}
+/* Kartu info: gelap dengan teks terang, kontras di atas latar putih. */
+.lokasi-cards-dark .lokasi-info{background:#1c1f26;border:2px solid rgba(255,255,255,.1);
+  border-left:4px solid var(--accent);box-shadow:0 14px 40px rgba(17,17,20,.22)}
+.lokasi-cards-dark .lokasi-info h3{color:#fff}
+.lokasi-cards-dark .lokasi-info > p{color:rgba(255,255,255,.64)}
+.lokasi-cards-dark .lokasi-facts span{color:rgba(255,255,255,.44)}
+.lokasi-cards-dark .lokasi-facts b{color:#f1f2f4}
+.lokasi-cards-dark .lokasi-facts a{color:#7fb0ff}
 
 /* ---------- Tugas 9b: ketentuan unit di halaman detail ---------- */
 .unit-terms{margin-top:36px;border:1px solid var(--line);border-radius:14px;
@@ -4145,7 +4156,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
       </Reveal>
 
       <Reveal>
-        <section className="section lokasi lokasi-dark" id="lokasi">
+        <section className="section lokasi lokasi-cards-dark" id="lokasi">
           <div className="container">
             <div className="sec-head">
               <div>
