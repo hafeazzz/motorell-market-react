@@ -632,6 +632,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .btn-dark:hover:not(:disabled){background:#2a2a30}
 .btn-ghost{border:1.5px solid var(--line-2);color:var(--ink)}
 .btn-ghost:hover:not(:disabled){border-color:var(--ink)}
+/* Tombol putih beroutline (mis. "Buka di Google Maps" di kartu gelap). */
+.btn-light{background:#fff;color:#1f2937;border:2px solid #d1d5db}
+.btn-light:hover:not(:disabled){background:#f3f4f6;border-color:#9ca3af}
 .btn-quiet{color:var(--muted);font-weight:500;padding:10px 14px}
 .btn-quiet:hover{color:var(--ink)}
 .btn-sm{padding:9px 17px;font-size:13px}
@@ -4191,7 +4194,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                     <a href={'https://wa.me/' + CS_WHATSAPP_NUMBER} target="_blank" rel="noopener noreferrer">WhatsApp kami</a>
                   </b></li>
                 </ul>
-                <a className="btn btn-accent" href={MAPS_LINK}
+                <a className="btn btn-light" href={MAPS_LINK}
                   target="_blank" rel="noopener noreferrer">Buka di Google Maps</a>
               </div>
             </div>
