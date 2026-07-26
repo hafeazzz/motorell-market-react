@@ -606,11 +606,6 @@ body,.nav,.card,.card-body,.card-go,.panel,.fp,.modal,.overlay,section,input,sel
   transition:border-color .2s,background .2s,color .2s}
 .theme-toggle:hover{border-color:var(--ink)}
 .theme-toggle svg{width:18px;height:18px}
-.theme-toggle-label{display:none}
-/* Di menu mobile (nav-links.open): jadi baris penuh berlabel. */
-.nav-links.open .theme-toggle{width:100%;height:auto;justify-content:flex-start;
-  padding:11px 16px;border-radius:12px}
-.nav-links.open .theme-toggle-label{display:inline;font-size:13px;font-weight:600}
 
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth;background:var(--bg)}
@@ -5409,26 +5404,27 @@ export default function App() {
             onPick={(l) => { setQuery(''); nav('#/unit/' + l.slug) }}
             onQuick={(text) => { setQuery(text); if (route.name !== 'home') nav('#/') }} />
           <div className="nav-actions">
+            {/* Toggle tema di LUAR nav-links → selalu terlihat, termasuk di mobile
+                (di samping hamburger), bukan tersembunyi di dalam menu. */}
+            <button type="button" className="theme-toggle" onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}
+              title={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}>
+              {theme === 'dark' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4.2" />
+                  <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" />
+                </svg>
+              )}
+            </button>
             {/* Di mobile deretan tombol ini dilipat ke menu dropdown (buka lewat
                 hamburger) supaya tak meluber/terpotong. Di desktop tetap inline. */}
             <div className={'nav-links' + (menuOpen ? ' open' : '')}>
-              <button type="button" className="theme-toggle" onClick={toggleTheme}
-                aria-label={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}
-                title={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}>
-                {theme === 'dark' ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="4.2" />
-                    <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" />
-                  </svg>
-                )}
-                <span className="theme-toggle-label">{theme === 'dark' ? 'Mode terang' : 'Mode gelap'}</span>
-              </button>
               {isStaff && route.name !== 'admin' && (
                 <button className="btn btn-quiet btn-sm" onClick={() => { nav('#/admin'); setMenuOpen(false) }}>Panel admin</button>)}
               {route.name !== 'titip' && (
