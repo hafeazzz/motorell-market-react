@@ -1,10 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabaseClient';
 import { MOD_CATEGORIES, CAT_FALLBACK } from './modParts';
-
-const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = SUPA_URL && SUPA_KEY ? createClient(SUPA_URL, SUPA_KEY) : null;
 
 function ModPartForm({ initial, onClose, onSaved, toast }) {
   const editing = Boolean(initial && initial.id);

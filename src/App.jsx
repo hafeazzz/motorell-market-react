@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './supabaseClient'
 import QRCode from 'qrcode'
 import ArchiveTab from './ArchiveTab';
 import ModPartPanel from './ModPartPanel';
@@ -21,15 +21,9 @@ import { openSocialApp } from './utils/deepLink';
 // ---------- Konfigurasi ----------
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-// flowType 'pkce': login OAuth (Google) kembali dengan `?code=...` di QUERY —
-// tidak bentrok dengan hash-router (#/…) yang dipakai app ini. detectSessionInUrl
-// membuat kode itu otomatis ditukar jadi sesi saat halaman balik dari Google,
-// tanpa perlu route /auth/callback khusus.
-const supabase = SUPA_URL && SUPA_KEY
-  ? createClient(SUPA_URL, SUPA_KEY, {
-      auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
-    })
-  : null
+// `supabase` = SATU instance dari ./supabaseClient (lihat impor di atas). Dulu
+// dibuat inline di sini; dipindah agar tidak ada createClient ganda di app
+// ("Multiple GoTrueClient instances").
 
 // Status koneksi dilog sekali saat modul dimuat — cukup untuk memastikan env
 // var terbaca tanpa membanjiri console tiap render.
