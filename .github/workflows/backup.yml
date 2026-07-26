@@ -1,0 +1,59 @@
+name: DB Backup
+
+on:
+  schedule:
+    # 19:00 UTC = 02:00 WIB (Asia/Jakarta), jam off-peak. Ubah bila zona berbeda.
+    - cron: "0 19 * * *"
+  workflow_dispatch: {} # tombol "Run workflow" manual di tab Actions (untuk tes)
+
+permissions:
+  contents: write # membuat & menghapus GitHub Release
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    # Dipetakan ke env agar bisa dipakai di `if:` (secret tak bisa dibaca di if).
+    env:
+      MAIL_TO: ${{ secrets.MAIL_TO }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL 17 client (pg_dump)
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Run backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh CLI auth
+          RETENTION_DAYS: "7"
+        run: |
+          chmod +x ./backup.sh
+          ./backup.sh
+
+      # Opsional: email saat GAGAL. Butuh secrets SMTP (MAIL_*). Kalau MAIL_TO
+      # kosong, step ini dilewati. GitHub juga otomatis mengirim email ke pemilik
+      # saat scheduled workflow gagal — jadi step ini boleh dihapus bila cukup.
+      - name: Email on failure
+        if: ${{ failure() && env.MAIL_TO != '' }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "❌ MotorellMarket — DB backup GAGAL"
+          to: ${{ secrets.MAIL_TO }}
+          from: MotorellMarket Backup <${{ secrets.MAIL_USERNAME }}>
+          body: |
+            Backup database MotorellMarket GAGAL.
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
