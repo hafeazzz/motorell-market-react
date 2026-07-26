@@ -1,7 +1,22 @@
 <!DOCTYPE html>
-<html lang="id" style="background:#ffffff">
+<html lang="id">
 <head>
   <meta charset="UTF-8" />
+  <!-- Set tema SEBELUM paint pertama → tanpa kedip putih (FOUC). -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t !== 'dark' && t !== 'light') {
+          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        var el = document.documentElement;
+        el.setAttribute('data-theme', t);
+        el.style.background = t === 'dark' ? '#0f1115' : '#ffffff';
+        el.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#ffffff" />
   <link rel="icon" type="image/x-icon" href="/icons/favicon.ico" />

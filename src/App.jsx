@@ -564,7 +564,54 @@ const CSS = `
   --font:'Archivo',system-ui,-apple-system,sans-serif;
   --mono:'IBM Plex Mono',monospace;
   --shadow:0 1px 2px rgba(17,17,20,.04),0 8px 30px rgba(17,17,20,.06);
+  color-scheme:light;
 }
+/* ---------- TEMA GELAP: override variabel (menyeluruh) + beberapa permukaan hardcoded ---------- */
+[data-theme="dark"]{
+  --bg:#0f1115; --bg-2:#16181d; --bg-3:#1f232b;
+  --panel:#16181d; --panel-2:#1e222b;
+  --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.18);
+  --ink:#eef0f3; --muted:#a3a9b4; --dim:#767c86;
+  --accent:#5b82c8; --accent-ink:#7599d8; --ok:#43bd6c; --warn:#d29a35;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 12px 36px rgba(0,0,0,.55);
+  color-scheme:dark;
+}
+/* Transisi halus saat ganti tema (hanya properti warna → tak ganggu transform/opacity). */
+body,.nav,.card,.card-body,.card-go,.panel,.fp,.modal,.overlay,section,input,select,textarea,
+.btn,.gal-title,.lokasi-info,h1,h2,h3,h4,p{
+  transition:background-color .28s ease,color .28s ease,border-color .28s ease}
+/* Permukaan warna-keras yang perlu disesuaikan di gelap. */
+[data-theme="dark"] .nav.scrolled{background:rgba(16,18,23,.86)}
+[data-theme="dark"] .btn-light{background:var(--panel-2);color:var(--ink);border-color:var(--line-2)}
+[data-theme="dark"] .btn-light:hover:not(:disabled){background:var(--bg-3);border-color:var(--ink)}
+[data-theme="dark"] .btn-ghost{background:transparent}
+[data-theme="dark"] .lokasi-cards-dark{background:var(--bg)}
+/* Placeholder foto (radial terang) → gelap di dark mode. */
+[data-theme="dark"] .card-media,
+[data-theme="dark"] .feature-media,
+[data-theme="dark"] .gallery-main{background:radial-gradient(120% 120% at 50% 25%, #232830, var(--bg-3) 82%)}
+[data-theme="dark"] .hero{background:
+  radial-gradient(1200px 640px at 80% 34%, #171a20, transparent 62%),
+  linear-gradient(180deg,#0f1115 0%,#141821 100%)}
+[data-theme="dark"] .hero-ambient .hero-bg-shade{background:linear-gradient(100deg,
+  rgba(15,17,21,.92) 0%, rgba(15,17,21,.66) 33%, rgba(15,17,21,.22) 63%, rgba(15,17,21,.02) 100%)}
+@media(max-width:1020px){
+  [data-theme="dark"] .hero-ambient .hero-bg-shade{background:linear-gradient(180deg,
+    rgba(15,17,21,.9) 0%, rgba(15,17,21,.6) 44%, rgba(15,17,21,.12) 100%)}
+}
+/* Tombol toggle tema di navbar. */
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  width:38px;height:38px;border-radius:999px;border:1px solid var(--line-2);
+  background:var(--panel);color:var(--ink);cursor:pointer;flex:none;
+  transition:border-color .2s,background .2s,color .2s}
+.theme-toggle:hover{border-color:var(--ink)}
+.theme-toggle svg{width:18px;height:18px}
+.theme-toggle-label{display:none}
+/* Di menu mobile (nav-links.open): jadi baris penuh berlabel. */
+.nav-links.open .theme-toggle{width:100%;height:auto;justify-content:flex-start;
+  padding:11px 16px;border-radius:12px}
+.nav-links.open .theme-toggle-label{display:inline;font-size:13px;font-weight:600}
+
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth;background:var(--bg)}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);
@@ -4925,6 +4972,21 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
 
 export default function App() {
   const [route, setRoute] = useState(parseHash)
+  // Tema (light/dark). Nilai awal dibaca dari <html data-theme> yang SUDAH diset
+  // skrip inline di index.html (anti-kedip). Toggle menyimpan ke localStorage +
+  // menyetel data-theme, background, color-scheme, & meta theme-color.
+  const [theme, setTheme] = useState(
+    () => (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme')) || 'light')
+  useEffect(() => {
+    const el = document.documentElement
+    el.setAttribute('data-theme', theme)
+    el.style.background = theme === 'dark' ? '#0f1115' : '#ffffff'
+    el.style.colorScheme = theme
+    try { localStorage.setItem('theme', theme) } catch { /* mode privat */ }
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1115' : '#ffffff')
+  }, [theme])
+  const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), [])
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [profileErr, setProfileErr] = useState('')
@@ -5350,6 +5412,23 @@ export default function App() {
             {/* Di mobile deretan tombol ini dilipat ke menu dropdown (buka lewat
                 hamburger) supaya tak meluber/terpotong. Di desktop tetap inline. */}
             <div className={'nav-links' + (menuOpen ? ' open' : '')}>
+              <button type="button" className="theme-toggle" onClick={toggleTheme}
+                aria-label={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}
+                title={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}>
+                {theme === 'dark' ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4.2" />
+                    <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" />
+                  </svg>
+                )}
+                <span className="theme-toggle-label">{theme === 'dark' ? 'Mode terang' : 'Mode gelap'}</span>
+              </button>
               {isStaff && route.name !== 'admin' && (
                 <button className="btn btn-quiet btn-sm" onClick={() => { nav('#/admin'); setMenuOpen(false) }}>Panel admin</button>)}
               {route.name !== 'titip' && (
