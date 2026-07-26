@@ -7,9 +7,8 @@
     (function () {
       try {
         var t = localStorage.getItem('theme');
-        if (t !== 'dark' && t !== 'light') {
-          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
+        // Default = LIGHT (tidak mengikuti tema OS) → konsisten di semua perangkat.
+        if (t !== 'dark' && t !== 'light') { t = 'light'; }
         var el = document.documentElement;
         el.setAttribute('data-theme', t);
         el.style.background = t === 'dark' ? '#0f1115' : '#ffffff';
