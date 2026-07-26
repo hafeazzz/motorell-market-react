@@ -2,6 +2,10 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
+  <!-- Deklarasi color-scheme sedini mungkin → memberi tahu Chrome bahwa halaman
+       ini mengelola temanya sendiri, sehingga "Auto/Force Dark Mode" Chrome tidak
+       ikut menggelapkan (penyebab latar putih jadi abu di Chrome mobile). -->
+  <meta name="color-scheme" content="light dark" />
   <!-- Set tema SEBELUM paint pertama → tanpa kedip putih (FOUC). -->
   <script>
     (function () {
