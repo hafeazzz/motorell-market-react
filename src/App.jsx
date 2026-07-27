@@ -2128,7 +2128,17 @@ function AuthModal({ onClose, onDone, toast }) {
 
   async function submit(e) {
     e.preventDefault()
+    // Penanda diagnosis: kalau log ini TIDAK muncul saat klik "Buat akun",
+    // berarti validasi bawaan browser (required / type=email / minLength 6)
+    // memblokir submit → signUp() tak pernah dipanggil, tak ada request ke server.
+    console.info('[AUTH] submit()', { mode, emailLen: email.length, passLen: pass.length })
     setErr(''); setInfo(''); setBusy(true)
+    if (!supabase) {
+      console.error('[AUTH] supabase client = null → VITE_SUPABASE_URL/ANON_KEY tak ter-build')
+      setErr('Koneksi ke server belum siap (konfigurasi). Muat ulang halaman & coba lagi.')
+      setBusy(false)
+      return
+    }
     try {
       if (mode === 'in') {
         const { error } = await supabase.auth.signInWithPassword({ email, password: pass })
@@ -2147,11 +2157,17 @@ function AuthModal({ onClose, onDone, toast }) {
           },
         })
         if (error) throw error
+        console.info('[AUTH] signUp OK', { hasSession: !!data.session, userId: data.user?.id })
         if (data.session) { toast('Akun dibuat, kamu sudah masuk'); onDone() }
         else setInfo('Akun dibuat. Cek email kamu untuk link konfirmasi, lalu masuk di sini.')
       }
     } catch (ex) {
-      setErr(ex.message || 'Gagal memproses. Coba lagi.')
+      // Bedakan gagal jaringan/CSP (request tak sampai server) dari error auth.
+      const net = /failed to fetch|networkerror|load failed|err_/i.test(ex?.message || '')
+      console.error('[AUTH] gagal:', ex?.name, '—', ex?.message, ex)
+      setErr(net
+        ? 'Tidak bisa menghubungi server. Cek koneksi internet lalu coba lagi.'
+        : (ex.message || 'Gagal memproses. Coba lagi.'))
     } finally { setBusy(false) }
   }
 
@@ -2160,6 +2176,12 @@ function AuthModal({ onClose, onDone, toast }) {
   // untuk memunculkan toast sukses setelah balik.
   async function google() {
     setErr(''); setInfo(''); setBusy(true)
+    if (!supabase) {
+      console.error('[AUTH] supabase client = null → VITE_SUPABASE_URL/ANON_KEY tak ter-build')
+      setErr('Koneksi ke server belum siap (konfigurasi). Muat ulang halaman & coba lagi.')
+      setBusy(false)
+      return
+    }
     try {
       localStorage.setItem('oauth_pending', 'google')
       const { error } = await supabase.auth.signInWithOAuth({
