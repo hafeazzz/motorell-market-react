@@ -568,12 +568,12 @@ const CSS = `
 }
 /* ---------- TEMA GELAP: override variabel (menyeluruh) + beberapa permukaan hardcoded ---------- */
 [data-theme="dark"]{
-  --bg:#0f1115; --bg-2:#16181d; --bg-3:#1f232b;
-  --panel:#16181d; --panel-2:#1e222b;
-  --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.18);
-  --ink:#eef0f3; --muted:#a3a9b4; --dim:#767c86;
-  --accent:#5b82c8; --accent-ink:#7599d8; --ok:#43bd6c; --warn:#d29a35;
-  --shadow:0 1px 2px rgba(0,0,0,.5),0 12px 36px rgba(0,0,0,.55);
+  --bg:#0d0f14; --bg-2:#161922; --bg-3:#1f242f;
+  --panel:#171b24; --panel-2:#1f242f;
+  --line:rgba(255,255,255,.13); --line-2:rgba(255,255,255,.24);
+  --ink:#f4f6f9; --muted:#b6bece; --dim:#8b95a5;
+  --accent:#3b82f6; --accent-ink:#2563eb; --ok:#34d17e; --warn:#eab543;
+  --shadow:0 1px 2px rgba(0,0,0,.55),0 14px 40px rgba(0,0,0,.6);
   color-scheme:dark;
 }
 /* Transisi halus saat ganti tema (hanya properti warna → tak ganggu transform/opacity). */
@@ -581,18 +581,24 @@ body,.nav,.card,.card-body,.card-go,.panel,.fp,.modal,.overlay,section,input,sel
 .btn,.gal-title,.lokasi-info,h1,h2,h3,h4,p{
   transition:background-color .28s ease,color .28s ease,border-color .28s ease}
 /* Permukaan warna-keras yang perlu disesuaikan di gelap. */
-[data-theme="dark"] .nav.scrolled{background:rgba(16,18,23,.86)}
+[data-theme="dark"] .nav.scrolled{background:rgba(13,15,20,.86)}
 [data-theme="dark"] .btn-light{background:var(--panel-2);color:var(--ink);border-color:var(--line-2)}
 [data-theme="dark"] .btn-light:hover:not(:disabled){background:var(--bg-3);border-color:var(--ink)}
 [data-theme="dark"] .btn-ghost{background:transparent}
+/* .btn-dark = pil terang di dark mode (bg var(--ink) jadi nyaris putih) → teksnya
+   HARUS gelap, kalau tidak putih-di-atas-putih (tak terbaca). */
+[data-theme="dark"] .btn-dark{background:var(--ink);color:#0d0f14}
+[data-theme="dark"] .btn-dark:hover:not(:disabled){background:#ffffff;color:#0d0f14}
+/* Tombol ghost di hero dipaksa berlatar putih → di dark mode teksnya ikut gelap. */
+[data-theme="dark"] .hero-cta .btn-ghost{color:#111827;border-color:rgba(0,0,0,.14)}
 [data-theme="dark"] .lokasi-cards-dark{background:var(--bg)}
 /* Placeholder foto (radial terang) → gelap di dark mode. */
 [data-theme="dark"] .card-media,
 [data-theme="dark"] .feature-media,
 [data-theme="dark"] .gallery-main{background:radial-gradient(120% 120% at 50% 25%, #232830, var(--bg-3) 82%)}
 [data-theme="dark"] .hero{background:
-  radial-gradient(1200px 640px at 80% 34%, #171a20, transparent 62%),
-  linear-gradient(180deg,#0f1115 0%,#141821 100%)}
+  radial-gradient(1200px 640px at 80% 34%, #182234, transparent 62%),
+  linear-gradient(180deg,#0d0f14 0%,#12161f 100%)}
 [data-theme="dark"] .hero-ambient .hero-bg-shade{background:linear-gradient(100deg,
   rgba(15,17,21,.92) 0%, rgba(15,17,21,.66) 33%, rgba(15,17,21,.22) 63%, rgba(15,17,21,.02) 100%)}
 @media(max-width:1020px){
@@ -4975,11 +4981,11 @@ export default function App() {
   useEffect(() => {
     const el = document.documentElement
     el.setAttribute('data-theme', theme)
-    el.style.background = theme === 'dark' ? '#0f1115' : '#ffffff'
+    el.style.background = theme === 'dark' ? '#0d0f14' : '#ffffff'
     el.style.colorScheme = theme
     try { localStorage.setItem('theme', theme) } catch { /* mode privat */ }
     const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1115' : '#ffffff')
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0d0f14' : '#ffffff')
   }, [theme])
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), [])
   const [session, setSession] = useState(null)
