@@ -6,20 +6,10 @@
        ini mengelola temanya sendiri, sehingga "Auto/Force Dark Mode" Chrome tidak
        ikut menggelapkan (penyebab latar putih jadi abu di Chrome mobile). -->
   <meta name="color-scheme" content="light dark" />
-  <!-- Set tema SEBELUM paint pertama → tanpa kedip putih (FOUC). -->
-  <script>
-    (function () {
-      try {
-        var t = localStorage.getItem('theme');
-        // Default = LIGHT (tidak mengikuti tema OS) → konsisten di semua perangkat.
-        if (t !== 'dark' && t !== 'light') { t = 'light'; }
-        var el = document.documentElement;
-        el.setAttribute('data-theme', t);
-        el.style.background = t === 'dark' ? '#0d0f14' : '#ffffff';
-        el.style.colorScheme = t;
-      } catch (e) {}
-    })();
-  </script>
+  <!-- Set tema SEBELUM paint pertama → tanpa kedip putih (FOUC). Skrip EKSTERNAL
+       (bukan inline) agar lolos CSP `script-src 'self'` tanpa 'unsafe-inline'/nonce.
+       Sinkron & tanpa defer → jalan sebelum <body> di-paint (anti-FOUC tetap). -->
+  <script src="/theme-init.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#ffffff" />
   <link rel="icon" type="image/x-icon" href="/icons/favicon.ico" />
