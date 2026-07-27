@@ -91,8 +91,12 @@ export async function uploadPhoto(file, { client, bucket, dir, compress } = {}) 
   const blob = compress ? await compress(file) : file
   const path = buildPhotoPath(dir, file.name)
 
+  // cacheControl 1 tahun: tiap `path` unik (uuid) & isinya tak pernah berubah,
+  // jadi aman di-cache lama. Browser & CDN menyimpan foto → pengunjung berulang
+  // / pindah halaman tak mengunduh ulang → EGRESS Supabase turun signifikan.
+  // (Objek lama tetap 3600 sampai di-update; lihat catatan ke user soal batch.)
   const { error } = await client.storage.from(bucket)
-    .upload(path, blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false })
+    .upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false })
   if (error) {
     const c = classifyUploadError(error, bucket)
     throw Object.assign(new Error(c.message), { code: c.code, raw: error })
