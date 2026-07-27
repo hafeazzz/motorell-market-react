@@ -15,7 +15,7 @@ import MotorCarousel from './MotorCarousel';
 import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
 import { parseCaption } from './captionParser';
-import { uploadPhoto, ALLOWED_PHOTO_TYPES, PHOTO_MAX_MB } from './photoUpload';
+import { uploadPhoto, thumbKey, ALLOWED_PHOTO_TYPES, PHOTO_MAX_MB } from './photoUpload';
 import { openSocialApp } from './utils/deepLink';
 
 // ---------- Konfigurasi ----------
@@ -172,18 +172,58 @@ function playThunk() {
 }
 
 // ---------- Util ----------
-async function compressImage(file, maxW = 1600, quality = 0.82) {
+// Deteksi sekali: apakah canvas bisa MENG-EKSPOR WebP? Chrome/Firefox/Safari 16+
+// bisa; Safari lama tidak (toBlob diam-diam jatuh ke PNG → malah lebih besar).
+// Kalau tak yakin → pakai JPEG. Dicache karena hasilnya tak berubah per sesi.
+let _canvasWebp = null
+function canvasCanWebp() {
+  if (_canvasWebp !== null) return _canvasWebp
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 1
+    _canvasWebp = c.toDataURL('image/webp').indexOf('data:image/webp') === 0
+  } catch { _canvasWebp = false }
+  return _canvasWebp
+}
+
+// Kompres + resize di BROWSER (bukan sharp — itu Node-only). Menghasilkan DUA
+// varian: `full` (≤1600px, untuk detail) & `thumb` (≤640px, untuk kartu etalase
+// → egress turun karena kartu tak lagi mengunduh foto full). Output WebP bila
+// browser mendukung (≈25-30% < JPEG), dengan pengaman fallback ke JPEG.
+// Mengembalikan { full, thumb, ext, type }; dipakai photoUpload.uploadPhoto.
+async function compressImage(file) {
+  const webp = canvasCanWebp()
+  let type = webp ? 'image/webp' : 'image/jpeg'
   try {
     const bmp = await createImageBitmap(file)
-    const scale = Math.min(1, maxW / bmp.width)
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(bmp.width * scale))
-    canvas.height = Math.max(1, Math.round(bmp.height * scale))
-    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality))
-    return blob || file
+    const encode = (maxW, quality) => {
+      const scale = Math.min(1, maxW / bmp.width)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(bmp.width * scale))
+      canvas.height = Math.max(1, Math.round(bmp.height * scale))
+      canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
+      return new Promise((res) => canvas.toBlob(res, type, quality))
+    }
+    let full = await encode(1600, webp ? 0.80 : 0.82)
+    // Jaga-jaga: kalau toBlob mengabaikan WebP & jatuh ke PNG (Safari lama yang
+    // lolos deteksi), paksa ulang ke JPEG supaya tak malah membengkak.
+    if (full && full.type !== type) {
+      type = 'image/jpeg'
+      full = await new Promise((res) => {
+        const c = document.createElement('canvas')
+        const scale = Math.min(1, 1600 / bmp.width)
+        c.width = Math.max(1, Math.round(bmp.width * scale))
+        c.height = Math.max(1, Math.round(bmp.height * scale))
+        c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height)
+        c.toBlob(res, 'image/jpeg', 0.82)
+      })
+    }
+    const thumb = await encode(640, type === 'image/webp' ? 0.70 : 0.72)
+    const ext = type === 'image/webp' ? 'webp' : 'jpg'
+    if (!full) return { full: file, thumb: null, ext: 'jpg', type: file.type || 'image/jpeg' }
+    return { full, thumb: thumb || null, ext, type }
   } catch {
-    return file
+    // Kompresi gagal → unggah file asli apa adanya (jangan blokir upload).
+    return { full: file, thumb: null, ext: 'jpg', type: file.type || 'image/jpeg' }
   }
 }
 
@@ -261,13 +301,19 @@ function useMediaQuery(query) {
   return match
 }
 
-// Foto yang muncul dengan fade halus begitu selesai dimuat
-function FadeImg({ className = '', ...props }) {
+// Foto yang muncul dengan fade halus begitu selesai dimuat.
+// `fallbackSrc` (opsional): dipakai untuk kartu yang memuat THUMBNAIL — bila
+// thumb tak ada (mis. foto lama yang diunggah sebelum fitur thumb), onError
+// menukar ke URL full sehingga tak ada gambar rusak, hanya sedikit kurang hemat.
+function FadeImg({ className = '', fallbackSrc, src, ...props }) {
   const [ok, setOk] = useState(false)
+  const [curSrc, setCurSrc] = useState(src)
+  useEffect(() => { setCurSrc(src); setOk(false) }, [src])
   return (
-    <img {...props} draggable={false}
+    <img {...props} src={curSrc} draggable={false}
       className={[className, ok ? 'ok' : ''].filter(Boolean).join(' ')}
-      onLoad={() => setOk(true)} />
+      onLoad={() => setOk(true)}
+      onError={() => { if (fallbackSrc && curSrc !== fallbackSrc) setCurSrc(fallbackSrc) }} />
   )
 }
 
@@ -3589,7 +3635,7 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
         <button className="card-hit" onClick={() => nav('#/unit/' + l.slug)}
           aria-label={'Lihat detail ' + l.title} />
         <div className="card-media">
-          {photos[0] ? <FadeImg src={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
+          {photos[0] ? <FadeImg src={thumbKey(photos[0])} fallbackSrc={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
           {badge && <span className={'card-status ' + badge.cls}>{badge.label}</span>}
           {/* Unit titip jual: badge "TITIP JUAL" (transparansi ke pembeli), TANPA
               badge grade emas/perak — grade menandakan kurasi resmi Motorell yang
@@ -3768,7 +3814,7 @@ function RecentlyViewed({ listings, recent, nav, onClear }) {
         {items.map((l) => (
           <button className="rcard" key={l.id} onClick={() => nav('#/unit/' + l.slug)}>
             <div className="rcard-media">
-              {l.photos?.[0] ? <FadeImg src={l.photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
+              {l.photos?.[0] ? <FadeImg src={thumbKey(l.photos[0])} fallbackSrc={l.photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
             </div>
             <div className="rcard-body">
               <b>{l.title}</b>

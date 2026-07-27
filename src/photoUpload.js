@@ -34,11 +34,23 @@ function uuid() {
     : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
 }
 
-// Path: {dir}/{uuid}-{namaAsli}.jpg — dir biasanya userId (titip jual) atau
+// Path: {dir}/{uuid}-{namaAsli}.{ext} — dir biasanya userId (titip jual) atau
 // slug unit (admin). uuid mencegah bentrok; nama asli menjaga keterbacaan.
-export function buildPhotoPath(dir, fileName) {
+// `ext` mengikuti hasil kompresi (webp bila didukung, selain itu jpg).
+export function buildPhotoPath(dir, fileName, ext = 'jpg') {
   const folder = String(dir || 'misc').replace(/^\/+|\/+$/g, '') || 'misc'
-  return folder + '/' + uuid() + '-' + sanitizePhotoName(fileName) + '.jpg'
+  const e = /^(webp|jpe?g|png)$/i.test(ext) ? ext.toLowerCase().replace('jpeg', 'jpg') : 'jpg'
+  return folder + '/' + uuid() + '-' + sanitizePhotoName(fileName) + '.' + e
+}
+
+// Sisipkan ".thumb" sebelum ekstensi terakhir sebuah path/URL storage:
+//   "dir/uuid-name.webp"     -> "dir/uuid-name.thumb.webp"
+//   ".../name.jpg?token=abc" -> ".../name.thumb.jpg?token=abc"
+// Dipakai DUA sisi: nama objek thumbnail saat upload, & menurunkan URL thumb
+// dari URL full saat render kartu. Bila tak ada ekstensi yang cocok →
+// dikembalikan apa adanya (pemanggil menyediakan fallback ke URL full).
+export function thumbKey(pathOrUrl) {
+  return String(pathOrUrl || '').replace(/(\.[a-z0-9]+)(\?.*)?$/i, '.thumb$1$2')
 }
 
 // Validasi tipe & ukuran SEBELUM upload. Melempar Error ber-`code`.
@@ -88,18 +100,40 @@ export async function uploadPhoto(file, { client, bucket, dir, compress } = {}) 
   if (!bucket) throw Object.assign(new Error('Nama bucket wajib diisi.'), { code: 'no_bucket' })
   validatePhoto(file)
 
-  const blob = compress ? await compress(file) : file
-  const path = buildPhotoPath(dir, file.name)
+  // `compress` (opsional) bisa mengembalikan:
+  //  - Blob (kontrak lama)              → 1 varian; ekstensi diturunkan dari tipe
+  //  - { full, thumb, ext, type } (baru)→ 2 varian (full ≤1600px + thumb ≤640px)
+  const out = compress ? await compress(file) : null
+  let full = file, thumb = null, ext = 'jpg', type = 'image/jpeg'
+  if (out && out.full) {
+    full = out.full; thumb = out.thumb || null
+    ext = out.ext || 'jpg'; type = out.type || 'image/jpeg'
+  } else if (out) {
+    full = out
+    if (out.type === 'image/webp') { ext = 'webp'; type = 'image/webp' }
+    else if (out.type === 'image/png') { ext = 'png'; type = 'image/png' }
+  }
+
+  const path = buildPhotoPath(dir, file.name, ext)
 
   // cacheControl 1 tahun: tiap `path` unik (uuid) & isinya tak pernah berubah,
   // jadi aman di-cache lama. Browser & CDN menyimpan foto → pengunjung berulang
   // / pindah halaman tak mengunduh ulang → EGRESS Supabase turun signifikan.
   // (Objek lama tetap 3600 sampai di-update; lihat catatan ke user soal batch.)
   const { error } = await client.storage.from(bucket)
-    .upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false })
+    .upload(path, full, { contentType: type, cacheControl: '31536000', upsert: false })
   if (error) {
     const c = classifyUploadError(error, bucket)
     throw Object.assign(new Error(c.message), { code: c.code, raw: error })
+  }
+
+  // Thumbnail OPSIONAL: kalau gagal, JANGAN gagalkan upload utama — kartu punya
+  // fallback ke URL full. Path thumb = path full + sisipan ".thumb".
+  if (thumb) {
+    const tpath = thumbKey(path)
+    const { error: terr } = await client.storage.from(bucket)
+      .upload(tpath, thumb, { contentType: type, cacheControl: '31536000', upsert: false })
+    if (terr) console.warn('[UPLOAD] thumbnail gagal (diabaikan):', tpath, terr.message || terr)
   }
 
   const { data } = client.storage.from(bucket).getPublicUrl(path)
