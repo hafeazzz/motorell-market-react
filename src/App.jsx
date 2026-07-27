@@ -2137,7 +2137,14 @@ function AuthModal({ onClose, onDone, toast }) {
         onDone()
       } else {
         const { data, error } = await supabase.auth.signUp({
-          email, password: pass, options: { data: { full_name: name || 'Pengguna' } },
+          email, password: pass,
+          options: {
+            data: { full_name: name || 'Pengguna' },
+            // Link konfirmasi kembali ke origin tempat user daftar (bukan default
+            // "Site URL" dashboard yang sering masih localhost). Tujuan tetap harus
+            // ada di allow-list "Redirect URLs" Supabase, kalau tidak diabaikan.
+            emailRedirectTo: window.location.origin + '/',
+          },
         })
         if (error) throw error
         if (data.session) { toast('Akun dibuat, kamu sudah masuk'); onDone() }
