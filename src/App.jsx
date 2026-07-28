@@ -558,6 +558,17 @@ function sellerWaLink(l) {
 
 const isTitip = (l) => l && l.source === 'titip_jual'
 
+// Statistik tayang/klik: naikkan counter lewat RPC aman `bump_stat` (migrasi
+// 0004). Fire-and-forget — TAK PERNAH memblok UI, dan bila migrasi belum jalan
+// errornya ditelan (fitur non-kritis). `kind` = 'view' | 'click'.
+function bumpStat(listing, kind) {
+  if (!supabase || !listing || !listing.id) return
+  const p_table = listing.source === 'titip_jual' ? 'titip_jual_units' : 'listings'
+  supabase.rpc('bump_stat', { p_table, p_id: listing.id, p_kind: kind })
+    .then(({ error }) => { if (error) console.warn('[STAT] bump_stat gagal (migrasi 0004 sudah dijalankan?):', error.message) })
+    .catch(() => {})
+}
+
 // ---------- Unit terakhir dilihat (localStorage) ----------
 const RECENT_KEY = 'recently_viewed'
 const RECENT_MAX = 6
@@ -1559,6 +1570,21 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .st.sold{color:var(--dim)}
 .st.draft{color:var(--muted)}
 .st.rejected{color:#c62828;border-color:rgba(198,40,40,.32);background:rgba(198,40,40,.06)}
+/* "Submission saya" — statistik, catatan pending, & edit inline */
+.a-info .a-stat{display:block;margin-top:4px;color:var(--muted)}
+.a-info .a-note{display:block;margin-top:6px;font-family:var(--font);font-size:12px;
+  color:var(--warn);line-height:1.45;letter-spacing:0}
+.a-edit-btn{margin-top:8px;font-family:var(--mono);font-size:10.5px;font-weight:600;
+  letter-spacing:.06em;padding:5px 12px;border-radius:999px;border:1px solid var(--line-2);
+  background:var(--panel);color:var(--ink);cursor:pointer}
+.a-edit-btn:hover{border-color:var(--ink)}
+.a-edit{width:100%;border-top:1px dashed var(--line);margin-top:6px;padding-top:13px;
+  display:flex;flex-direction:column;gap:11px}
+.a-edit label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.a-edit input,.a-edit textarea{padding:9px 11px;border:1px solid var(--line-2);border-radius:9px;
+  background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.a-edit-actions{display:flex;gap:9px}
+.a-edit-actions .btn{flex:0 0 auto}
 
 /* ---------- halaman Titip Jual ---------- */
 .titip{padding:clamp(96px,12vw,132px) 0 clamp(56px,8vw,90px)}
@@ -3392,6 +3418,9 @@ function DetailView({ listing, nav, onBook }) {
   // Panel kanan & CTA-nya diganti total (kontak langsung ke penjual).
   const titip = isTitip(listing)
 
+  // Statistik: hitung 1 "tayang" saat halaman detail unit ini dibuka.
+  useEffect(() => { bumpStat(listing, 'view') }, [listing.id])
+
   const totalModPartsPrice = selectedModParts.reduce((sum, part) => sum + Number(part.price), 0);
   const totalPrice = Number(listing.price) + totalModPartsPrice;
 
@@ -3437,6 +3466,7 @@ function DetailView({ listing, nav, onBook }) {
             </div>
             <div className="panel-cta has-sticky-twin">
               <a className="btn btn-accent btn-full" href={sellerWaLink(listing)}
+                onClick={() => bumpStat(listing, 'click')}
                 target="_blank" rel="noopener noreferrer">Chat penjual via WhatsApp</a>
               <p className="fine">Kamu akan terhubung langsung ke nomor WhatsApp penjual untuk
                 tanya kondisi, nego harga, dan atur COD. Transaksi di luar tanggung jawab Motorell —
@@ -3533,7 +3563,7 @@ function DetailView({ listing, nav, onBook }) {
 
             <div className={'panel-cta' + (canBook ? ' has-sticky-twin' : '')}>
               <button className="btn btn-accent btn-full" disabled={!canBook}
-                onClick={() => onBook(listing, warranty)}>
+                onClick={() => { bumpStat(listing, 'click'); onBook(listing, warranty) }}>
                 {canBook
                   ? (PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : 'Booking DP via QRIS')
                   : listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
@@ -3556,6 +3586,7 @@ function DetailView({ listing, nav, onBook }) {
               <b>{rupiah(listing.price)}</b>
             </div>
             <a className="btn btn-accent" href={sellerWaLink(listing)}
+              onClick={() => bumpStat(listing, 'click')}
               target="_blank" rel="noopener noreferrer">Chat penjual</a>
           </div>
         ) : canBook && (
@@ -3564,7 +3595,7 @@ function DetailView({ listing, nav, onBook }) {
               <span>Harga unit</span>
               <b>{rupiah(listing.price)}</b>
             </div>
-            <button className="btn btn-accent" onClick={() => onBook(listing, warranty)}>
+            <button className="btn btn-accent" onClick={() => { bumpStat(listing, 'click'); onBook(listing, warranty) }}>
               {PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : 'Booking DP via QRIS'}
             </button>
           </div>
@@ -4840,17 +4871,48 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
   const [err, setErr] = useState('')
   const [done, setDone] = useState(false)
   const [mine, setMine] = useState(null)        // submission milik user
+  const [editId, setEditId] = useState(null)    // baris "Submission saya" yang diedit
+  const [edit, setEdit] = useState({ harga_diinginkan: '', deskripsi: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
   const fileRef = useRef(null)
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+
+  const loadMine = useCallback(async () => {
+    if (!session) { setMine(null); return }
+    const { data } = await supabase.from('titip_jual_units')
+      .select('*').eq('seller_id', session.user.id).order('created_at', { ascending: false })
+    setMine(data || [])
+  }, [session])
 
   // Prefill nama dari profil bila ada; muat submission milik sendiri.
   useEffect(() => {
     if (!session) { setMine(null); return }
     setF((p) => ({ ...p, seller_email: p.seller_email || session.user.email || '' }))
-    supabase.from('titip_jual_units')
-      .select('*').eq('seller_id', session.user.id).order('created_at', { ascending: false })
-      .then(({ data }) => setMine(data || []))
-  }, [session, done])
+    loadMine()
+  }, [session, done, loadMine])
+
+  function startEdit(m) {
+    setEditId(m.id)
+    setEdit({ harga_diinginkan: String(m.harga_diinginkan ?? ''), deskripsi: m.deskripsi || '' })
+  }
+  async function saveEdit() {
+    const harga = Number(edit.harga_diinginkan)
+    if (!harga || harga <= 0) { toast('Harga harus berupa angka lebih dari 0'); return }
+    setSavingEdit(true)
+    // Hanya boleh sukses bila submission MILIK sendiri & masih 'pending'
+    // (dijaga RLS titip_jual_update_own_pending — migrasi 0004).
+    const { error } = await supabase.from('titip_jual_units')
+      .update({ harga_diinginkan: harga, deskripsi: edit.deskripsi || null })
+      .eq('id', editId).eq('seller_id', session.user.id).eq('status', 'pending')
+    setSavingEdit(false)
+    if (error) {
+      toast(/row-level|policy|permission|denied/i.test(error.message)
+        ? 'Belum bisa menyimpan — jalankan migrasi 0004 di Supabase dulu.'
+        : 'Gagal menyimpan: ' + error.message)
+      return
+    }
+    toast('Perubahan tersimpan'); setEditId(null); loadMine()
+  }
 
   async function handleFiles(picked) {
     const all = Array.from(picked || [])
@@ -5028,14 +5090,42 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                 <div className="a-row" key={m.id}>
                   <div className="a-thumb">
                     {Array.isArray(m.photos) && m.photos[0]
-                      ? <img src={m.photos[0]} alt="" />
+                      ? <img src={thumbKey(m.photos[0])} alt=""
+                          onError={(e) => { if (e.currentTarget.src !== m.photos[0]) e.currentTarget.src = m.photos[0] }} />
                       : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
                   </div>
                   <div className="a-info">
                     <b>{[m.merek, m.model, m.tahun].filter(Boolean).join(' ')}</b>
                     <span>{rupiah(m.harga_diinginkan)}{m.status === 'rejected' && m.rejection_reason ? ' · Alasan: ' + m.rejection_reason : ''}</span>
+                    {m.status === 'approved' && (
+                      <span className="a-stat">{(m.view_count || 0)} dilihat · {(m.click_count || 0)} chat</span>
+                    )}
+                    {m.status === 'pending' && (
+                      <span className="a-note">Menunggu persetujuan admin — otomatis tayang di etalase setelah disetujui. Kamu masih bisa mengubah harga & deskripsi selama menunggu.</span>
+                    )}
+                    {m.status === 'pending' && editId !== m.id && (
+                      <button type="button" className="a-edit-btn" onClick={() => startEdit(m)}>Edit harga / deskripsi</button>
+                    )}
                   </div>
                   <span className={'st ' + m.status}>{TITIP_STATUS_LABEL[m.status] || m.status}</span>
+                  {editId === m.id && (
+                    <div className="a-edit">
+                      <label>Harga diinginkan (Rp)
+                        <input type="number" min="0" value={edit.harga_diinginkan}
+                          onChange={(e) => setEdit((p) => ({ ...p, harga_diinginkan: e.target.value }))} />
+                      </label>
+                      <label>Deskripsi
+                        <textarea rows={3} value={edit.deskripsi}
+                          onChange={(e) => setEdit((p) => ({ ...p, deskripsi: e.target.value }))} />
+                      </label>
+                      <div className="a-edit-actions">
+                        <button type="button" className="btn btn-accent" onClick={saveEdit} disabled={savingEdit}>
+                          {savingEdit ? 'Menyimpan…' : 'Simpan'}
+                        </button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setEditId(null)} disabled={savingEdit}>Batal</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
