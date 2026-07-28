@@ -1553,6 +1553,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   color:var(--muted);flex:none;white-space:nowrap}
 .a-tabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(17,17,20,.08)}
 .a-list{display:flex;flex-direction:column;gap:11px}
+.staff-search{width:100%;max-width:360px;padding:10px 13px;margin-bottom:14px;
+  border:1px solid var(--line-2);border-radius:10px;background:var(--bg);color:var(--ink);
+  font:inherit;font-size:14px}
 .a-row{background:var(--panel);border:1px solid var(--line);border-radius:12px;
   padding:15px 18px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;box-shadow:var(--shadow)}
 .a-thumb{width:76px;height:56px;border-radius:8px;overflow:hidden;flex:none;
@@ -1578,6 +1581,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   letter-spacing:.06em;padding:5px 12px;border-radius:999px;border:1px solid var(--line-2);
   background:var(--panel);color:var(--ink);cursor:pointer}
 .a-edit-btn:hover{border-color:var(--ink)}
+.a-mine-actions{display:inline-flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.a-mine-actions .a-edit-btn{margin-top:0}
+.a-del-btn{color:#c62828;border-color:rgba(198,40,40,.35)}
+.a-del-btn:hover{border-color:#c62828;background:rgba(198,40,40,.06)}
 .a-edit{width:100%;border-top:1px dashed var(--line);margin-top:6px;padding-top:13px;
   display:flex;flex-direction:column;gap:11px}
 .a-edit label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
@@ -2880,6 +2887,7 @@ function StaffPanel({ profile, toast }) {
   const [rows, setRows] = useState(null)
   const [err, setErr] = useState('')
   const [busyId, setBusyId] = useState(null)
+  const [q, setQ] = useState('')
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('profiles')
@@ -2898,12 +2906,21 @@ function StaffPanel({ profile, toast }) {
     load()
   }
 
+  const term = q.trim().toLowerCase()
+  const filtered = (rows || []).filter((p) =>
+    !term || (p.email || '').toLowerCase().includes(term) || (p.full_name || '').toLowerCase().includes(term))
+
   return (
     <div>
       <p className="f-info" style={{ marginBottom: 18 }}>
         Orang baru harus <b>Daftar</b> lewat tombol Masuk di navbar dulu (email + password) sebelum
         namanya muncul di sini. Setelah itu, atur akses lewat daftar di bawah — tidak perlu SQL manual lagi.
       </p>
+
+      {rows && rows.length > 0 && (
+        <input className="staff-search" type="search" value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder="Cari nama atau email…" aria-label="Cari pengguna" />
+      )}
 
       {rows === null && !err && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
       {err && (
@@ -2916,18 +2933,20 @@ function StaffPanel({ profile, toast }) {
       {rows && rows.length === 0 && !err && (
         <div className="empty">Belum ada pengguna terdaftar selain kamu.</div>
       )}
-      {rows && rows.length > 0 && (
+      {rows && rows.length > 0 && filtered.length === 0 && (
+        <div className="empty">Tak ada pengguna cocok dengan “{q}”.</div>
+      )}
+      {rows && rows.length > 0 && filtered.length > 0 && (
         <div className="a-list">
-          {rows.map((p) => {
+          {filtered.map((p) => {
             const isSelf = p.id === profile.id
             return (
               <div className="a-row" key={p.id}>
                 <div className="a-info">
                   <b>{p.full_name || 'Tanpa nama'}{isSelf ? ' (kamu)' : ''}</b>
-                  {/* Tabel profiles tidak punya kolom email (dicek langsung ke DB),
-                      jadi tampilkan potongan user id — bukan p.email yang selalu
-                      undefined. Peran ditandai di tombol aksi di sebelah kanan. */}
-                  <span className="mono" style={{ fontSize: 11.5 }}>{String(p.id).slice(0, 8)}… · {ROLE_LABEL[p.role] || p.role}</span>
+                  {/* Email diisi migrasi 0005 (disalin dari auth.users saat signup).
+                      Kalau belum ada (baris lama sebelum migrasi) → tampilkan potongan id. */}
+                  <span className="mono" style={{ fontSize: 11.5 }}>{p.email || String(p.id).slice(0, 8) + '…'} · {ROLE_LABEL[p.role] || p.role}</span>
                 </div>
                 <div className="a-actions">
                   {isSelf ? (
@@ -4913,6 +4932,20 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
     }
     toast('Perubahan tersimpan'); setEditId(null); loadMine()
   }
+  async function deleteMine(m) {
+    const label = [m.merek, m.model, m.tahun].filter(Boolean).join(' ')
+    if (!window.confirm('Hapus submission "' + label + '"? Tindakan ini tidak bisa dibatalkan.')) return
+    // Hanya sukses bila MILIK sendiri & masih 'pending' (RLS 0005).
+    const { error } = await supabase.from('titip_jual_units').delete()
+      .eq('id', m.id).eq('seller_id', session.user.id).eq('status', 'pending')
+    if (error) {
+      toast(/row-level|policy|permission|denied/i.test(error.message)
+        ? 'Belum bisa menghapus — jalankan migrasi 0005 di Supabase dulu.'
+        : 'Gagal menghapus: ' + error.message)
+      return
+    }
+    toast('Submission dihapus'); if (editId === m.id) setEditId(null); loadMine()
+  }
 
   async function handleFiles(picked) {
     const all = Array.from(picked || [])
@@ -5104,7 +5137,10 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                       <span className="a-note">Menunggu persetujuan admin — otomatis tayang di etalase setelah disetujui. Kamu masih bisa mengubah harga & deskripsi selama menunggu.</span>
                     )}
                     {m.status === 'pending' && editId !== m.id && (
-                      <button type="button" className="a-edit-btn" onClick={() => startEdit(m)}>Edit harga / deskripsi</button>
+                      <span className="a-mine-actions">
+                        <button type="button" className="a-edit-btn" onClick={() => startEdit(m)}>Edit harga / deskripsi</button>
+                        <button type="button" className="a-edit-btn a-del-btn" onClick={() => deleteMine(m)}>Hapus</button>
+                      </span>
                     )}
                   </div>
                   <span className={'st ' + m.status}>{TITIP_STATUS_LABEL[m.status] || m.status}</span>
