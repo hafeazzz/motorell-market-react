@@ -1591,6 +1591,19 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .a-edit input,.a-edit textarea,.a-edit select{padding:9px 11px;border:1px solid var(--line-2);
   border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
 .a-edit-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:11px}
+.a-ep-label{font-size:12px;color:var(--muted)}
+.a-edit-photos{display:flex;flex-wrap:wrap;gap:9px}
+.a-ep{position:relative;width:74px;height:56px;border-radius:8px;overflow:hidden;
+  border:1px solid var(--line-2);background:var(--bg-2)}
+.a-ep img{width:100%;height:100%;object-fit:cover;display:block}
+.a-ep-x{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:999px;
+  border:none;background:rgba(0,0,0,.62);color:#fff;font-size:14px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.a-ep-x:hover{background:#c62828}
+.a-ep-add{width:74px;height:56px;border-radius:8px;border:1px dashed var(--line-2);
+  display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--muted);
+  cursor:pointer;background:var(--bg)}
+.a-ep-add:hover{border-color:var(--ink);color:var(--ink)}
 .a-edit-actions{display:flex;gap:9px}
 .a-edit-actions .btn{flex:0 0 auto}
 
@@ -4893,6 +4906,8 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
   const [mine, setMine] = useState(null)        // submission milik user
   const [editId, setEditId] = useState(null)    // baris "Submission saya" yang diedit
   const [edit, setEdit] = useState({ merek: '', model: '', tahun: '', odometer: '', harga_diinginkan: '', deskripsi: '', kondisi: '' })
+  const [editPhotos, setEditPhotos] = useState([])   // foto saat mengedit submission
+  const [editBusyUp, setEditBusyUp] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
   const fileRef = useRef(null)
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
@@ -4913,6 +4928,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
 
   function startEdit(m) {
     setEditId(m.id)
+    setEditPhotos(Array.isArray(m.photos) ? m.photos : [])
     setEdit({
       merek: m.merek || '', model: m.model || '',
       tahun: String(m.tahun ?? ''), odometer: String(m.odometer ?? ''),
@@ -4920,15 +4936,34 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
       deskripsi: m.deskripsi || '', kondisi: m.kondisi || '',
     })
   }
+  async function addEditPhotos(picked) {
+    const all = Array.from(picked || [])
+    if (!all.length) return
+    const remaining = MAX_PHOTOS - editPhotos.length
+    if (remaining <= 0) { toast('Maksimal ' + MAX_PHOTOS + ' foto'); return }
+    setEditBusyUp(true)
+    for (const file of all.slice(0, remaining)) {
+      try {
+        if (!ALLOWED_PHOTO_TYPES.includes(file.type)) { toast('Lewati ' + file.name + ' (format)'); continue }
+        if (file.size > PHOTO_MAX_MB * 1024 * 1024) { toast('Lewati ' + file.name + ' (>' + PHOTO_MAX_MB + 'MB)'); continue }
+        const { url } = await uploadPhoto(file, {
+          client: supabase, bucket: 'titip-jual-photos', dir: session.user.id, compress: compressImage,
+        })
+        setEditPhotos((p) => [...p, url])
+      } catch (ex) { toast(ex.message || 'Gagal mengunggah foto') }
+    }
+    setEditBusyUp(false)
+  }
   async function saveEdit() {
     const harga = Number(edit.harga_diinginkan)
     if (!edit.merek.trim()) { toast('Merek wajib diisi'); return }
     if (!harga || harga <= 0) { toast('Harga harus berupa angka lebih dari 0'); return }
+    if (editPhotos.length < 1) { toast('Minimal 1 foto motor'); return }
     const tahun = parseInt(edit.tahun, 10)
     const odo = edit.odometer === '' ? null : parseInt(edit.odometer, 10)
     setSavingEdit(true)
-    // Hanya boleh sukses bila submission MILIK sendiri & masih 'pending'
-    // (dijaga RLS titip_jual_update_own_pending — migrasi 0004).
+    // Status/jejak review dikunci trigger untuk penjual (migrasi 0006) → hanya
+    // konten yang berubah. RLS mengizinkan edit unit sendiri 'pending'/'approved'.
     const { error } = await supabase.from('titip_jual_units')
       .update({
         merek: edit.merek.trim(), model: edit.model.trim() || null,
@@ -4937,12 +4972,13 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
         harga_diinginkan: harga,
         deskripsi: edit.deskripsi || null,
         kondisi: edit.kondisi || null,
+        photos: editPhotos,
       })
-      .eq('id', editId).eq('seller_id', session.user.id).eq('status', 'pending')
+      .eq('id', editId).eq('seller_id', session.user.id)
     setSavingEdit(false)
     if (error) {
       toast(/row-level|policy|permission|denied/i.test(error.message)
-        ? 'Belum bisa menyimpan — jalankan migrasi 0004 di Supabase dulu.'
+        ? 'Belum bisa menyimpan — jalankan migrasi 0006 di Supabase dulu.'
         : 'Gagal menyimpan: ' + error.message)
       return
     }
@@ -4950,17 +4986,18 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
   }
   async function deleteMine(m) {
     const label = [m.merek, m.model, m.tahun].filter(Boolean).join(' ')
-    if (!window.confirm('Hapus submission "' + label + '"? Tindakan ini tidak bisa dibatalkan.')) return
-    // Hanya sukses bila MILIK sendiri & masih 'pending' (RLS 0005).
+    const extra = m.status === 'approved' ? ' Unit ini sedang tayang di etalase dan akan hilang.' : ''
+    if (!window.confirm('Hapus "' + label + '"?' + extra + ' Tindakan ini tidak bisa dibatalkan.')) return
+    // Penjual boleh hapus unit sendiri di status apa pun (RLS titip_jual_delete_own — 0006).
     const { error } = await supabase.from('titip_jual_units').delete()
-      .eq('id', m.id).eq('seller_id', session.user.id).eq('status', 'pending')
+      .eq('id', m.id).eq('seller_id', session.user.id)
     if (error) {
       toast(/row-level|policy|permission|denied/i.test(error.message)
-        ? 'Belum bisa menghapus — jalankan migrasi 0005 di Supabase dulu.'
+        ? 'Belum bisa menghapus — jalankan migrasi 0006 di Supabase dulu.'
         : 'Gagal menghapus: ' + error.message)
       return
     }
-    toast('Submission dihapus'); if (editId === m.id) setEditId(null); loadMine()
+    toast('Unit dihapus'); if (editId === m.id) setEditId(null); loadMine()
   }
 
   async function handleFiles(picked) {
@@ -5146,15 +5183,17 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                   <div className="a-info">
                     <b>{[m.merek, m.model, m.tahun].filter(Boolean).join(' ')}</b>
                     <span>{rupiah(m.harga_diinginkan)}{m.status === 'rejected' && m.rejection_reason ? ' · Alasan: ' + m.rejection_reason : ''}</span>
-                    {m.status === 'approved' && (
+                    {(m.status === 'approved' || m.status === 'sold') && (
                       <span className="a-stat">{(m.view_count || 0)} dilihat · {(m.click_count || 0)} chat</span>
                     )}
                     {m.status === 'pending' && (
-                      <span className="a-note">Menunggu persetujuan admin — otomatis tayang di etalase setelah disetujui. Kamu masih bisa mengubah harga & deskripsi selama menunggu.</span>
+                      <span className="a-note">Menunggu persetujuan admin — otomatis tayang di etalase setelah disetujui. Kamu masih bisa mengubah detail & foto selama menunggu.</span>
                     )}
-                    {m.status === 'pending' && editId !== m.id && (
+                    {editId !== m.id && (
                       <span className="a-mine-actions">
-                        <button type="button" className="a-edit-btn" onClick={() => startEdit(m)}>Edit harga / deskripsi</button>
+                        {(m.status === 'pending' || m.status === 'approved') && (
+                          <button type="button" className="a-edit-btn" onClick={() => startEdit(m)}>Edit motor</button>
+                        )}
                         <button type="button" className="a-edit-btn a-del-btn" onClick={() => deleteMine(m)}>Hapus</button>
                       </span>
                     )}
@@ -5162,6 +5201,24 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                   <span className={'st ' + m.status}>{TITIP_STATUS_LABEL[m.status] || m.status}</span>
                   {editId === m.id && (
                     <div className="a-edit">
+                      <div className="a-ep-label">Foto ({editPhotos.length}/{MAX_PHOTOS})</div>
+                      <div className="a-edit-photos">
+                        {editPhotos.map((url, i) => (
+                          <div className="a-ep" key={url + '#' + i}>
+                            <img src={thumbKey(url)} alt="" loading="lazy"
+                              onError={(e) => { if (e.currentTarget.src !== url) e.currentTarget.src = url }} />
+                            <button type="button" className="a-ep-x" aria-label="Hapus foto ini"
+                              onClick={() => setEditPhotos((p) => p.filter((_, j) => j !== i))}>×</button>
+                          </div>
+                        ))}
+                        {editPhotos.length < MAX_PHOTOS && (
+                          <label className="a-ep-add" title="Tambah foto">
+                            {editBusyUp ? '…' : '+'}
+                            <input type="file" accept="image/*" multiple hidden disabled={editBusyUp}
+                              onChange={(e) => { addEditPhotos(e.target.files); e.target.value = '' }} />
+                          </label>
+                        )}
+                      </div>
                       <div className="a-edit-2">
                         <label>Merek
                           <input type="text" value={edit.merek}
