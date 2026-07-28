@@ -1588,8 +1588,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .a-edit{width:100%;border-top:1px dashed var(--line);margin-top:6px;padding-top:13px;
   display:flex;flex-direction:column;gap:11px}
 .a-edit label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
-.a-edit input,.a-edit textarea{padding:9px 11px;border:1px solid var(--line-2);border-radius:9px;
-  background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.a-edit input,.a-edit textarea,.a-edit select{padding:9px 11px;border:1px solid var(--line-2);
+  border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.a-edit-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:11px}
 .a-edit-actions{display:flex;gap:9px}
 .a-edit-actions .btn{flex:0 0 auto}
 
@@ -4891,7 +4892,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
   const [done, setDone] = useState(false)
   const [mine, setMine] = useState(null)        // submission milik user
   const [editId, setEditId] = useState(null)    // baris "Submission saya" yang diedit
-  const [edit, setEdit] = useState({ harga_diinginkan: '', deskripsi: '' })
+  const [edit, setEdit] = useState({ merek: '', model: '', tahun: '', odometer: '', harga_diinginkan: '', deskripsi: '', kondisi: '' })
   const [savingEdit, setSavingEdit] = useState(false)
   const fileRef = useRef(null)
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
@@ -4912,16 +4913,31 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
 
   function startEdit(m) {
     setEditId(m.id)
-    setEdit({ harga_diinginkan: String(m.harga_diinginkan ?? ''), deskripsi: m.deskripsi || '' })
+    setEdit({
+      merek: m.merek || '', model: m.model || '',
+      tahun: String(m.tahun ?? ''), odometer: String(m.odometer ?? ''),
+      harga_diinginkan: String(m.harga_diinginkan ?? ''),
+      deskripsi: m.deskripsi || '', kondisi: m.kondisi || '',
+    })
   }
   async function saveEdit() {
     const harga = Number(edit.harga_diinginkan)
+    if (!edit.merek.trim()) { toast('Merek wajib diisi'); return }
     if (!harga || harga <= 0) { toast('Harga harus berupa angka lebih dari 0'); return }
+    const tahun = parseInt(edit.tahun, 10)
+    const odo = edit.odometer === '' ? null : parseInt(edit.odometer, 10)
     setSavingEdit(true)
     // Hanya boleh sukses bila submission MILIK sendiri & masih 'pending'
     // (dijaga RLS titip_jual_update_own_pending — migrasi 0004).
     const { error } = await supabase.from('titip_jual_units')
-      .update({ harga_diinginkan: harga, deskripsi: edit.deskripsi || null })
+      .update({
+        merek: edit.merek.trim(), model: edit.model.trim() || null,
+        tahun: Number.isFinite(tahun) ? tahun : null,
+        odometer: Number.isFinite(odo) ? odo : null,
+        harga_diinginkan: harga,
+        deskripsi: edit.deskripsi || null,
+        kondisi: edit.kondisi || null,
+      })
       .eq('id', editId).eq('seller_id', session.user.id).eq('status', 'pending')
     setSavingEdit(false)
     if (error) {
@@ -5146,9 +5162,36 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                   <span className={'st ' + m.status}>{TITIP_STATUS_LABEL[m.status] || m.status}</span>
                   {editId === m.id && (
                     <div className="a-edit">
+                      <div className="a-edit-2">
+                        <label>Merek
+                          <input type="text" value={edit.merek}
+                            onChange={(e) => setEdit((p) => ({ ...p, merek: e.target.value }))} />
+                        </label>
+                        <label>Model
+                          <input type="text" value={edit.model}
+                            onChange={(e) => setEdit((p) => ({ ...p, model: e.target.value }))} />
+                        </label>
+                      </div>
+                      <div className="a-edit-2">
+                        <label>Tahun
+                          <input type="number" value={edit.tahun}
+                            onChange={(e) => setEdit((p) => ({ ...p, tahun: e.target.value }))} />
+                        </label>
+                        <label>Odometer (KM)
+                          <input type="number" min="0" value={edit.odometer}
+                            onChange={(e) => setEdit((p) => ({ ...p, odometer: e.target.value }))} />
+                        </label>
+                      </div>
                       <label>Harga diinginkan (Rp)
                         <input type="number" min="0" value={edit.harga_diinginkan}
                           onChange={(e) => setEdit((p) => ({ ...p, harga_diinginkan: e.target.value }))} />
+                      </label>
+                      <label>Kondisi
+                        <select value={edit.kondisi}
+                          onChange={(e) => setEdit((p) => ({ ...p, kondisi: e.target.value }))}>
+                          <option value="">— pilih —</option>
+                          {KONDISI_OPTS.map((k) => <option key={k} value={k}>{k}</option>)}
+                        </select>
                       </label>
                       <label>Deskripsi
                         <textarea rows={3} value={edit.deskripsi}
