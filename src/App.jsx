@@ -5529,6 +5529,34 @@ export default function App() {
 
   useEffect(() => { loadProfile() }, [loadProfile])
 
+  // Segarkan peran saat tab kembali fokus. Tanpa ini, user yang BARU diangkat
+  // admin (di perangkat/orang lain) tetap melihat peran lama sampai keluar-masuk
+  // — profile cuma diambil sekali per sesi. Refetch on focus membuat menu admin
+  // muncul begitu ia kembali ke tab. (Andal, tanpa setup tambahan.)
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible') loadProfile() }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [loadProfile])
+
+  // Realtime: begitu baris profiles-ku berubah (admin menyetel role-ku), muat
+  // ulang peran SEKETIKA — tanpa reload. Butuh tabel `profiles` diaktifkan di
+  // Supabase → Database → Replication. Bila belum, refetch-on-focus di atas
+  // tetap menjadi jaring pengaman.
+  useEffect(() => {
+    if (!supabase || !session) return
+    const ch = supabase.channel('me-profile-' + session.user.id)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'id=eq.' + session.user.id },
+        loadProfile)
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [session, loadProfile])
+
   const isStaff = Boolean(profile && ['admin', 'kurator'].includes(profile.role))
 
   // Etalase publik: unit 'published' + 'booked'. Unit ter-DP sengaja TETAP
