@@ -1583,6 +1583,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .staff-search{width:100%;max-width:360px;padding:10px 13px;margin-bottom:14px;
   border:1px solid var(--line-2);border-radius:10px;background:var(--bg);color:var(--ink);
   font:inherit;font-size:14px}
+.staff-filter{max-width:420px;margin-bottom:12px}
 .a-row{background:var(--panel);border:1px solid var(--line);border-radius:12px;
   padding:15px 18px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;box-shadow:var(--shadow)}
 .a-thumb{width:76px;height:56px;border-radius:8px;overflow:hidden;flex:none;
@@ -2949,6 +2950,7 @@ function StaffPanel({ profile, toast }) {
   const [err, setErr] = useState('')
   const [busyId, setBusyId] = useState(null)
   const [q, setQ] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')  // 'all' (semua user) | 'staff' (admin/kurator saja)
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('profiles')
@@ -2960,16 +2962,25 @@ function StaffPanel({ profile, toast }) {
 
   async function setRole(p, role) {
     setBusyId(p.id)
-    const { error } = await supabase.from('profiles').update({ role }).eq('id', p.id)
+    // .select() → tahu apakah baris BENAR-BENAR ter-update. Bila RLS memblokir
+    // (akun pemanggil belum ber-role admin di DB), update kena 0 baris TANPA
+    // error — dulu terlihat "berhasil" padahal tak berubah. Sekarang dibedakan.
+    const { data, error } = await supabase.from('profiles').update({ role }).eq('id', p.id).select()
     setBusyId(null)
     if (error) { toast('Gagal ubah akses: ' + error.message); return }
+    if (!data || data.length === 0) {
+      toast('Perubahan DITOLAK (0 baris diubah). Akun kamu kemungkinan belum ber-role admin di database — set via SQL dulu lalu muat ulang peran.')
+      return
+    }
     toast((p.full_name || 'Pengguna') + ' sekarang ' + (ROLE_LABEL[role] || role).toLowerCase())
     load()
   }
 
+  const isStaffRow = (p) => p.role === 'admin' || p.role === 'kurator'
   const term = q.trim().toLowerCase()
   const filtered = (rows || []).filter((p) =>
-    !term || (p.email || '').toLowerCase().includes(term) || (p.full_name || '').toLowerCase().includes(term))
+    (roleFilter === 'all' || isStaffRow(p)) &&
+    (!term || (p.email || '').toLowerCase().includes(term) || (p.full_name || '').toLowerCase().includes(term)))
 
   return (
     <div>
@@ -2978,6 +2989,16 @@ function StaffPanel({ profile, toast }) {
         namanya muncul di sini. Setelah itu, atur akses lewat daftar di bawah — tidak perlu SQL manual lagi.
       </p>
 
+      {rows && rows.length > 0 && (
+        <div className="switcher staff-filter">
+          <button type="button" className={roleFilter === 'all' ? 'on' : ''} onClick={() => setRoleFilter('all')}>
+            Semua pengguna ({rows.length})
+          </button>
+          <button type="button" className={roleFilter === 'staff' ? 'on' : ''} onClick={() => setRoleFilter('staff')}>
+            Staf saja ({rows.filter(isStaffRow).length})
+          </button>
+        </div>
+      )}
       {rows && rows.length > 0 && (
         <input className="staff-search" type="search" value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Cari nama atau email…" aria-label="Cari pengguna" />
@@ -2995,7 +3016,11 @@ function StaffPanel({ profile, toast }) {
         <div className="empty">Belum ada pengguna terdaftar selain kamu.</div>
       )}
       {rows && rows.length > 0 && filtered.length === 0 && (
-        <div className="empty">Tak ada pengguna cocok dengan “{q}”.</div>
+        <div className="empty">
+          {term
+            ? 'Tak ada pengguna cocok dengan “' + q + '”.'
+            : 'Belum ada admin/kurator. Pilih “Semua pengguna” untuk mengangkat seseorang.'}
+        </div>
       )}
       {rows && rows.length > 0 && filtered.length > 0 && (
         <div className="a-list">
