@@ -742,6 +742,12 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .btn-light:hover:not(:disabled){background:#f3f4f6;border-color:#9ca3af}
 .btn-quiet{color:var(--muted);font-weight:500;padding:10px 14px}
 .btn-quiet:hover{color:var(--ink)}
+/* Tombol "Panel admin": sengaja MENONJOL (pil beraksen + ikon perisai) supaya
+   staf tak kesulitan menemukannya. Hanya tampil bila role admin/kurator. */
+.btn-admin{color:var(--accent);border:1px solid var(--accent);background:rgba(59,130,246,.10);
+  font-weight:650;gap:6px}
+.btn-admin:hover:not(:disabled){background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-admin svg{width:15px;height:15px;flex:none}
 .btn-sm{padding:9px 17px;font-size:13px}
 .btn-full{width:100%}
 
@@ -5802,7 +5808,14 @@ export default function App() {
                 hamburger) supaya tak meluber/terpotong. Di desktop tetap inline. */}
             <div className={'nav-links' + (menuOpen ? ' open' : '')}>
               {isStaff && route.name !== 'admin' && (
-                <button className="btn btn-quiet btn-sm" onClick={() => { nav('#/admin'); setMenuOpen(false) }}>Panel admin</button>)}
+                <button className="btn btn-admin btn-sm" onClick={() => { nav('#/admin'); setMenuOpen(false) }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+                    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z" />
+                    <path d="M9.2 12l1.9 1.9 3.7-3.8" />
+                  </svg>
+                  Panel admin
+                </button>)}
               {route.name !== 'titip' && (
                 <button className="btn btn-ghost btn-sm" onClick={() => { nav('#/titip-jual'); setMenuOpen(false) }}
                   title="Titip jual motor Anda di Motorell">Titip Jual</button>)}
