@@ -2126,7 +2126,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 // author "everhard", dan Sketchfab — masing-masing tertaut.
 const MODEL_SRC = '/models/harley-davidson-flhrxs.glb'
 
-function HeroModel({ fallbackPhoto }) {
+function HeroModel({ fallbackPhoto, startDelay = 0 }) {
   const frameRef = useRef(null)
   const mvRef = useRef(null)
   const [visible, setVisible] = useState(false)   // sudah dekat viewport?
@@ -2153,19 +2153,25 @@ function HeroModel({ fallbackPhoto }) {
   // fetch same-origin dengan Range 0-0 (ambil 1 byte) memberi vonis pasti:
   // gagal → cadangan; ada → lanjut. Event 'error' viewer tetap dipertahankan
   // untuk kasus file ADA tapi rusak saat di-decode.
+  // `startDelay`: saat intro berjalan, TUNDA pemuatan model (decode Draco berat di
+  // main thread) sampai animasi teks selesai → animasi teks tidak patah-patah
+  // karena berebut CPU. Poster foto/blueprint tetap tampil selama jeda ini.
   useEffect(() => {
     if (!visible) return
     let alive = true
-    fetch(MODEL_SRC, { headers: { Range: 'bytes=0-0' } })
-      .then((res) => {
-        res.body?.cancel?.()  // jangan lanjutkan unduhan bila server abaikan Range
-        if (!alive) return
-        if (!res.ok && res.status !== 206) { setState('failed'); return }
-        return import('@google/model-viewer').then(() => { if (alive) setLibReady(true) })
-      })
-      .catch(() => { if (alive) setState('failed') })
-    return () => { alive = false }
-  }, [visible])
+    const timer = setTimeout(() => {
+      if (!alive) return
+      fetch(MODEL_SRC, { headers: { Range: 'bytes=0-0' } })
+        .then((res) => {
+          res.body?.cancel?.()  // jangan lanjutkan unduhan bila server abaikan Range
+          if (!alive) return
+          if (!res.ok && res.status !== 206) { setState('failed'); return }
+          return import('@google/model-viewer').then(() => { if (alive) setLibReady(true) })
+        })
+        .catch(() => { if (alive) setState('failed') })
+    }, startDelay)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [visible, startDelay])
 
   // Event dari <model-viewer>: 'load' = model siap, 'error' = gagal (mis. .glb
   // 404 / rusak) → foto cadangan. Keduanya dipancarkan andal, jadi tak perlu
@@ -2224,12 +2230,16 @@ function HeroModel({ fallbackPhoto }) {
 // spasi antar-kata mengizinkan pembungkusan. play=false → tampil statis penuh
 // (prefers-reduced-motion / kunjungan berikutnya).
 function HeroHeading({ play }) {
-  const EXPO = [0.16, 1, 0.3, 1]
+  // Easing LEMBUT (easeOutCubic) + fade opacity + tumpang-tindih tinggi → huruf
+  // MENGALIR seperti gelombang, bukan meletup satu-satu (menghilangkan kesan
+  // patah-patah & terasa lebih elegan). Durasi panjang > jarak antar-huruf.
+  const SMOOTH = [0.33, 1, 0.68, 1]
   const ch = (d) => play
-    ? { initial: { y: '110%' }, animate: { y: '0%' }, transition: { duration: 0.5, ease: EXPO, delay: d } }
+    ? { initial: { y: '100%', opacity: 0 }, animate: { y: '0%', opacity: 1 },
+        transition: { duration: 0.72, ease: SMOOTH, delay: d } }
     : {}
   let i = 0
-  const BASE = 0.06, STEP = 0.022
+  const BASE = 0.05, STEP = 0.026
   const word = (text, accent) => {
     const letters = [...text].map((c, k) => c === ' '
       ? <span className="ch-sp" key={k}>{' '}</span>
@@ -4299,7 +4309,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         <div className="hero-grid-lines" aria-hidden="true" />
         {/* Model 3D sebagai LATAR ambient di belakang teks (fade-in halus). */}
         <motion.div className="hero-bg" aria-hidden="true" {...heroModelAnim}>
-          <HeroModel fallbackPhoto={introPhoto} />
+          <HeroModel fallbackPhoto={introPhoto} startDelay={playIntro ? 1500 : 0} />
         </motion.div>
         {/* Selubung putih: menjaga teks tetap terbaca di atas model. */}
         <div className="hero-bg-shade" aria-hidden="true" />
