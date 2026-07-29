@@ -846,14 +846,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    supaya frasa ini tetap muat utuh bahkan di layar 320px. nowrap dipasang di
    <em>, bukan di h1 — h1 memuat dua kalimat dan akan meluber kalau dikunci. */
 .hero-copy h1 em{font-style:normal;color:var(--accent);white-space:nowrap}
-/* Mask reveal per HURUF: tiap huruf "mencuat" naik dari balik kotak overflow-hidden.
-   .word (inline-block, nowrap) menjaga kata tak pecah di tengah saat wrap; spasi
-   antar-kata mengizinkan pembungkusan. padding+margin negatif memberi ruang agar
-   huruf tak terpotong saat digeser (tanpa mengubah tinggi baris). */
-.hero-copy h1 .word{display:inline-block;white-space:nowrap}
-.hero-copy h1 .ch{display:inline-block;overflow:hidden;vertical-align:top;padding:.14em 0;margin:-.14em 0}
-.hero-copy h1 .ch-in{display:inline-block;will-change:transform}
-.hero-copy h1 .ch-sp{display:inline-block}
+/* Blur-dissolve per kata: tiap .word (inline-block, nowrap) menajam dari buram.
+   nowrap menjaga kata tak pecah; spasi antar-kata mengizinkan pembungkusan.
+   will-change: petunjuk kompositor untuk transform+filter (hanya ~6 elemen). */
+.hero-copy h1 .word{display:inline-block;white-space:nowrap;will-change:transform,filter,opacity}
 /* Sentuhan "wow": aksen "anti was-was" berpendar sekejap saat intro (hanya sekali,
    hanya bila animasi intro aktif → hormati prefers-reduced-motion). */
 @keyframes heroAccentGlow{
@@ -2191,14 +2187,10 @@ function HeroModel({ fallbackPhoto, startDelay = 0 }) {
   return (
     <div className="hero-embed">
       <div className="hero-embed-frame" ref={frameRef}>
-        {/* POSTER INSTAN: foto motor tampil SEKARANG (tanpa menunggu unduhan 3D),
-            jadi hero tak pernah kosong / ber-spinner. Model 3D memudar masuk di
-            ATASNYA begitu siap; poster memudar keluar bersamaan (area transparan
-            model tak menampilkan foto di belakangnya). */}
-        {fallbackPhoto
-          ? <img className={'hero-embed-fallback' + (state === 'ready' ? ' is-hidden' : '')}
-              src={fallbackPhoto} alt="Motor pilihan Motorell" />
-          : (state !== 'ready' && <Blueprint />)}
+        {/* TANPA poster foto: selama model 3D dimuat, area ini dibiarkan transparan
+            (latar hero tampak) — foto unit (XSR) tak lagi muncul & mengganggu.
+            Cadangan hanya Blueprint netral bila 3D BENAR-BENAR gagal dimuat. */}
+        {state === 'failed' && <Blueprint />}
         {state !== 'failed' && visible && libReady && (
           <model-viewer
             ref={mvRef}
@@ -2224,28 +2216,24 @@ function HeroModel({ fallbackPhoto, startDelay = 0 }) {
   )
 }
 
-// ---------- Judul hero: reveal PER-HURUF ----------
-// Tiap huruf mencuat naik dari balik mask, di-stagger halus (kaskade). Tiap KATA
-// dibungkus .word (inline-block, nowrap) agar tak pecah di tengah saat wrap;
-// spasi antar-kata mengizinkan pembungkusan. play=false → tampil statis penuh
-// (prefers-reduced-motion / kunjungan berikutnya).
+// ---------- Judul hero: reveal BLUR-DISSOLVE per kata ----------
+// Pendekatan lebih elegan: tiap KATA "mengembun" masuk — dari buram + sedikit naik
+// + transparan → menajam & mantap, dengan easing panjang yang lembut & tumpang-
+// tindih. Terasa mewah/sinematik, bukan mekanis. Per-kata (bukan per-huruf) → hanya
+// ~6 elemen yang mem-blur, jadi tetap mulus (blur itu mahal). play=false → tampil
+// statis penuh (prefers-reduced-motion / kunjungan berikutnya).
 function HeroHeading({ play }) {
-  // Easing LEMBUT (easeOutCubic) + fade opacity + tumpang-tindih tinggi → huruf
-  // MENGALIR seperti gelombang, bukan meletup satu-satu (menghilangkan kesan
-  // patah-patah & terasa lebih elegan). Durasi panjang > jarak antar-huruf.
-  const SMOOTH = [0.33, 1, 0.68, 1]
-  const ch = (d) => play
-    ? { initial: { y: '100%', opacity: 0 }, animate: { y: '0%', opacity: 1 },
-        transition: { duration: 0.72, ease: SMOOTH, delay: d } }
-    : {}
+  const EASE = [0.22, 1, 0.36, 1]   // easeOutQuint-ish: lembut, tanpa overshoot
   let i = 0
-  const BASE = 0.05, STEP = 0.026
+  const BASE = 0.12, STEP = 0.16
   const word = (text, accent) => {
-    const letters = [...text].map((c, k) => c === ' '
-      ? <span className="ch-sp" key={k}>{' '}</span>
-      : <span className="ch" key={k}><motion.span className="ch-in" {...ch(BASE + (i++) * STEP)}>{c}</motion.span></span>)
-    const Tag = accent ? 'em' : 'span'
-    return <Tag className="word">{letters}</Tag>
+    const anim = play
+      ? { initial: { opacity: 0, y: 16, filter: 'blur(14px)' },
+          animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
+          transition: { duration: 1.05, ease: EASE, delay: BASE + (i++) * STEP } }
+      : {}
+    const Tag = accent ? motion.em : motion.span
+    return <Tag className="word" {...anim}>{text}</Tag>
   }
   return (
     <h1>
