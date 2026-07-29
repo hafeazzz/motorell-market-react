@@ -78,6 +78,12 @@ const MAPS_EMBED = 'https://maps.google.com/maps?q=' +
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n) || 0))
 const fmt = (n) => new Intl.NumberFormat('id-ID').format(Number(n) || 0)
+// Untuk FIELD input harga: kelompokkan ribuan saat diketik ("5000000"→"5.000.000")
+// & ambil digit murni ("5.000.000"→"5000000"). State menyimpan angka MENTAH; input
+// menampilkan yang berkelompok. Wajib type="text" inputMode="numeric" (type=number
+// tak bisa menampilkan pemisah ribuan).
+const groupDigits = (v) => { const d = String(v ?? '').replace(/\D/g, ''); return d ? d.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '' }
+const onlyDigits = (v) => String(v ?? '').replace(/\D/g, '')
 const slugify = (s) =>
   String(s).toLowerCase().normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -2850,7 +2856,7 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
               <div className="field"><label htmlFor="u-color">Warna</label>
                 <input id="u-color" value={f.color} onChange={set('color')} placeholder="Hitam" /></div>
               <div className={'field' + mark('price')}><label htmlFor="u-price">Harga jual (Rp)</label>
-                <input id="u-price" type="number" min="0" value={f.price} onChange={set('price')} placeholder="20800000" required /></div>
+                <input id="u-price" type="text" inputMode="numeric" value={groupDigits(f.price)} onChange={(e) => setF((p) => ({ ...p, price: onlyDigits(e.target.value) }))} placeholder="20.800.000" required /></div>
               <div className="field"><label htmlFor="u-grade">Grade kurasi</label>
                 <select id="u-grade" value={f.grade} onChange={set('grade')}>
                   <option value="S">S — istimewa, seperti baru</option>
@@ -5143,7 +5149,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
               <div className="field"><label htmlFor="t-plat">Plat nomor</label>
                 <input id="t-plat" value={f.plat_nomor} onChange={set('plat_nomor')} placeholder="B 1234 XYZ" /></div>
               <div className="field"><label htmlFor="t-harga">Harga diinginkan (Rp) *</label>
-                <input id="t-harga" type="number" min="0" value={f.harga_diinginkan} onChange={set('harga_diinginkan')} placeholder="18000000" required /></div>
+                <input id="t-harga" type="text" inputMode="numeric" value={groupDigits(f.harga_diinginkan)} onChange={(e) => setF((p) => ({ ...p, harga_diinginkan: onlyDigits(e.target.value) }))} placeholder="18.000.000" required /></div>
               <div className="field full"><label htmlFor="t-desc">Deskripsi tambahan</label>
                 <textarea id="t-desc" value={f.deskripsi} onChange={set('deskripsi')}
                   placeholder="Riwayat servis, alasan jual, kondisi mesin…" /></div>
@@ -5275,8 +5281,8 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                         </label>
                       </div>
                       <label>Harga diinginkan (Rp)
-                        <input type="number" min="0" value={edit.harga_diinginkan}
-                          onChange={(e) => setEdit((p) => ({ ...p, harga_diinginkan: e.target.value }))} />
+                        <input type="text" inputMode="numeric" value={groupDigits(edit.harga_diinginkan)}
+                          onChange={(e) => setEdit((p) => ({ ...p, harga_diinginkan: onlyDigits(e.target.value) }))} />
                       </label>
                       <label>Kondisi
                         <select value={edit.kondisi}
