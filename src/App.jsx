@@ -843,11 +843,11 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    supaya frasa ini tetap muat utuh bahkan di layar 320px. nowrap dipasang di
    <em>, bukan di h1 — h1 memuat dua kalimat dan akan meluber kalau dikunci. */
 .hero-copy h1 em{font-style:normal;color:var(--accent);white-space:nowrap}
-/* Mask reveal per baris judul: tiap baris "naik" dari balik kotak overflow-hidden.
-   padding+margin negatif memberi ruang agar ascender/descender tak terpotong saat
-   digeser, tanpa mengubah jarak antar-baris. */
-.hero-copy h1 .line{display:block;overflow:hidden;padding:.09em 0;margin:-.09em 0}
-.hero-copy h1 .line-in{display:inline-block;will-change:transform}
+/* Mask reveal per KATA: tiap kata "mencuat" naik dari balik kotak overflow-hidden.
+   inline-block + spasi normal di antara .w → kata tetap membungkus wajar. padding+
+   margin negatif memberi ruang agar huruf tak terpotong saat digeser. */
+.hero-copy h1 .w{display:inline-block;overflow:hidden;vertical-align:top;padding:.12em 0;margin:-.12em 0}
+.hero-copy h1 .w-in{display:inline-block;will-change:transform}
 /* Sentuhan "wow": aksen "anti was-was" berpendar sekejap saat intro (hanya sekali,
    hanya bila animasi intro aktif → hormati prefers-reduced-motion). */
 @keyframes heroAccentGlow{
@@ -4228,10 +4228,11 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
         transition: { duration: 0.82, ease: EXPO, delay } }
     : {}
-  // Baris judul: naik dari 120% → 0 di balik overflow-hidden (mask reveal).
-  const revealLine = (delay) => playIntro
-    ? { initial: { y: '120%' }, animate: { y: '0%' },
-        transition: { duration: 0.92, ease: EXPO, delay } }
+  // Judul: tiap KATA mencuat naik dari balik mask (overflow-hidden), berurutan →
+  // kaskade yang lebih hidup daripada per-baris. Sedikit spring di ujung (via EXPO).
+  const revealWord = (delay) => playIntro
+    ? { initial: { y: '112%' }, animate: { y: '0%' },
+        transition: { duration: 0.7, ease: EXPO, delay } }
     : {}
   // Model 3D menyusul setelah teks memimpin (~1.4s) → tetap terasa premium.
   const heroModelAnim = playIntro
@@ -4288,12 +4289,17 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             <div className={'hero-copy' + (playIntro ? ' intro' : '')}>
               <motion.p className="kicker" {...reveal(0.05)}>Motorell Market — Showroom motor terkurasi</motion.p>
               <h1>
-                <span className="line"><motion.span className="line-in" {...revealLine(0.16)}>Lebih dari motor bekas.</motion.span></span>
-                <span className="line"><motion.span className="line-in" {...revealLine(0.28)}>Kualitas <em>anti was-was.</em></motion.span></span>
+                <span className="w"><motion.span className="w-in" {...revealWord(0.10)}>Lebih</motion.span></span>{' '}
+                <span className="w"><motion.span className="w-in" {...revealWord(0.17)}>dari</motion.span></span>{' '}
+                <span className="w"><motion.span className="w-in" {...revealWord(0.24)}>motor</motion.span></span>{' '}
+                <span className="w"><motion.span className="w-in" {...revealWord(0.31)}>bekas.</motion.span></span>
+                <br />
+                <span className="w"><motion.span className="w-in" {...revealWord(0.42)}>Kualitas</motion.span></span>{' '}
+                <span className="w"><motion.span className="w-in" {...revealWord(0.52)}><em>anti was-was.</em></motion.span></span>
               </h1>
-              <motion.p {...reveal(0.44)}>Setiap motor telah dikurasi dan siap
+              <motion.p {...reveal(0.66)}>Setiap motor telah dikurasi dan siap
                 mengukir cerita perjalanan Anda.</motion.p>
-              <motion.div className="hero-cta" {...reveal(0.58)}>
+              <motion.div className="hero-cta" {...reveal(0.80)}>
                 <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
                 <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
               </motion.div>
