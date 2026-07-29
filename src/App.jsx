@@ -843,6 +843,19 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    supaya frasa ini tetap muat utuh bahkan di layar 320px. nowrap dipasang di
    <em>, bukan di h1 — h1 memuat dua kalimat dan akan meluber kalau dikunci. */
 .hero-copy h1 em{font-style:normal;color:var(--accent);white-space:nowrap}
+/* Mask reveal per baris judul: tiap baris "naik" dari balik kotak overflow-hidden.
+   padding+margin negatif memberi ruang agar ascender/descender tak terpotong saat
+   digeser, tanpa mengubah jarak antar-baris. */
+.hero-copy h1 .line{display:block;overflow:hidden;padding:.09em 0;margin:-.09em 0}
+.hero-copy h1 .line-in{display:inline-block;will-change:transform}
+/* Sentuhan "wow": aksen "anti was-was" berpendar sekejap saat intro (hanya sekali,
+   hanya bila animasi intro aktif → hormati prefers-reduced-motion). */
+@keyframes heroAccentGlow{
+  0%{text-shadow:0 0 0 rgba(59,130,246,0)}
+  55%{text-shadow:0 0 24px rgba(59,130,246,.5)}
+  100%{text-shadow:0 0 0 rgba(59,130,246,0)}
+}
+.hero-copy.intro h1 em{animation:heroAccentGlow 1.5s ease-out 1.15s both}
 .hero-copy p{font-size:16.5px;line-height:1.62;color:var(--muted);max-width:440px;margin-bottom:26px}
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
@@ -4200,26 +4213,30 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
   const officialAll = useMemo(() => listings.filter((l) => !isTitip(l)), [listings])
   const titipAll = useMemo(() => listings.filter((l) => isTitip(l)), [listings])
 
-  // Intro hero: teks meluncur kanan→kiri, LALU model 3D fade-in setelah teks
-  // selesai. initial/animate (bukan whileInView) → jalan sekali saat mount, tidak
-  // terpicu ulang saat scroll. Dilewati untuk prefers-reduced-motion & untuk
-  // mount berikutnya di page-load yang sama (heroIntroSeen).
+  // Intro hero: reveal teks yang lebih sinematik — tiap BARIS judul muncul dari
+  // balik "mask" (naik dari bawah), sedangkan kicker/subjudul/CTA mengambang naik
+  // dengan blur→fokus. Di-stagger via delay eksplisit + ease-out-expo (cepat lalu
+  // melambat lembut → kesan premium). Jalan SEKALI saat mount pertama; dilewati
+  // untuk prefers-reduced-motion & mount berikutnya (heroIntroSeen). Semua pakai
+  // transform/opacity/filter → tanpa layout shift & tanpa luapan horizontal.
   const [playIntro] = useState(() => !heroIntroSeen && !prefersReduced())
   useEffect(() => { heroIntroSeen = true }, [])
-  // Total durasi ~1.8s (teks 1.1s → model mulai 1.2s, selesai 1.8s) — di bawah 2s.
-  // Teks meluncur DARI KIRI (x -100% → 0). body{overflow-x:hidden} + .hero{overflow:hidden}
-  // menahan luapan horizontal selama elemen di luar layar kiri.
-  const heroTextAnim = playIntro
-    ? { initial: { x: '-100%', opacity: 0 }, animate: { x: 0, opacity: 1 },
-        transition: { duration: 1.1, ease: 'easeOut' } }
+  const EXPO = [0.16, 1, 0.3, 1]
+  // Elemen non-judul: mengambang naik sambil blur menajam.
+  const reveal = (delay) => playIntro
+    ? { initial: { opacity: 0, y: 30, filter: 'blur(10px)' },
+        animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
+        transition: { duration: 0.82, ease: EXPO, delay } }
     : {}
-  // Fade-in model lebih elegan: opacity + sedikit scale (0.92→1) + naik halus
-  // (y 20→0), pakai ease-out-expo [0.16,1,0.3,1] (cepat lalu melambat lembut).
-  // Transform saja → tanpa layout shift. Total intro jadi ~2.3s (delay 1.2 +
-  // durasi 1.1) — sengaja sedikit lebih panjang demi kesan premium.
+  // Baris judul: naik dari 120% → 0 di balik overflow-hidden (mask reveal).
+  const revealLine = (delay) => playIntro
+    ? { initial: { y: '120%' }, animate: { y: '0%' },
+        transition: { duration: 0.92, ease: EXPO, delay } }
+    : {}
+  // Model 3D menyusul setelah teks memimpin (~1.4s) → tetap terasa premium.
   const heroModelAnim = playIntro
     ? { initial: { opacity: 0, scale: 0.92, y: 20 }, animate: { opacity: 1, scale: 1, y: 0 },
-        transition: { duration: 1.1, delay: 1.2, ease: [0.16, 1, 0.3, 1] } }
+        transition: { duration: 1.1, delay: 1.4, ease: EXPO } }
     : {}
 
   // Unit asli terbaik (grade tertinggi yang punya foto) — dipakai sebagai foto
@@ -4268,16 +4285,19 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         <div className="hero-bg-shade" aria-hidden="true" />
         <div className="container hero-inner">
           <div className="hero-main">
-            <motion.div className="hero-copy" {...heroTextAnim}>
-              <p className="kicker">Motorell Market — Showroom motor terkurasi</p>
-              <h1>Lebih dari motor bekas.<br />Kualitas <em>anti was-was.</em></h1>
-              <p>Setiap motor telah dikurasi dan siap
-                mengukir cerita perjalanan Anda.</p>
-              <div className="hero-cta">
+            <div className={'hero-copy' + (playIntro ? ' intro' : '')}>
+              <motion.p className="kicker" {...reveal(0.05)}>Motorell Market — Showroom motor terkurasi</motion.p>
+              <h1>
+                <span className="line"><motion.span className="line-in" {...revealLine(0.16)}>Lebih dari motor bekas.</motion.span></span>
+                <span className="line"><motion.span className="line-in" {...revealLine(0.28)}>Kualitas <em>anti was-was.</em></motion.span></span>
+              </h1>
+              <motion.p {...reveal(0.44)}>Setiap motor telah dikurasi dan siap
+                mengukir cerita perjalanan Anda.</motion.p>
+              <motion.div className="hero-cta" {...reveal(0.58)}>
                 <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
                 <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
-              </div>
-            </motion.div>
+              </motion.div>
+            </div>
           </div>
           <div className="spec-rail">
             <span>titik inspeksi<b>50+</b></span>
