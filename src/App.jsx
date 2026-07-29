@@ -780,7 +780,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   background-color:transparent;--poster-color:transparent;cursor:grab;
   transition:opacity .5s ease}
 .hero-embed-frame model-viewer:active{cursor:grabbing}
-.hero-embed-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero-embed-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  transition:opacity .7s ease}
+/* Poster memudar keluar begitu model 3D siap tampil. */
+.hero-embed-fallback.is-hidden{opacity:0}
 
 /* ---------- hero ambient: model 3D jadi LATAR di belakang teks ---------- */
 /* pointer-events:auto → motor bisa DI-DRAG untuk diputar. Lapisan teks (hero-inner)
@@ -843,11 +846,14 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    supaya frasa ini tetap muat utuh bahkan di layar 320px. nowrap dipasang di
    <em>, bukan di h1 — h1 memuat dua kalimat dan akan meluber kalau dikunci. */
 .hero-copy h1 em{font-style:normal;color:var(--accent);white-space:nowrap}
-/* Mask reveal per KATA: tiap kata "mencuat" naik dari balik kotak overflow-hidden.
-   inline-block + spasi normal di antara .w → kata tetap membungkus wajar. padding+
-   margin negatif memberi ruang agar huruf tak terpotong saat digeser. */
-.hero-copy h1 .w{display:inline-block;overflow:hidden;vertical-align:top;padding:.12em 0;margin:-.12em 0}
-.hero-copy h1 .w-in{display:inline-block;will-change:transform}
+/* Mask reveal per HURUF: tiap huruf "mencuat" naik dari balik kotak overflow-hidden.
+   .word (inline-block, nowrap) menjaga kata tak pecah di tengah saat wrap; spasi
+   antar-kata mengizinkan pembungkusan. padding+margin negatif memberi ruang agar
+   huruf tak terpotong saat digeser (tanpa mengubah tinggi baris). */
+.hero-copy h1 .word{display:inline-block;white-space:nowrap}
+.hero-copy h1 .ch{display:inline-block;overflow:hidden;vertical-align:top;padding:.14em 0;margin:-.14em 0}
+.hero-copy h1 .ch-in{display:inline-block;will-change:transform}
+.hero-copy h1 .ch-sp{display:inline-block}
 /* Sentuhan "wow": aksen "anti was-was" berpendar sekejap saat intro (hanya sekali,
    hanya bila animasi intro aktif → hormati prefers-reduced-motion). */
 @keyframes heroAccentGlow{
@@ -2179,46 +2185,64 @@ function HeroModel({ fallbackPhoto }) {
   return (
     <div className="hero-embed">
       <div className="hero-embed-frame" ref={frameRef}>
-        {state === 'failed' ? (
-          fallbackPhoto
-            ? <img className="hero-embed-fallback" src={fallbackPhoto}
-                alt="Motor pilihan Motorell" />
-            : <Blueprint />
-        ) : (
-          <>
-            {visible && libReady && (
-              <model-viewer
-                ref={mvRef}
-                src={MODEL_SRC}
-                alt="Harley-Davidson FLHRXS Road King Special"
-                camera-controls=""
-                disable-zoom=""
-                disable-pan=""
-                interaction-prompt="none"
-                auto-rotate=""
-                auto-rotate-delay="3000"
-                rotation-per-second="15deg"
-                camera-orbit="270deg 82deg 100%"
-                shadow-intensity="1"
-                exposure="1"
-                environment-image="neutral"
-                style={{ opacity: state === 'ready' ? 1 : 0 }}>
-                {/* slot kosong: buang progress-bar bawaan; loader branded kita
-                    (spinner di bawah) yang dipakai supaya konsisten & tanpa UI
-                    asing. */}
-                <div slot="progress-bar" />
-              </model-viewer>
-            )}
-            {state !== 'ready' && (
-              <div className="hero-embed-ph" aria-hidden="true">
-                <span className="hero-embed-spinner" />
-                <span>Memuat model 3D…</span>
-              </div>
-            )}
-          </>
+        {/* POSTER INSTAN: foto motor tampil SEKARANG (tanpa menunggu unduhan 3D),
+            jadi hero tak pernah kosong / ber-spinner. Model 3D memudar masuk di
+            ATASNYA begitu siap; poster memudar keluar bersamaan (area transparan
+            model tak menampilkan foto di belakangnya). */}
+        {fallbackPhoto
+          ? <img className={'hero-embed-fallback' + (state === 'ready' ? ' is-hidden' : '')}
+              src={fallbackPhoto} alt="Motor pilihan Motorell" />
+          : (state !== 'ready' && <Blueprint />)}
+        {state !== 'failed' && visible && libReady && (
+          <model-viewer
+            ref={mvRef}
+            src={MODEL_SRC}
+            alt="Harley-Davidson FLHRXS Road King Special"
+            camera-controls=""
+            disable-zoom=""
+            disable-pan=""
+            interaction-prompt="none"
+            auto-rotate=""
+            auto-rotate-delay="3000"
+            rotation-per-second="15deg"
+            camera-orbit="270deg 82deg 100%"
+            shadow-intensity="1"
+            exposure="1"
+            environment-image="neutral"
+            style={{ opacity: state === 'ready' ? 1 : 0 }}>
+            <div slot="progress-bar" />
+          </model-viewer>
         )}
       </div>
     </div>
+  )
+}
+
+// ---------- Judul hero: reveal PER-HURUF ----------
+// Tiap huruf mencuat naik dari balik mask, di-stagger halus (kaskade). Tiap KATA
+// dibungkus .word (inline-block, nowrap) agar tak pecah di tengah saat wrap;
+// spasi antar-kata mengizinkan pembungkusan. play=false → tampil statis penuh
+// (prefers-reduced-motion / kunjungan berikutnya).
+function HeroHeading({ play }) {
+  const EXPO = [0.16, 1, 0.3, 1]
+  const ch = (d) => play
+    ? { initial: { y: '110%' }, animate: { y: '0%' }, transition: { duration: 0.5, ease: EXPO, delay: d } }
+    : {}
+  let i = 0
+  const BASE = 0.06, STEP = 0.022
+  const word = (text, accent) => {
+    const letters = [...text].map((c, k) => c === ' '
+      ? <span className="ch-sp" key={k}>{' '}</span>
+      : <span className="ch" key={k}><motion.span className="ch-in" {...ch(BASE + (i++) * STEP)}>{c}</motion.span></span>)
+    const Tag = accent ? 'em' : 'span'
+    return <Tag className="word">{letters}</Tag>
+  }
+  return (
+    <h1>
+      {word('Lebih')} {word('dari')} {word('motor')} {word('bekas.')}
+      <br />
+      {word('Kualitas')} {word('anti was-was.', true)}
+    </h1>
   )
 }
 
@@ -4228,12 +4252,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
         transition: { duration: 0.82, ease: EXPO, delay } }
     : {}
-  // Judul: tiap KATA mencuat naik dari balik mask (overflow-hidden), berurutan →
-  // kaskade yang lebih hidup daripada per-baris. Sedikit spring di ujung (via EXPO).
-  const revealWord = (delay) => playIntro
-    ? { initial: { y: '112%' }, animate: { y: '0%' },
-        transition: { duration: 0.7, ease: EXPO, delay } }
-    : {}
+  // (Judul di-reveal per-huruf oleh komponen HeroHeading.)
   // Model 3D menyusul setelah teks memimpin (~1.4s) → tetap terasa premium.
   const heroModelAnim = playIntro
     ? { initial: { opacity: 0, scale: 0.92, y: 20 }, animate: { opacity: 1, scale: 1, y: 0 },
@@ -4288,15 +4307,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
           <div className="hero-main">
             <div className={'hero-copy' + (playIntro ? ' intro' : '')}>
               <motion.p className="kicker" {...reveal(0.05)}>Motorell Market — Showroom motor terkurasi</motion.p>
-              <h1>
-                <span className="w"><motion.span className="w-in" {...revealWord(0.10)}>Lebih</motion.span></span>{' '}
-                <span className="w"><motion.span className="w-in" {...revealWord(0.17)}>dari</motion.span></span>{' '}
-                <span className="w"><motion.span className="w-in" {...revealWord(0.24)}>motor</motion.span></span>{' '}
-                <span className="w"><motion.span className="w-in" {...revealWord(0.31)}>bekas.</motion.span></span>
-                <br />
-                <span className="w"><motion.span className="w-in" {...revealWord(0.42)}>Kualitas</motion.span></span>{' '}
-                <span className="w"><motion.span className="w-in" {...revealWord(0.52)}><em>anti was-was.</em></motion.span></span>
-              </h1>
+              <HeroHeading play={playIntro} />
               <motion.p {...reveal(0.66)}>Setiap motor telah dikurasi dan siap
                 mengukir cerita perjalanan Anda.</motion.p>
               <motion.div className="hero-cta" {...reveal(0.80)}>
