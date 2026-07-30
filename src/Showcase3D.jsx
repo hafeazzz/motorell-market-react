@@ -19,13 +19,13 @@ import { motion } from 'framer-motion'
 const MODEL = '/models/harley-davidson-flhrxs.glb'
 useGLTF.preload(MODEL)
 
-// ---- Model: load GLB, bobbing halus, highlight glossy saat hover ----
-function Motor({ onHover }) {
+// ---- Model: load GLB, bobbing halus, highlight glossy saat hover, ganti warna ----
+function Motor({ onHover, paint }) {
   const { scene } = useGLTF(MODEL)
   const grp = useRef()
   const [hovered, setHovered] = useState(false)
 
-  useEffect(() => {  // kloning material sekali → aman ubah emissive
+  useEffect(() => {  // kloning material sekali → aman ubah emissive/warna
     scene.traverse((o) => {
       if (o.isMesh && o.material) {
         o.material = o.material.clone()
@@ -33,6 +33,18 @@ function Motor({ onHover }) {
       }
     })
   }, [scene])
+
+  // Ganti warna "cat bodi": tint hanya material METALIK (metalness > 0.35) supaya
+  // karet/ban & bagian matte relatif tak ikut. Model tergabung → sebagian aksen
+  // krom bisa sedikit ikut (batas wajar untuk 1 mesh).
+  useEffect(() => {
+    if (!paint) return
+    scene.traverse((o) => {
+      if (o.isMesh && o.material && 'metalness' in o.material && o.material.metalness > 0.35) {
+        o.material.color.set(paint); o.material.needsUpdate = true
+      }
+    })
+  }, [paint, scene])
 
   useEffect(() => {  // highlight glossy saat hover
     scene.traverse((o) => {
@@ -75,10 +87,10 @@ function CameraFov({ focused }) {
 function Lights() {
   return (
     <>
-      <ambientLight intensity={0.35} />
-      <directionalLight position={[4, 6, 4]} intensity={2.1} color="#ffffff" castShadow shadow-mapSize={[1024, 1024]} />
-      <directionalLight position={[-6, 2, 3]} intensity={0.9} color="#8fb4ff" />
-      <directionalLight position={[0, 3, -6]} intensity={1.4} color="#dfe8ff" />
+      <ambientLight intensity={0.55} />
+      <directionalLight position={[4, 6, 4]} intensity={2.9} color="#ffffff" castShadow shadow-mapSize={[1024, 1024]} />
+      <directionalLight position={[-6, 2, 3]} intensity={1.2} color="#8fb4ff" />
+      <directionalLight position={[0, 3, -6]} intensity={1.9} color="#dfe8ff" />
     </>
   )
 }
@@ -97,15 +109,22 @@ export default function Showcase3D({ onExit, onShop }) {
   const [focused, setFocused] = useState(false)
   const [hoverInfo, setHoverInfo] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
+  const [paint, setPaint] = useState('#1a1a1a')
   const controls = useRef()
 
-  useEffect(() => {  // keyboard: panah = putar, Enter = belanja, Esc = keluar
+  useEffect(() => {  // keyboard: panah = putar (4 arah), Enter = belanja, Esc = keluar
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
     const onKey = (e) => {
       const c = controls.current
-      if (e.key === 'ArrowLeft' && c) c.setAzimuthalAngle(c.getAzimuthalAngle() - 0.12)
-      else if (e.key === 'ArrowRight' && c) c.setAzimuthalAngle(c.getAzimuthalAngle() + 0.12)
+      if (!c && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return
+      if (e.key === 'ArrowLeft') c.setAzimuthalAngle(c.getAzimuthalAngle() - 0.12)
+      else if (e.key === 'ArrowRight') c.setAzimuthalAngle(c.getAzimuthalAngle() + 0.12)
+      else if (e.key === 'ArrowUp') c.setPolarAngle(clamp(c.getPolarAngle() - 0.1, Math.PI / 3, Math.PI / 1.9))
+      else if (e.key === 'ArrowDown') c.setPolarAngle(clamp(c.getPolarAngle() + 0.1, Math.PI / 3, Math.PI / 1.9))
       else if (e.key === 'Enter') onShop?.()
       else if (e.key === 'Escape') onExit?.()
+      else return
+      e.preventDefault()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -134,16 +153,18 @@ export default function Showcase3D({ onExit, onShop }) {
             {/* Environment map lokal (dari Lightformer, TANPA CDN) → cat metalik
                 punya sesuatu untuk dipantulkan → tampak glossy, tak gelap pekat. */}
             <Environment resolution={128} frames={1}>
-              <Lightformer intensity={2.6} position={[0, 4, 5]} scale={[12, 6, 1]} color="#ffffff" />
-              <Lightformer intensity={1.3} position={[-6, 1, 2]} scale={[5, 8, 1]} color="#a8c6ff" />
-              <Lightformer intensity={1.1} position={[6, 1, -2]} scale={[5, 8, 1]} color="#ffe9c7" />
+              <Lightformer intensity={3.4} position={[0, 4, 5]} scale={[12, 6, 1]} color="#ffffff" />
+              <Lightformer intensity={1.8} position={[-6, 1, 2]} scale={[5, 8, 1]} color="#a8c6ff" />
+              <Lightformer intensity={1.5} position={[6, 1, -2]} scale={[5, 8, 1]} color="#ffe9c7" />
             </Environment>
             <Bounds fit clip margin={1.15}>
-              <Motor onHover={setHoverInfo} />
+              <Motor onHover={setHoverInfo} paint={paint} />
             </Bounds>
             <ContactShadows position={[0, -1.05, 0]} opacity={0.5} scale={9} blur={2.6} far={4} />
           </Suspense>
-          <OrbitControls ref={controls} makeDefault enableZoom={false} enablePan={false}
+          <OrbitControls ref={controls} makeDefault enablePan={false}
+            enableZoom enableDamping dampingFactor={0.08} zoomSpeed={0.85}
+            minDistance={2.4} maxDistance={7}
             autoRotate autoRotateSpeed={0.9} minPolarAngle={Math.PI / 3} maxPolarAngle={Math.PI / 1.9} />
         </Canvas>
       </WebGLBoundary>
@@ -171,6 +192,15 @@ export default function Showcase3D({ onExit, onShop }) {
           <button className="sc-cta" onClick={onShop} aria-label="Mulai belanja — lihat etalase">Mulai Belanja</button>
           <button className="sc-ghost" onClick={onExit} aria-label="Kembali ke beranda">← Beranda</button>
         </motion.div>
+      </div>
+
+      {/* Color picker: ganti warna cat bodi (perkiraan — model tergabung) */}
+      <div className="sc-paint" role="group" aria-label="Ganti warna cat motor">
+        {['#1a1a1a', '#8a1c1c', '#1c3a8a', '#0f5132', '#9a9aa2'].map((c) => (
+          <button key={c} type="button" className={'sc-swatch' + (paint === c ? ' on' : '')}
+            style={{ background: c }} onClick={() => setPaint(c)}
+            aria-label={'Warna ' + c} aria-pressed={paint === c} />
+        ))}
       </div>
     </div>
   )
@@ -203,5 +233,12 @@ const CSS = `
   max-width:260px;box-shadow:0 8px 26px rgba(0,0,0,.5)}
 .sc-fallback{position:absolute;inset:0;display:flex;flex-direction:column;gap:18px;
   align-items:center;justify-content:center;color:#fff;text-align:center;padding:24px}
+.sc-paint{position:absolute;top:clamp(58px,10vh,92px);right:16px;display:flex;gap:8px;
+  padding:8px;border-radius:999px;background:rgba(10,16,24,.5);border:1px solid rgba(255,255,255,.14);
+  backdrop-filter:blur(6px);pointer-events:auto}
+.sc-swatch{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.3);
+  cursor:pointer;padding:0;transition:transform .15s,border-color .15s}
+.sc-swatch:hover{transform:scale(1.12)}
+.sc-swatch.on{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
 @media (prefers-reduced-motion: reduce){.sc-features span,.sc-logo,.sc-bottom{transition:none}}
 `

@@ -4351,6 +4351,9 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
               <motion.div className="hero-cta" {...reveal(0.80)}>
                 <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
                 <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
+                <a className="btn btn-ghost" href="#/showcase"
+                  onClick={(e) => { e.preventDefault(); nav('#/showcase') }}
+                  title="Pengalaman 3D interaktif (halaman terpisah)">Lihat 3D</a>
               </motion.div>
             </div>
           </div>
