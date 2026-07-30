@@ -5,10 +5,7 @@
 // Pembayaran: Edge Function create-dp-payment -> Midtrans QRIS
 // ============================================================
 
-import { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from 'react'
-// Showcase 3D (React Three Fiber) di-lazy-load: three/R3F (~800KB) hanya termuat
-// saat route #/showcase dibuka → bundle awal app tetap ramping.
-const Showcase3D = lazy(() => import('./Showcase3D'))
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion'
 import { supabase } from './supabaseClient'
 import QRCode from 'qrcode'
@@ -4351,9 +4348,6 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
               <motion.div className="hero-cta" {...reveal(0.80)}>
                 <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
                 <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
-                <a className="btn btn-ghost" href="#/showcase"
-                  onClick={(e) => { e.preventDefault(); nav('#/showcase') }}
-                  title="Pengalaman 3D interaktif (halaman terpisah)">Lihat 3D</a>
               </motion.div>
             </div>
           </div>
@@ -4751,7 +4745,6 @@ function parseHash() {
   if (path === '#/etalase') return { name: 'etalase', q, panel, sort }
   if (path === '#/kebijakan') return { name: 'kebijakan', q, panel, sort }
   if (path === '#/titip-jual') return { name: 'titip', q, panel, sort }
-  if (path === '#/showcase') return { name: 'showcase', q, panel, sort }
   return { name: 'home', q, panel, sort }
 }
 
@@ -5793,16 +5786,6 @@ export default function App() {
   const current = route.name === 'unit'
     ? (units.find((l) => l.slug === route.slug) || deepUnit)
     : null
-
-  // Showcase 3D = pengalaman layar-penuh terpisah (pratinjau). Render sendiri,
-  // tanpa nav/etalase di belakangnya. three/R3F lazy → hanya termuat di sini.
-  if (route.name === 'showcase') {
-    return (
-      <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: '#1f2a38' }} />}>
-        <Showcase3D onExit={() => nav('#/')} onShop={() => nav('#/')} />
-      </Suspense>
-    )
-  }
 
   return (
     <>
