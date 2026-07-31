@@ -10,7 +10,6 @@ import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'fra
 import { supabase } from './supabaseClient'
 import QRCode from 'qrcode'
 import ArchiveTab from './ArchiveTab';
-import ModPartPanel from './ModPartPanel';
 import MotorCarousel from './MotorCarousel';
 import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
@@ -1851,7 +1850,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .about-story{display:flex;flex-direction:column;gap:20px}
 /* rata kiri (bukan justify) — justify bikin "rivers" jarak antar-kata di kolom
    sempit dan susah dibaca di mobile */
-.about-story p{font-size:16px;line-height:1.8;color:#33363c;max-width:68ch}
+.about-story p{font-size:16px;line-height:1.8;color:var(--ink);max-width:68ch}
 
 /* ---------- section "Temukan Kami" (peta Google Maps asli, dibingkai bulat) ---------- */
 .lokasi-grid{display:grid;grid-template-columns:1fr;gap:44px;align-items:center;margin-top:16px}
@@ -3069,6 +3068,7 @@ const TITIP_FILTERS = [
   { code: 'pending', label: 'Perlu review' },
   { code: 'approved', label: 'Disetujui' },
   { code: 'rejected', label: 'Ditolak' },
+  { code: 'sold', label: 'Terjual' },
 ]
 
 function TitipReview({ profile, toast, nav }) {
@@ -3077,6 +3077,7 @@ function TitipReview({ profile, toast, nav }) {
   const [err, setErr] = useState('')
   const [busyId, setBusyId] = useState(null)
   const [openId, setOpenId] = useState(null)   // baris yang detail-nya dibuka
+  const [sort, setSort] = useState('newest')   // 'newest' | 'oldest'
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('titip_jual_units')
@@ -3103,7 +3104,10 @@ function TitipReview({ profile, toast, nav }) {
     load()
   }
 
-  const shown = (rows || []).filter((r) => r.status === tab)
+  const shown = (rows || []).filter((r) => r.status === tab).sort((a, b) => {
+    const d = new Date(a.created_at) - new Date(b.created_at)
+    return sort === 'oldest' ? d : -d
+  })
 
   return (
     <div>
@@ -3116,6 +3120,13 @@ function TitipReview({ profile, toast, nav }) {
           )
         })}
       </div>
+
+      {rows && rows.length > 0 && (
+        <div className="switcher" style={{ maxWidth: 240, marginTop: 10 }}>
+          <button type="button" className={sort === 'newest' ? 'on' : ''} onClick={() => setSort('newest')}>Terbaru</button>
+          <button type="button" className={sort === 'oldest' ? 'on' : ''} onClick={() => setSort('oldest')}>Terlama</button>
+        </div>
+      )}
 
       {rows === null && !err && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
       {err && (
@@ -3230,7 +3241,6 @@ function AdminPanel({ profile, toast, nav }) {
             <button type="button" className={view === 'staff' ? 'on' : ''} onClick={() => setView('staff')}>Staf</button>
             <button type="button" className={view === 'titip' ? 'on' : ''} onClick={() => setView('titip')}>Titip Jual</button>
             <button type="button" className={view === 'archive' ? 'on' : ''} onClick={() => setView('archive')}>Arsip</button>
-            <button type="button" className={view === 'mod_parts' ? 'on' : ''} onClick={() => setView('mod_parts')}>Part Modifikasi</button>
           </div>
         )}
 
@@ -3239,8 +3249,6 @@ function AdminPanel({ profile, toast, nav }) {
         {view === 'titip' && canManageStaff && <TitipReview profile={profile} toast={toast} nav={nav} />}
 
         {view === 'archive' && <ArchiveTab />}
-
-        {view === 'mod_parts' && canManageStaff && <ModPartPanel toast={toast} />}
 
         {view === 'units' && (
           <>
