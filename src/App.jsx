@@ -9,7 +9,6 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion'
 import { supabase } from './supabaseClient'
 import QRCode from 'qrcode'
-import ArchiveTab from './ArchiveTab';
 import MotorCarousel from './MotorCarousel';
 import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
@@ -3223,6 +3222,19 @@ function AdminPanel({ profile, toast, nav }) {
 
   const canManageStaff = ['admin', 'owner'].includes(profile.role)
 
+  // Hapus PERMANEN unit dari arsip (irreversible). Foto di storage jadi orphan
+  // (bisa dibersihkan scripts/optimizeStorage.mjs); baris listings dihapus.
+  async function removeListing(l) {
+    if (!window.confirm('Hapus PERMANEN "' + l.title + '" dari arsip? Tindakan ini tidak bisa dibatalkan.')) return
+    const { error } = await supabase.from('listings').delete().eq('id', l.id)
+    if (error) { toast('Gagal menghapus: ' + error.message); return }
+    toast('Unit dihapus permanen'); load()
+  }
+  // Etalase = unit aktif; Arsip = terjual/delisted (pindah otomatis saat "Tandai terjual").
+  const ARCHIVE_ST = ['sold', 'delisted']
+  const activeRows = (rows || []).filter((l) => !ARCHIVE_ST.includes(l.status))
+  const archiveRows = (rows || []).filter((l) => ARCHIVE_ST.includes(l.status))
+
   return (
     <section className="admin">
       <div className="container">
@@ -3240,7 +3252,7 @@ function AdminPanel({ profile, toast, nav }) {
             <button type="button" className={view === 'units' ? 'on' : ''} onClick={() => setView('units')}>Etalase</button>
             <button type="button" className={view === 'staff' ? 'on' : ''} onClick={() => setView('staff')}>Staf</button>
             <button type="button" className={view === 'titip' ? 'on' : ''} onClick={() => setView('titip')}>Titip Jual</button>
-            <button type="button" className={view === 'archive' ? 'on' : ''} onClick={() => setView('archive')}>Arsip</button>
+            <button type="button" className={view === 'archive' ? 'on' : ''} onClick={() => setView('archive')}>Arsip{archiveRows.length ? ' (' + archiveRows.length + ')' : ''}</button>
           </div>
         )}
 
@@ -3248,7 +3260,43 @@ function AdminPanel({ profile, toast, nav }) {
 
         {view === 'titip' && canManageStaff && <TitipReview profile={profile} toast={toast} nav={nav} />}
 
-        {view === 'archive' && <ArchiveTab />}
+        {view === 'archive' && (
+          <>
+            <p className="f-info" style={{ marginBottom: 16 }}>
+              Unit <b>terjual/diarsip</b> — hilang dari etalase. Bisa <b>Edit</b>, <b>Kembalikan ke
+              etalase</b> (restore), atau <b>Hapus permanen</b>.
+            </p>
+            {rows === null && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
+            {rows && archiveRows.length === 0 && (
+              <div className="empty">Arsip kosong — belum ada unit terjual.</div>
+            )}
+            {rows && archiveRows.length > 0 && (
+              <div className="a-list">
+                {archiveRows.map((l) => (
+                  <div className="a-row" key={l.id}>
+                    <div className="a-thumb">
+                      {Array.isArray(l.photos) && l.photos[0]
+                        ? <img src={l.photos[0]} alt="" />
+                        : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
+                    </div>
+                    <div className="a-info">
+                      <b>{l.title}</b>
+                      <span>{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' km' : 'km —'} · grade {l.grade}
+                        {l.sold_at ? ' · terjual ' + new Date(l.sold_at).toLocaleDateString('id-ID') : ''}</span>
+                    </div>
+                    <span className="a-price">{rupiah(l.price)}</span>
+                    <span className={'st ' + l.status}>{STATUS_LABEL[l.status] || l.status}</span>
+                    <div className="a-actions">
+                      <button className="btn btn-ghost btn-sm" onClick={() => setForm(l)}>Edit</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setStatus(l, 'published')}>Kembalikan ke etalase</button>
+                      <button className="btn btn-ghost btn-sm a-del-btn" onClick={() => removeListing(l)}>Hapus permanen</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
 
         {view === 'units' && (
           <>
@@ -3272,12 +3320,12 @@ function AdminPanel({ profile, toast, nav }) {
               </div>
             )}
             {rows === null && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
-            {rows && rows.length === 0 && (
-              <div className="empty">Belum ada unit. Klik "Tambah unit" untuk mengisi etalase pertamamu.</div>
+            {rows && activeRows.length === 0 && (
+              <div className="empty">Belum ada unit aktif. Klik "Tambah unit" untuk mengisi etalase.</div>
             )}
-            {rows && rows.length > 0 && (
+            {rows && activeRows.length > 0 && (
               <div className="a-list">
-                {rows.map((l) => (
+                {activeRows.map((l) => (
                   <div className="a-row" key={l.id}>
                     <div className="a-thumb">
                       {Array.isArray(l.photos) && l.photos[0]
