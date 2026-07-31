@@ -790,7 +790,8 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    loader branded kita yang terlihat. */
 .hero-embed-frame model-viewer{position:absolute;inset:0;width:100%;height:100%;
   background-color:transparent;--poster-color:transparent;cursor:grab;
-  transition:opacity .5s ease}
+  will-change:opacity,transform;
+  transition:opacity .8s ease,transform 1s cubic-bezier(0.16,1,0.3,1)}
 .hero-embed-frame model-viewer:active{cursor:grabbing}
 .hero-embed-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   transition:opacity .7s ease}
@@ -2220,7 +2221,7 @@ function HeroModel({ fallbackPhoto, startDelay = 0 }) {
             shadow-intensity="1"
             exposure="1"
             environment-image="neutral"
-            style={{ opacity: state === 'ready' ? 1 : 0 }}>
+            style={{ opacity: state === 'ready' ? 1 : 0, transform: state === 'ready' ? 'none' : 'translateX(9%) scale(0.9)' }}>
             <div slot="progress-bar" />
           </model-viewer>
         )}
@@ -4287,12 +4288,13 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
         transition: { duration: 0.82, ease: EXPO, delay } }
     : {}
-  // (Judul di-reveal per-huruf oleh komponen HeroHeading.)
-  // Model 3D menyusul setelah teks memimpin (~1.4s) → tetap terasa premium.
-  const heroModelAnim = playIntro
-    ? { initial: { opacity: 0, scale: 0.92, y: 20 }, animate: { opacity: 1, scale: 1, y: 0 },
-        transition: { duration: 1.1, delay: 1.4, ease: EXPO } }
-    : {}
+  // (Judul di-reveal per-kata oleh komponen HeroHeading.)
+  // Entrance motor TIDAK lagi memakai delay tetap pada kontainer (dulu kotak
+  // kosong beranimasi lalu motor muncul terpisah → terasa datar). Sekarang
+  // animasi "masuk"-nya dikendalikan oleh state 'ready' <model-viewer> (via CSS
+  // .hero-embed-frame model-viewer) → motor MELUNCUR + membesar tepat saat ia
+  // benar-benar tampil, menyatu dengan reveal teks.
+  const heroModelAnim = {}
 
   // Unit asli terbaik (grade tertinggi yang punya foto) — dipakai sebagai foto
   // fallback kalau WebGL gagal render (bukan lagi bagian animasi pembuka).
@@ -4334,7 +4336,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         <div className="hero-grid-lines" aria-hidden="true" />
         {/* Model 3D sebagai LATAR ambient di belakang teks (fade-in halus). */}
         <motion.div className="hero-bg" aria-hidden="true" {...heroModelAnim}>
-          <HeroModel fallbackPhoto={introPhoto} startDelay={playIntro ? 1500 : 0} />
+          <HeroModel fallbackPhoto={introPhoto} startDelay={playIntro ? 500 : 0} />
         </motion.div>
         {/* Selubung putih: menjaga teks tetap terbaca di atas model. */}
         <div className="hero-bg-shade" aria-hidden="true" />
