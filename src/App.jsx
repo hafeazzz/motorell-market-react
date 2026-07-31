@@ -2944,7 +2944,7 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
 }
 
 // ---------- Kelola staf (khusus role admin) ----------
-const ROLE_LABEL = { admin: 'Admin', kurator: 'Kurator', null: 'Tanpa akses' }
+const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', kurator: 'Kurator', null: 'Tanpa akses' }
 
 function StaffPanel({ profile, toast }) {
   const [rows, setRows] = useState(null)
@@ -3038,7 +3038,12 @@ function StaffPanel({ profile, toast }) {
                 <div className="a-actions">
                   {isSelf ? (
                     <span className="f-info" style={{ margin: 0 }}>
-                      {ROLE_LABEL[p.role] || p.role} — minta admin lain untuk mengubah aksesmu sendiri</span>
+                      {ROLE_LABEL[p.role] || p.role} — minta owner untuk mengubah aksesmu sendiri</span>
+                  ) : profile.role !== 'owner' ? (
+                    // Hierarki: HANYA owner yang boleh mengubah peran. Admin lihat read-only.
+                    <span className="f-info" style={{ margin: 0 }}>{ROLE_LABEL[p.role] || p.role}</span>
+                  ) : p.role === 'owner' ? (
+                    <span className="f-info" style={{ margin: 0 }}>🔒 Owner — tak bisa diubah</span>
                   ) : (
                     ['admin', 'kurator', null].map((r) => (
                       <button key={String(r)} type="button"
@@ -3205,7 +3210,7 @@ function AdminPanel({ profile, toast, nav }) {
     toast(msg); load()
   }
 
-  const canManageStaff = profile.role === 'admin'
+  const canManageStaff = ['admin', 'owner'].includes(profile.role)
 
   return (
     <section className="admin">
@@ -5631,7 +5636,7 @@ export default function App() {
     return () => { supabase.removeChannel(ch) }
   }, [session, loadProfile])
 
-  const isStaff = Boolean(profile && ['admin', 'kurator'].includes(profile.role))
+  const isStaff = Boolean(profile && ['owner', 'admin', 'kurator'].includes(profile.role))
 
   // Etalase publik: unit 'published' + 'booked'. Unit ter-DP sengaja TETAP
   // tampil — dengan badge "Hampir Terjual" — sebagai pemicu urgensi; tombol
