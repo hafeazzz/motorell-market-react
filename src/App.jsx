@@ -14,6 +14,7 @@ import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
 import { parseCaption } from './captionParser';
 import { uploadPhoto, thumbKey, ALLOWED_PHOTO_TYPES, PHOTO_MAX_MB } from './photoUpload';
+import { PROVINCES, citiesOf } from './cities';
 import { openSocialApp } from './utils/deepLink';
 
 // ---------- Konfigurasi ----------
@@ -539,6 +540,7 @@ function normalizeTitip(row) {
     title,
     brand: row.merek, model: row.model, year: row.tahun,
     mileage_km: row.odometer || 0, color: row.warna || null,
+    kota: row.kota || null,
     price: Number(row.harga_diinginkan) || 0,
     // Titip jual TIDAK punya grade/kondisi (bukan unit kurasi resmi). grade null
     // → filter "Kondisi" otomatis absen di galeri titip (facet grades kosong).
@@ -1618,6 +1620,23 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .a-edit input,.a-edit textarea,.a-edit select{padding:9px 11px;border:1px solid var(--line-2);
   border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
 .a-edit-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:11px}
+.t-loc{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+/* ---------- halaman Birojasa ---------- */
+.biro{padding:clamp(96px,12vw,132px) 0 clamp(56px,8vw,90px)}
+.biro-h1{font-size:clamp(28px,5vw,46px);font-weight:750;letter-spacing:-.025em;margin:12px 0 12px;max-width:18ch}
+.biro-lead{font-size:16.5px;line-height:1.7;color:var(--muted);max-width:56ch;margin-bottom:26px}
+.biro-cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:44px}
+.biro-feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:48px}
+.biro-feat{border:1px solid var(--line);border-radius:14px;padding:20px;background:var(--panel);
+  display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow)}
+.biro-feat .biro-ic{font-size:30px}
+.biro-feat b{font-size:16px;font-weight:700}
+.biro-feat span:last-child{font-size:13.5px;color:var(--muted);line-height:1.55}
+.biro-faq{max-width:640px}
+.biro-h2{font-size:22px;font-weight:750;letter-spacing:-.02em;margin-bottom:14px}
+.biro-q{border-top:1px solid var(--line);padding:16px 0}
+.biro-q b{display:block;font-size:15.5px;font-weight:650;margin-bottom:6px}
+.biro-q p{font-size:14px;color:var(--muted);line-height:1.6;max-width:60ch}
 .a-ep-label{font-size:12px;color:var(--muted)}
 .a-edit-photos{display:flex;flex-wrap:wrap;gap:9px}
 .a-ep{position:relative;width:74px;height:56px;border-radius:8px;overflow:hidden;
@@ -2303,11 +2322,24 @@ function AuthModal({ onClose, onDone, toast }) {
       }
     } catch (ex) {
       // Bedakan gagal jaringan/CSP (request tak sampai server) dari error auth.
-      const net = /failed to fetch|networkerror|load failed|err_/i.test(ex?.message || '')
-      console.error('[AUTH] gagal:', ex?.name, '—', ex?.message, ex)
-      setErr(net
-        ? 'Tidak bisa menghubungi server. Cek koneksi internet lalu coba lagi.'
-        : (ex.message || 'Gagal memproses. Coba lagi.'))
+      //
+      // PENTING: untuk balasan 5xx, supabase-js membungkusnya jadi
+      // `AuthRetryableFetchError` dengan message berisi "{}" — namanya berbunyi
+      // "FetchError" sehingga TAMPAK seperti masalah jaringan, padahal request
+      // SAMPAI ke server dan server yang menolak. Dulu pesan "{}" itu langsung
+      // ditampilkan ke user dan menyesatkan diagnosis. Pembeda yang benar adalah
+      // ex.status: kalau ada status HTTP, request jelas sampai ke server.
+      const status = ex?.status ?? ex?.originalError?.status ?? null
+      const net = !status && /failed to fetch|networkerror|load failed|err_/i.test(ex?.message || '')
+      const useless = !ex?.message || ex.message === '{}'
+      console.error('[AUTH] gagal:', ex?.name, '| status:', status, '| message:', ex?.message, ex)
+      setErr(
+        net
+          ? 'Tidak bisa menghubungi server. Cek koneksi internet lalu coba lagi.'
+          : status >= 500
+            ? `Server sedang bermasalah (HTTP ${status}). Ini bukan dari sisi kamu — coba lagi beberapa saat lagi.`
+            : (useless ? 'Gagal memproses. Coba lagi.' : ex.message)
+      )
     } finally { setBusy(false) }
   }
 
@@ -3629,6 +3661,7 @@ function DetailView({ listing, nav, onBook }) {
             </div>
             <div className="rows">
               <div className="row"><span>Penjual</span><b>{listing.seller_name || '—'}</b></div>
+              {listing.kota && <div className="row"><span>Lokasi</span><b>📍 {listing.kota}</b></div>}
               {listing.plat_nomor && <div className="row"><span>Plat</span><b>{listing.plat_nomor}</b></div>}
             </div>
             <div className="panel-cta has-sticky-twin">
@@ -3850,7 +3883,7 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
         </div>
         <div className="card-body">
           <h3>{l.title}</h3>
-          <span className="card-meta">{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' KM' : 'KM —'}{l.color ? ' · ' + l.color.toUpperCase() : ''}</span>
+          <span className="card-meta">{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' KM' : 'KM —'}{l.color ? ' · ' + l.color.toUpperCase() : ''}{l.kota ? ' · 📍 ' + l.kota.toUpperCase() : ''}</span>
           <span className="card-price">{rupiah(l.price)}</span>
         </div>
         <span className="card-go"><span>Lihat detail</span><span className="aro">→</span></span>
@@ -4808,6 +4841,7 @@ function parseHash() {
   if (path === '#/etalase') return { name: 'etalase', q, panel, sort }
   if (path === '#/kebijakan') return { name: 'kebijakan', q, panel, sort }
   if (path === '#/titip-jual') return { name: 'titip', q, panel, sort }
+  if (path === '#/birojasa') return { name: 'birojasa', q, panel, sort }
   return { name: 'home', q, panel, sort }
 }
 
@@ -5029,10 +5063,11 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
   const empty = {
     seller_name: '', seller_phone: '', seller_email: '',
     merek: '', model: '', tahun: new Date().getFullYear(), odometer: '',
-    warna: '', plat_nomor: '', harga_diinginkan: '',
+    warna: '', plat_nomor: '', harga_diinginkan: '', kota: '',
     deskripsi: '', kelengkapan: '',
   }
   const [f, setF] = useState(empty)
+  const [province, setProvince] = useState('')  // pemilih lokasi (kota disimpan di f.kota)
   const [photos, setPhotos] = useState([])      // URL hasil upload
   const [prog, setProg] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -5172,6 +5207,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
     setErr('')
     if (!f.seller_name.trim() || !f.seller_phone.trim()) { setErr('Nama dan No. HP penjual wajib diisi.'); return }
     if (!f.merek.trim() || !f.model.trim() || !f.harga_diinginkan) { setErr('Merek, model, dan harga wajib diisi.'); return }
+    if (!f.kota) { setErr('Pilih lokasi kota/kabupaten dulu.'); return }
     if (photos.length < TITIP_MIN_PHOTOS) { setErr('Unggah minimal ' + TITIP_MIN_PHOTOS + ' foto motor.'); return }
     setBusy(true)
     const payload = {
@@ -5180,7 +5216,7 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
       seller_email: f.seller_email.trim() || null,
       merek: f.merek.trim(), model: f.model.trim(), tahun: Number(f.tahun),
       odometer: Number(f.odometer) || null, warna: f.warna.trim() || null,
-      plat_nomor: f.plat_nomor.trim() || null, kondisi: null,
+      plat_nomor: f.plat_nomor.trim() || null, kondisi: null, kota: f.kota || null,
       harga_diinginkan: Number(f.harga_diinginkan), deskripsi: f.deskripsi.trim() || null,
       kelengkapan: f.kelengkapan.trim() || null, photos, status: 'pending',
     }
@@ -5242,6 +5278,19 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
                 <input id="t-warna" value={f.warna} onChange={set('warna')} /></div>
               <div className="field"><label htmlFor="t-plat">Plat nomor</label>
                 <input id="t-plat" value={f.plat_nomor} onChange={set('plat_nomor')} placeholder="B 1234 XYZ" /></div>
+              <div className="field full"><label htmlFor="t-prov">Lokasi penjual (provinsi → kota) *</label>
+                <div className="t-loc">
+                  <select id="t-prov" value={province}
+                    onChange={(e) => { setProvince(e.target.value); setF((p) => ({ ...p, kota: '' })) }}>
+                    <option value="">— Pilih provinsi —</option>
+                    {PROVINCES.map((pv) => <option key={pv} value={pv}>{pv}</option>)}
+                  </select>
+                  <select value={f.kota} disabled={!province}
+                    onChange={(e) => setF((p) => ({ ...p, kota: e.target.value }))}>
+                    <option value="">{province ? '— Pilih kota/kab —' : '— Pilih provinsi dulu —'}</option>
+                    {province && citiesOf(province).map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div></div>
               <div className="field"><label htmlFor="t-harga">Harga diinginkan (Rp) *</label>
                 <input id="t-harga" type="text" inputMode="numeric" value={groupDigits(f.harga_diinginkan)} onChange={(e) => setF((p) => ({ ...p, harga_diinginkan: onlyDigits(e.target.value) }))} placeholder="18.000.000" required /></div>
               <div className="field full"><label htmlFor="t-desc">Deskripsi tambahan</label>
@@ -5402,6 +5451,61 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
             </div>
           </div>
         )}
+      </div>
+    </section>
+  )
+}
+
+// ---------- Halaman Birojasa (route #/birojasa) ----------
+// Layanan perpanjangan STNK: pengunjung diarahkan ke WhatsApp Motorell (nomor CS
+// asli, bukan placeholder). Copy dari pemilik; tanpa klaim yang dibuat-buat.
+const BIRO_FEATURES = [
+  { ic: '⚡', t: 'Cepat', d: 'Proses 1–3 hari kerja.' },
+  { ic: '💬', t: 'Lewat WhatsApp', d: 'Cukup kirim foto STNK & dokumen.' },
+  { ic: '🏠', t: 'Tanpa ke Samsat', d: 'Kamu tak perlu antre; kami yang urus.' },
+  { ic: '✅', t: 'Aman & jelas', d: 'Biaya diinfokan di depan sebelum mulai.' },
+]
+const BIRO_FAQ = [
+  { q: 'Berapa lama prosesnya?', a: 'Umumnya 1–3 hari kerja, tergantung antrean & kelengkapan dokumen.' },
+  { q: 'Berapa biayanya?', a: 'Bervariasi menurut jenis & pajak kendaraan. Kami infokan rinciannya lewat WhatsApp sebelum dimulai.' },
+  { q: 'Dokumen apa yang perlu disiapkan?', a: 'STNK, KTP pemilik, dan (bila diminta) dokumen pendukung. Detailnya dijelaskan saat chat.' },
+  { q: 'Wilayah mana saja yang dilayani?', a: 'Hubungi kami via WhatsApp untuk memastikan wilayahmu tercakup.' },
+]
+
+function BirojasaView({ nav }) {
+  const waUrl = 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' +
+    encodeURIComponent('Halo Motorell, saya mau perpanjang STNK. Boleh info prosedur & biayanya?')
+  return (
+    <section className="biro">
+      <div className="container">
+        <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
+        <p className="kicker">Birojasa</p>
+        <h1 className="biro-h1">Perpanjang STNK tanpa repot ke Samsat.</h1>
+        <p className="biro-lead">Cukup kirim foto STNK & dokumenmu lewat WhatsApp — sisanya kami yang urus.
+          Praktis untuk kamu yang sibuk.</p>
+        <div className="biro-cta">
+          <a className="btn btn-accent" href={waUrl} target="_blank" rel="noopener noreferrer">Chat WhatsApp Motorell</a>
+        </div>
+
+        <div className="biro-feats">
+          {BIRO_FEATURES.map((f) => (
+            <div className="biro-feat" key={f.t}>
+              <span className="biro-ic" aria-hidden="true">{f.ic}</span>
+              <b>{f.t}</b><span>{f.d}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="biro-faq">
+          <h2 className="biro-h2">Pertanyaan umum</h2>
+          {BIRO_FAQ.map((item, i) => (
+            <div className="biro-q" key={i}><b>{item.q}</b><p>{item.a}</p></div>
+          ))}
+        </div>
+
+        <div className="biro-cta" style={{ marginTop: 8 }}>
+          <a className="btn btn-accent" href={waUrl} target="_blank" rel="noopener noreferrer">Mulai sekarang via WhatsApp</a>
+        </div>
       </div>
     </section>
   )
@@ -5907,6 +6011,9 @@ export default function App() {
               {route.name !== 'titip' && (
                 <button className="btn btn-ghost btn-sm" onClick={() => { nav('#/titip-jual'); setMenuOpen(false) }}
                   title="Titip jual motor Anda di Motorell">Titip Jual</button>)}
+              {route.name !== 'birojasa' && (
+                <button className="btn btn-ghost btn-sm" onClick={() => { nav('#/birojasa'); setMenuOpen(false) }}
+                  title="Birojasa — perpanjang STNK via WhatsApp">Birojasa</button>)}
               <button className="btn btn-ghost btn-sm nav-loc" onClick={() => { setMenuOpen(false); goLokasi() }} title="Lokasi showroom Motorell">
                 <svg className="nav-loc-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -5955,6 +6062,8 @@ export default function App() {
         {route.name === 'titip' && (
           <TitipJualView session={session} nav={nav} toast={toast}
             onLoginClick={() => setAuthOpen(true)} />)}
+
+        {route.name === 'birojasa' && <BirojasaView nav={nav} />}
 
         {route.name === 'unit' && (current
           ? <DetailView listing={current} nav={nav} onBook={requestBooking} />
