@@ -995,7 +995,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   font-size:10px;font-weight:700;letter-spacing:.07em;padding:6px 10px;border-radius:999px;
   text-transform:uppercase;color:#fff;box-shadow:0 2px 8px rgba(17,17,20,.22)}
 .card-status.st-new{background:#c62828}
-.card-status.st-booked{background:#e07b1c}
+.card-status.st-booked{background:#b85a0f}
 /* Tombol WA melayang di atas .card-hit — z-index harus lebih tinggi, kalau
    tidak lapisan klik kartu menelan klik-nya dan malah membuka halaman unit.
    Ia diam di tempat saat kartu di-hover: sasaran klik yang bergeser persis
@@ -1222,7 +1222,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .fp-grp > label{font-size:12px;font-family:var(--mono);letter-spacing:.1em;color:var(--muted);
   text-transform:uppercase}
 .fp-opts{display:flex;flex-direction:column;gap:9px;max-height:190px;overflow-y:auto}
-.fp-opt{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;color:#33363c}
+.fp-opt{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;color:var(--ink)}
 .fp-opt input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex:none}
 .fp-sel{width:100%;border:1px solid var(--line-2);background:var(--panel);border-radius:8px;
   padding:9px 11px;font-size:13.5px;cursor:pointer}
@@ -1417,7 +1417,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* Wrapper = grid; ketiga panel menempati sel yang sama (grid-area 1/1) sehingga
    barisnya setinggi panel terpanjang. Tinggi tak berubah saat ganti tab. */
 .dtab-body{display:grid;padding-top:22px;min-height:96px}
-.dtab-panel{grid-area:1/1;font-size:15.5px;line-height:1.72;color:#33363c;
+.dtab-panel{grid-area:1/1;font-size:15.5px;line-height:1.72;color:var(--ink);
   max-width:60ch;white-space:pre-line;
   opacity:0;visibility:hidden;transition:opacity .22s ease-out}
 .dtab-panel.on{opacity:1;visibility:visible}
@@ -1469,7 +1469,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   border-radius:9px;border:1px solid var(--line-2)}
 .stnote.warn{color:var(--warn);border-color:rgba(184,121,27,.32);background:rgba(184,121,27,.05)}
 .stnote.dim{color:var(--muted)}
-.stnote.titip-note{font-family:var(--font);font-size:13px;line-height:1.55;color:#33363c;
+.stnote.titip-note{font-family:var(--font);font-size:13px;line-height:1.55;color:var(--ink);
   background:var(--panel-2);border-color:var(--line-2)}
 .stnote.titip-note b{color:var(--ink)}
 
@@ -1564,7 +1564,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .admin-diag dt{flex:none;width:120px;color:var(--muted)}
 .admin-diag dd{word-break:break-all}
 .admin-diag .mono{font-family:var(--mono);font-size:12.5px}
-.admin-diag-hint{font-size:13.5px;line-height:1.6;color:#33363c;margin-bottom:14px}
+.admin-diag-hint{font-size:13.5px;line-height:1.6;color:var(--ink);margin-bottom:14px}
 .a-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
   flex-wrap:wrap;margin-bottom:28px}
 .a-head h1{font-size:clamp(27px,3.4vw,40px);font-weight:750;letter-spacing:-.025em}
@@ -1662,11 +1662,11 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .titip-form{max-width:720px}
 .titip-gate{max-width:520px;border:1px solid var(--line);border-radius:14px;padding:22px 24px;
   background:var(--panel-2)}
-.titip-gate p{color:#33363c;line-height:1.6;margin-bottom:16px}
+.titip-gate p{color:var(--ink);line-height:1.6;margin-bottom:16px}
 .titip-ok{max-width:600px;border:1px solid var(--ok);background:rgba(31,157,85,.07);
   border-radius:14px;padding:20px 22px;margin-bottom:28px}
 .titip-ok b{display:block;margin-bottom:8px}
-.titip-ok p{color:#33363c;line-height:1.6;font-size:14.5px;margin-bottom:14px}
+.titip-ok p{color:var(--ink);line-height:1.6;font-size:14.5px;margin-bottom:14px}
 .titip-mine{max-width:720px;margin-top:38px}
 /* panduan foto (read-only) di form titip jual */
 .titip-guide{margin:6px 0 22px}
@@ -1685,7 +1685,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .titip-detail dl{display:flex;flex-direction:column;gap:7px}
 .titip-detail dl > div{display:flex;gap:10px;font-size:13.5px}
 .titip-detail dt{flex:none;width:96px;color:var(--muted)}
-.titip-detail dd{color:#33363c}
+.titip-detail dd{color:var(--ink)}
 /* band CTA titip jual di homepage */
 .titip-band{padding:clamp(40px,6vw,72px) 0}
 .titip-band-in{display:flex;flex-direction:column;gap:20px;align-items:flex-start;
@@ -1920,7 +1920,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .unit-terms h4{font-size:11px;font-family:var(--mono);letter-spacing:.13em;
   color:var(--muted);margin-bottom:15px}
 .unit-terms ul{list-style:none;display:flex;flex-direction:column;gap:11px}
-.unit-terms li{display:flex;gap:11px;font-size:14px;line-height:1.5;color:#33363c}
+.unit-terms li{display:flex;gap:11px;font-size:14px;line-height:1.5;color:var(--ink)}
 .unit-terms li .dot{color:var(--accent);flex:none;font-weight:800}
 .unit-terms b{color:var(--ink)}
 .unit-terms a{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
@@ -1939,7 +1939,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   transition:transform .25s;flex:none}
 .policy-item[open] summary .pm{transform:rotate(45deg)}
 .policy-body{padding:0 2px 26px;max-width:72ch}
-.policy-body p{color:#33363c;line-height:1.74;font-size:15px}
+.policy-body p{color:var(--ink);line-height:1.74;font-size:15px}
 .policy-body p + p{margin-top:14px}
 
 /* ---------- Tugas 13b: reveal berselang-seling (teks & visual bertemu di tengah) ----------
