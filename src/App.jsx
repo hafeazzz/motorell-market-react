@@ -1606,6 +1606,42 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .a-info .a-stat{display:block;margin-top:4px;color:var(--muted)}
 .a-info .a-note{display:block;margin-top:6px;font-family:var(--font);font-size:12px;
   color:var(--warn);line-height:1.45;letter-spacing:0}
+/* ---------- featured motor panel ---------- */
+.feat-panel .feat-form{border:1px solid var(--line);border-radius:14px;padding:20px 22px;
+  background:var(--panel-2);margin-bottom:20px}
+.feat-panel .feat-form h3,.feat-h{font-size:16px;font-weight:750;margin-bottom:14px;color:var(--ink)}
+.feat-h{margin:26px 0 14px}
+.feat-grid{gap:14px}
+@media(min-width:620px){ .feat-grid{grid-template-columns:1fr 1fr} }
+.feat-form-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.feat-sched-ctl{margin-bottom:8px}
+.mono-lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);display:block;margin-bottom:6px}
+.feat-sched-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.feat-sched-row input{background:var(--bg);border:1.5px solid var(--line-2);border-radius:10px;
+  padding:10px 12px;font-size:14px;color:var(--ink)}
+.feat-lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.feat-card{border:1px solid var(--line);border-radius:13px;overflow:hidden;background:var(--panel);
+  display:flex;flex-direction:column}
+.feat-card-media{position:relative;aspect-ratio:16/10;background:var(--bg-2);display:flex;
+  align-items:center;justify-content:center}
+.feat-card-media img{width:100%;height:100%;object-fit:cover}
+.feat-accent-dot{position:absolute;top:10px;right:10px;width:16px;height:16px;border-radius:50%;
+  border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.feat-card-body{padding:12px 14px 4px;display:flex;flex-direction:column;gap:3px}
+.feat-card-body b{font-size:14.5px;font-weight:700;color:var(--ink)}
+.feat-meta{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.feat-card-actions{display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px}
+.feat-card-actions .btn{flex:1 1 auto}
+.feat-sched-list{display:flex;flex-direction:column;gap:8px}
+.feat-sched-item{display:flex;align-items:center;gap:12px;border:1px solid var(--line);
+  border-radius:11px;padding:12px 14px;background:var(--panel)}
+.feat-sched-item.on{border-color:var(--ok);background:rgba(31,157,85,.05)}
+.feat-sched-main{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.feat-sched-main b{font-size:14px;font-weight:700;color:var(--ink)}
+/* aksen kicker hero saat ada motor unggulan */
+.feat-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;
+  vertical-align:middle;background:var(--accent)}
 .a-edit-btn{margin-top:8px;font-family:var(--mono);font-size:10.5px;font-weight:600;
   letter-spacing:.06em;padding:5px 12px;border-radius:999px;border:1px solid var(--line-2);
   background:var(--panel);color:var(--ink);cursor:pointer}
@@ -2153,7 +2189,12 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 // author "everhard", dan Sketchfab — masing-masing tertaut.
 const MODEL_SRC = '/models/harley-davidson-flhrxs.glb'
 
-function HeroModel({ fallbackPhoto, startDelay = 0 }) {
+// modelSrc/poster/alt di-inject dari motor unggulan (featured) bila ada; kalau
+// tidak, jatuh ke Harley default. modelSrc null = motor unggulan tanpa GLB →
+// tampilkan foto poster saja (bukan 3D). Komponen ini di-`key` oleh modelSrc di
+// pemanggil, jadi ganti motor = remount bersih (semua state lazy ter-reset).
+function HeroModel({ fallbackPhoto, startDelay = 0, modelSrc = MODEL_SRC, poster = null,
+  alt = 'Harley-Davidson FLHRXS Road King Special' }) {
   const frameRef = useRef(null)
   const mvRef = useRef(null)
   const [visible, setVisible] = useState(false)   // sudah dekat viewport?
@@ -2184,11 +2225,11 @@ function HeroModel({ fallbackPhoto, startDelay = 0 }) {
   // main thread) sampai animasi teks selesai → animasi teks tidak patah-patah
   // karena berebut CPU. Poster foto/blueprint tetap tampil selama jeda ini.
   useEffect(() => {
-    if (!visible) return
+    if (!visible || !modelSrc) return
     let alive = true
     const timer = setTimeout(() => {
       if (!alive) return
-      fetch(MODEL_SRC, { headers: { Range: 'bytes=0-0' } })
+      fetch(modelSrc, { headers: { Range: 'bytes=0-0' } })
         .then((res) => {
           res.body?.cancel?.()  // jangan lanjutkan unduhan bila server abaikan Range
           if (!alive) return
@@ -2198,7 +2239,7 @@ function HeroModel({ fallbackPhoto, startDelay = 0 }) {
         .catch(() => { if (alive) setState('failed') })
     }, startDelay)
     return () => { alive = false; clearTimeout(timer) }
-  }, [visible, startDelay])
+  }, [visible, startDelay, modelSrc])
 
   // Event dari <model-viewer>: 'load' = model siap, 'error' = gagal (mis. .glb
   // 404 / rusak) → foto cadangan. Keduanya dipancarkan andal, jadi tak perlu
@@ -2221,12 +2262,19 @@ function HeroModel({ fallbackPhoto, startDelay = 0 }) {
         {/* TANPA poster foto: selama model 3D dimuat, area ini dibiarkan transparan
             (latar hero tampak) — foto unit (XSR) tak lagi muncul & mengganggu.
             Cadangan hanya Blueprint netral bila 3D BENAR-BENAR gagal dimuat. */}
-        {state === 'failed' && <Blueprint />}
-        {state !== 'failed' && visible && libReady && (
+        {/* Motor unggulan tanpa GLB → foto poster saja (bukan 3D). */}
+        {!modelSrc && (poster
+          ? <img className="hero-embed-fallback" src={poster} alt={alt} />
+          : <Blueprint />)}
+        {/* GLB gagal dimuat → poster motor itu bila ada, jika tidak Blueprint. */}
+        {modelSrc && state === 'failed' && (poster
+          ? <img className="hero-embed-fallback" src={poster} alt={alt} />
+          : <Blueprint />)}
+        {modelSrc && state !== 'failed' && visible && libReady && (
           <model-viewer
             ref={mvRef}
-            src={MODEL_SRC}
-            alt="Harley-Davidson FLHRXS Road King Special"
+            src={modelSrc}
+            alt={alt}
             camera-controls=""
             disable-zoom=""
             disable-pan=""
@@ -3226,6 +3274,200 @@ function TitipReview({ profile, toast, nav }) {
 }
 
 // ---------- Panel admin ----------
+// Senin depan 00:00 WIB (UTC+7) sebagai ISO UTC — untuk tombol jadwal cepat.
+function nextMondayWIBISO() {
+  const wib = new Date(Date.now() + 7 * 3600 * 1000) // wall-clock WIB lewat field UTC
+  const dow = wib.getUTCDay()               // 0=Min..6=Sab (dalam WIB)
+  let add = ((1 - dow) % 7 + 7) % 7          // hari menuju Senin
+  if (add === 0) add = 7                     // hari ini Senin → Senin BERIKUTNYA
+  const midnightWIB = Date.UTC(wib.getUTCFullYear(), wib.getUTCMonth(), wib.getUTCDate() + add, 0, 0, 0)
+  return new Date(midnightWIB - 7 * 3600 * 1000).toISOString() // −7j → UTC sebenarnya
+}
+// datetime-local (waktu lokal browser) → ISO; kosong → null.
+const localToISO = (v) => (v ? new Date(v).toISOString() : null)
+// ISO → nilai <input datetime-local> pada zona lokal browser.
+function isoToLocalInput(iso) {
+  const d = new Date(iso)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+const EMPTY_FEAT = { name: '', brand: '', model_type: '', model_url: '', image_url: '', description: '', color_accent: '#1a2f5e' }
+
+// Panel admin: kelola motor unggulan (hero 3D) + jadwal rotasi mingguan.
+// Rotasi berbasis waktu (lihat loadFeatured di App & migrasi 0009) — panel ini
+// hanya menyisipkan baris jadwal; hero yang memilih mana yang tayang.
+function FeaturedPanel({ toast }) {
+  const [motors, setMotors] = useState(null)
+  const [schedule, setSchedule] = useState([])
+  const [f, setF] = useState(EMPTY_FEAT)
+  const [editId, setEditId] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [startAt, setStartAt] = useState(() => isoToLocalInput(nextMondayWIBISO()))
+
+  const load = useCallback(async () => {
+    const [{ data: m }, { data: s }] = await Promise.all([
+      supabase.from('featured_motors').select('*').order('created_at', { ascending: false }),
+      supabase.from('featured_motor_schedule').select('*, featured_motors(*)').order('start_date', { ascending: false }),
+    ])
+    setMotors(m || [])
+    setSchedule(s || [])
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+
+  async function saveMotor() {
+    if (!f.name.trim()) { toast('Nama motor wajib diisi'); return }
+    setBusy(true)
+    const payload = {
+      name: f.name.trim(), brand: f.brand.trim() || null, model_type: f.model_type.trim() || null,
+      model_url: f.model_url.trim() || null, image_url: f.image_url.trim() || null,
+      description: f.description.trim() || null, color_accent: f.color_accent || null,
+    }
+    const { error } = editId
+      ? await supabase.from('featured_motors').update(payload).eq('id', editId)
+      : await supabase.from('featured_motors').insert(payload)
+    setBusy(false)
+    if (error) { toast('Gagal menyimpan: ' + error.message); return }
+    toast(editId ? 'Motor unggulan diperbarui' : 'Motor unggulan ditambahkan')
+    setF(EMPTY_FEAT); setEditId(null); load()
+  }
+
+  function editMotor(m) {
+    setEditId(m.id)
+    setF({ name: m.name || '', brand: m.brand || '', model_type: m.model_type || '',
+      model_url: m.model_url || '', image_url: m.image_url || '', description: m.description || '',
+      color_accent: m.color_accent || '#1a2f5e' })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function toggleActive(m) {
+    const { error } = await supabase.from('featured_motors').update({ is_active: !m.is_active }).eq('id', m.id)
+    if (error) { toast('Gagal: ' + error.message); return }
+    toast(m.is_active ? 'Motor dinonaktifkan' : 'Motor diaktifkan'); load()
+  }
+
+  async function removeMotor(m) {
+    if (!window.confirm('Hapus "' + m.name + '" beserta jadwalnya? Tindakan ini tidak bisa dibatalkan.')) return
+    const { error } = await supabase.from('featured_motors').delete().eq('id', m.id)
+    if (error) { toast('Gagal menghapus: ' + error.message); return }
+    toast('Motor unggulan dihapus'); load()
+  }
+
+  async function scheduleMotor(m) {
+    const iso = localToISO(startAt)
+    if (!iso) { toast('Isi tanggal mulai dulu'); return }
+    const { error } = await supabase.from('featured_motor_schedule')
+      .insert({ featured_motor_id: m.id, start_date: iso })
+    if (error) { toast('Gagal menjadwalkan: ' + error.message); return }
+    toast(m.name + ' dijadwalkan mulai ' + new Date(iso).toLocaleString('id-ID')); load()
+  }
+
+  async function removeSchedule(id) {
+    const { error } = await supabase.from('featured_motor_schedule').delete().eq('id', id)
+    if (error) { toast('Gagal: ' + error.message); return }
+    toast('Jadwal dihapus'); load()
+  }
+
+  // Jadwal yang SEDANG tayang = start<=now & (end null|end>=now), start terbaru.
+  const now = Date.now()
+  const activeSchedId = schedule
+    .filter((s) => new Date(s.start_date).getTime() <= now && (!s.end_date || new Date(s.end_date).getTime() >= now))
+    .sort((a, b) => new Date(b.start_date) - new Date(a.start_date))[0]?.id || null
+
+  return (
+    <div className="feat-panel">
+      <p className="f-info" style={{ marginBottom: 18 }}>
+        Motor unggulan tampil sebagai <b>3D hero</b> di beranda. Rotasi <b>berbasis waktu</b>:
+        hero memakai jadwal dengan tanggal mulai terbaru yang sudah lewat — tanpa cron.
+        Setel tanggal ke "Senin depan" untuk pergantian mingguan otomatis. Model 3D pakai
+        file <b>.glb</b> (bukan Sketchfab — diblok CSP); tanpa GLB, hero menampilkan fotonya.
+      </p>
+
+      <div className="feat-form">
+        <h3>{editId ? 'Edit motor unggulan' : 'Tambah motor unggulan'}</h3>
+        <div className="f-grid feat-grid">
+          <div className="field"><label>Nama *</label>
+            <input value={f.name} onChange={set('name')} placeholder="Road King Special" /></div>
+          <div className="field"><label>Merek</label>
+            <input value={f.brand} onChange={set('brand')} placeholder="Harley-Davidson" /></div>
+          <div className="field"><label>Tipe</label>
+            <input value={f.model_type} onChange={set('model_type')} placeholder="Cruiser" /></div>
+          <div className="field"><label>Warna aksen</label>
+            <input type="color" value={f.color_accent} onChange={set('color_accent')} style={{ height: 46, padding: 4 }} /></div>
+          <div className="field full"><label>URL model GLB (Supabase storage / /models/…) — kosongkan untuk foto saja</label>
+            <input value={f.model_url} onChange={set('model_url')} placeholder="https://…/motor.glb" /></div>
+          <div className="field full"><label>URL foto poster (cadangan bila 3D gagal / motor tanpa GLB)</label>
+            <input value={f.image_url} onChange={set('image_url')} placeholder="https://…/motor.jpg" /></div>
+          <div className="field full"><label>Deskripsi (tampil di hero)</label>
+            <textarea value={f.description} onChange={set('description')} placeholder="Kalimat singkat yang menggugah tentang motor ini…" /></div>
+        </div>
+        <div className="feat-form-actions">
+          <button className="btn btn-accent" disabled={busy} onClick={saveMotor}>
+            {busy ? 'Menyimpan…' : editId ? 'Simpan perubahan' : '+ Tambah motor'}</button>
+          {editId && <button className="btn btn-ghost" onClick={() => { setEditId(null); setF(EMPTY_FEAT) }}>Batal edit</button>}
+        </div>
+      </div>
+
+      <div className="feat-sched-ctl">
+        <label className="mono-lbl">Tanggal mulai untuk tombol "Jadwalkan" (waktu lokal / WIB)</label>
+        <div className="feat-sched-row">
+          <input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} />
+          <button className="btn btn-ghost btn-sm" onClick={() => setStartAt(isoToLocalInput(nextMondayWIBISO()))}>Senin depan 00:00</button>
+        </div>
+      </div>
+
+      <h3 className="feat-h">Perpustakaan motor ({motors?.length || 0})</h3>
+      {motors === null && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
+      {motors && motors.length === 0 && <div className="empty">Belum ada motor unggulan. Tambahkan di atas.</div>}
+      <div className="feat-lib">
+        {(motors || []).map((m) => (
+          <div className="feat-card" key={m.id}>
+            <div className="feat-card-media">
+              {m.image_url ? <img src={m.image_url} alt="" />
+                : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{m.model_url ? '3D GLB' : 'NO MEDIA'}</span>}
+              <span className="feat-accent-dot" style={{ background: m.color_accent || 'var(--accent)' }} />
+            </div>
+            <div className="feat-card-body">
+              <b>{[m.brand, m.name].filter(Boolean).join(' ')}</b>
+              <span className="feat-meta">{m.model_type || '—'} · {m.model_url ? 'GLB' : 'foto'}</span>
+              <span className={'st ' + (m.is_active ? 'published' : 'draft')} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+                {m.is_active ? 'Aktif' : 'Nonaktif'}</span>
+            </div>
+            <div className="feat-card-actions">
+              <button className="btn btn-accent btn-sm" onClick={() => scheduleMotor(m)}>📅 Jadwalkan</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => editMotor(m)}>Edit</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(m)}>{m.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button>
+              <button className="btn btn-ghost btn-sm a-del-btn" onClick={() => removeMotor(m)}>Hapus</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="feat-h">Jadwal rotasi ({schedule.length})</h3>
+      {schedule.length === 0 ? <div className="empty">Belum ada jadwal. Klik "Jadwalkan" pada motor di atas.</div> : (
+        <div className="feat-sched-list">
+          {schedule.map((s) => {
+            const start = new Date(s.start_date)
+            const isActive = s.id === activeSchedId
+            const upcoming = start.getTime() > now
+            return (
+              <div className={'feat-sched-item' + (isActive ? ' on' : '')} key={s.id}>
+                <div className="feat-sched-main">
+                  <b>{s.featured_motors ? [s.featured_motors.brand, s.featured_motors.name].filter(Boolean).join(' ') : '(motor terhapus)'}</b>
+                  <span className="feat-meta">mulai {start.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                </div>
+                <span className={'st ' + (isActive ? 'published' : upcoming ? 'booked' : 'draft')}>
+                  {isActive ? '🟢 Tayang' : upcoming ? '🟡 Menunggu' : '⚪ Lewat'}</span>
+                <button className="btn btn-ghost btn-sm a-del-btn" onClick={() => removeSchedule(s.id)}>Hapus</button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AdminPanel({ profile, toast, nav }) {
   const [view, setView] = useState('units') // units | staff
   const [rows, setRows] = useState(null)
@@ -3273,7 +3515,7 @@ function AdminPanel({ profile, toast, nav }) {
         <div className="a-head">
           <div>
             <p className="kicker">Panel admin — {profile.full_name}</p>
-            <h1>{view === 'staff' ? 'Kelola staf' : 'Kelola etalase'}</h1>
+            <h1>{view === 'staff' ? 'Kelola staf' : view === 'featured' ? 'Motor unggulan' : 'Kelola etalase'}</h1>
           </div>
           {view === 'units' && (
             <button className="btn btn-accent" onClick={() => setForm({})}>+ Tambah unit</button>)}
@@ -3285,10 +3527,13 @@ function AdminPanel({ profile, toast, nav }) {
             <button type="button" className={view === 'staff' ? 'on' : ''} onClick={() => setView('staff')}>Staf</button>
             <button type="button" className={view === 'titip' ? 'on' : ''} onClick={() => setView('titip')}>Titip Jual</button>
             <button type="button" className={view === 'archive' ? 'on' : ''} onClick={() => setView('archive')}>Arsip{archiveRows.length ? ' (' + archiveRows.length + ')' : ''}</button>
+            <button type="button" className={view === 'featured' ? 'on' : ''} onClick={() => setView('featured')}>Featured</button>
           </div>
         )}
 
         {view === 'staff' && canManageStaff && <StaffPanel profile={profile} toast={toast} />}
+
+        {view === 'featured' && canManageStaff && <FeaturedPanel toast={toast} />}
 
         {view === 'titip' && canManageStaff && <TitipReview profile={profile} toast={toast} nav={nav} />}
 
@@ -4350,7 +4595,7 @@ let heroIntroSeen = false
 
 function HomeView({ listings, nav, query = '', filters = null, searchActive = false,
   loading = false, error = '', panel, setPanel, sort, setSort, resetPanel,
-  recent = [], clearRecent }) {
+  recent = [], clearRecent, featured = null }) {
   // listings berisi status 'published' + 'booked' (unit ter-DP tetap tampil
   // sebagai pemicu urgensi, tapi tidak bisa di-booking — lihat canBook di
   // UnitView). Unit 'sold' tidak pernah sampai ke sini.
@@ -4399,6 +4644,13 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
   // Foto unit terbaik dipakai sebagai cadangan kalau embed Sketchfab gagal muat.
   const introPhoto = introUnit?.photos?.[0] || null
 
+  // Motor unggulan (featured) yang admin jadwalkan → mengendalikan GLB hero,
+  // kicker, subjudul, & aksen warna. Tanpa featured → Harley default (MODEL_SRC).
+  const featName = featured ? [featured.brand, featured.name].filter(Boolean).join(' ') : ''
+  const featModelSrc = featured ? (featured.model_url || null) : MODEL_SRC
+  const featPoster = featured ? (featured.image_url || null) : null
+  const featAccent = featured?.color_accent || null
+
   // Transisi "portal" saat pindah dari hero ke etalase — cincin cahaya
   // membesar & memudar sambil halaman scroll, terinspirasi portal-frame
   // reveal di video referensi desain.
@@ -4430,17 +4682,24 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
         <div className="hero-grid-lines" aria-hidden="true" />
         {/* Model 3D sebagai LATAR ambient di belakang teks (fade-in halus). */}
         <motion.div className="hero-bg" aria-hidden="true" {...heroModelAnim}>
-          <HeroModel fallbackPhoto={introPhoto} startDelay={playIntro ? 500 : 0} />
+          <HeroModel key={featModelSrc || 'poster-' + (featured?.id || 'default')}
+            modelSrc={featModelSrc} poster={featPoster}
+            alt={featName || undefined}
+            fallbackPhoto={introPhoto} startDelay={playIntro ? 500 : 0} />
         </motion.div>
         {/* Selubung putih: menjaga teks tetap terbaca di atas model. */}
         <div className="hero-bg-shade" aria-hidden="true" />
         <div className="container hero-inner">
           <div className="hero-main">
             <div className={'hero-copy' + (playIntro ? ' intro' : '')}>
-              <motion.p className="kicker" {...reveal(0.05)}>Motorell Market — Showroom motor terkurasi</motion.p>
+              <motion.p className="kicker" {...reveal(0.05)}>
+                {featName && <span className="feat-dot" style={featAccent ? { background: featAccent } : undefined} aria-hidden="true" />}
+                {featName ? 'Unggulan minggu ini — ' + featName : 'Motorell Market — Showroom motor terkurasi'}
+              </motion.p>
               <HeroHeading play={playIntro} />
-              <motion.p {...reveal(0.66)}>Setiap motor telah dikurasi dan siap
-                mengukir cerita perjalanan Anda.</motion.p>
+              <motion.p {...reveal(0.66)}>{featured?.description
+                ? featured.description
+                : 'Setiap motor telah dikurasi dan siap mengukir cerita perjalanan Anda.'}</motion.p>
               <motion.div className="hero-cta" {...reveal(0.80)}>
                 <a className="btn btn-dark" href="#etalase" onClick={goEtalase}>Lihat semua unit</a>
                 <a className="btn btn-ghost" href="#kurasi">Standar kurasi</a>
@@ -5885,6 +6144,48 @@ export default function App() {
     return () => { supabase.removeChannel(ch) }
   }, [loadTitipJual])
 
+  // ---------- Motor unggulan (featured) untuk hero ----------
+  // Rotasi berbasis WAKTU (bukan cron): ambil jadwal dengan start_date sudah
+  // lewat & (end_date NULL atau belum lewat), yang start_date-nya TERBARU. Tanpa
+  // jadwal aktif → motor is_active terbaru. Gagal/tabel belum ada (migrasi 0009
+  // belum jalan) → featured=null → hero pakai Harley default (MODEL_SRC).
+  const [featured, setFeatured] = useState(null)
+  const loadFeatured = useCallback(async () => {
+    if (!supabase) return
+    const nowIso = new Date().toISOString()
+    try {
+      const { data: sched } = await supabase
+        .from('featured_motor_schedule')
+        .select('*, featured_motors(*)')
+        .lte('start_date', nowIso)
+        .or('end_date.is.null,end_date.gte.' + nowIso)
+        .order('start_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      let motor = sched?.featured_motors && sched.featured_motors.is_active ? sched.featured_motors : null
+      if (!motor) {
+        const { data: fb } = await supabase.from('featured_motors')
+          .select('*').eq('is_active', true)
+          .order('created_at', { ascending: false }).limit(1).maybeSingle()
+        motor = fb || null
+      }
+      setFeatured(motor)
+    } catch (e) {
+      console.warn('[FEATURED] tidak ada motor unggulan (hero pakai default):', e?.message || e)
+      setFeatured(null)
+    }
+  }, [])
+  useEffect(() => {
+    if (!supabase) return
+    loadFeatured()
+    // Realtime: jadwal/motor berubah dari panel admin → hero segera menyesuaikan.
+    const ch = supabase.channel('public-featured')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'featured_motors' }, loadFeatured)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'featured_motor_schedule' }, loadFeatured)
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [loadFeatured])
+
   // deep link ke unit yang tidak ada di etalase publik (booked/sold/draft)
   useEffect(() => {
     if (route.name !== 'unit' || !supabase) { setDeepUnit(null); return }
@@ -6051,7 +6352,7 @@ export default function App() {
             query={dQuery} filters={filters} searchActive={active}
             loading={listLoading} error={listError}
             panel={panel} setPanel={setPanel} resetPanel={resetPanel}
-            sort={sort} setSort={setSort}
+            sort={sort} setSort={setSort} featured={featured}
             recent={recent} clearRecent={clearRecent} />)}
 
         {route.name === 'etalase' && (
