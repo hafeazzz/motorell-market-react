@@ -1646,6 +1646,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .a-row.is-inactive{opacity:.62}
 .btn.st-deactivate{color:var(--warn)}
 .btn.st-activate{color:var(--ok)}
+/* akun dihapus (soft delete) */
+.a-row.is-deleted{opacity:.55;background:rgba(198,40,40,.05)}
+.btn.st-delete{color:#c62828}
 .a-edit-btn{margin-top:8px;font-family:var(--mono);font-size:10.5px;font-weight:600;
   letter-spacing:.06em;padding:5px 12px;border-radius:999px;border:1px solid var(--line-2);
   background:var(--panel);color:var(--ink);cursor:pointer}
@@ -3059,6 +3062,37 @@ function StaffPanel({ profile, toast }) {
     load()
   }
 
+  // Soft delete: set deleted_at (peran TIDAK diubah supaya info & grup tetap).
+  // loadProfile menutup sesi pengguna ber-deleted_at. RLS 0010: admin hanya bisa
+  // pada baris pengguna; staf hanya owner (di-select() untuk deteksi penolakan).
+  async function softDelete(p) {
+    const who = p.full_name || p.email || 'pengguna ini'
+    if (!window.confirm('Hapus akun ' + who + '?\n\nPengguna tak akan bisa login. Akun MASIH BISA dipulihkan nanti.')) return
+    if (!window.confirm('Konfirmasi sekali lagi: hapus akun ' + who + '?')) return
+    setBusyId(p.id)
+    const { data, error } = await supabase.from('profiles')
+      .update({ deleted_at: new Date().toISOString() }).eq('id', p.id).select()
+    setBusyId(null)
+    if (error) { toast('Gagal menghapus: ' + error.message); return }
+    if (!data || data.length === 0) {
+      toast('Penghapusan DITOLAK (0 baris). Menghapus staf hanya bisa oleh owner; akunmu juga harus ber-role admin/owner di database.')
+      return
+    }
+    toast('Akun ' + (p.full_name || 'pengguna') + ' dihapus — masih bisa dipulihkan')
+    load()
+  }
+
+  async function restore(p) {
+    setBusyId(p.id)
+    const { data, error } = await supabase.from('profiles')
+      .update({ deleted_at: null }).eq('id', p.id).select()
+    setBusyId(null)
+    if (error) { toast('Gagal memulihkan: ' + error.message); return }
+    if (!data || data.length === 0) { toast('Pemulihan DITOLAK (0 baris diubah).'); return }
+    toast('Akun ' + (p.full_name || 'pengguna') + ' dipulihkan')
+    load()
+  }
+
   // Staf = admin/kurator/owner. Pengguna = buyer/null/inactive (termasuk yang
   // dinonaktifkan, agar admin bisa mengaktifkannya lagi dari grup ini).
   const isStaffRow = (p) => p.role === 'admin' || p.role === 'kurator' || p.role === 'owner'
@@ -3116,12 +3150,12 @@ function StaffPanel({ profile, toast }) {
           {filtered.map((p) => {
             const isSelf = p.id === profile.id
             return (
-              <div className={'a-row' + (p.role === 'inactive' ? ' is-inactive' : '')} key={p.id}>
+              <div className={'a-row' + (p.deleted_at ? ' is-deleted' : p.role === 'inactive' ? ' is-inactive' : '')} key={p.id}>
                 <div className="a-info">
                   <b>{p.full_name || 'Tanpa nama'}{isSelf ? ' (kamu)' : ''}</b>
                   {/* Email diisi migrasi 0005 (disalin dari auth.users saat signup).
                       Kalau belum ada (baris lama sebelum migrasi) → tampilkan potongan id. */}
-                  <span className="mono" style={{ fontSize: 11.5 }}>{p.email || String(p.id).slice(0, 8) + '…'} · {ROLE_LABEL[p.role] || p.role}</span>
+                  <span className="mono" style={{ fontSize: 11.5 }}>{p.email || String(p.id).slice(0, 8) + '…'} · {ROLE_LABEL[p.role] || p.role}{p.deleted_at ? ' · 💀 Dihapus' : ''}</span>
                 </div>
                 <div className="a-actions">
                   {isSelf ? (
@@ -3133,6 +3167,14 @@ function StaffPanel({ profile, toast }) {
                     // Admin (non-owner) TIDAK boleh mengubah staf — itu hak owner (RLS
                     // 0010 pun menolaknya). Hanya baris pengguna yang bisa ia kelola.
                     <span className="f-info" style={{ margin: 0 }}>{ROLE_LABEL[p.role] || p.role} — hanya owner yang bisa ubah</span>
+                  ) : p.deleted_at ? (
+                    // Akun terhapus → sembunyikan aksi peran; hanya tawarkan pulihkan.
+                    <>
+                      <span className="f-info" style={{ margin: 0 }}>💀 Akun dihapus</span>
+                      <button type="button" className="btn btn-sm btn-ghost st-activate"
+                        disabled={busyId === p.id} onClick={() => restore(p)}
+                        title="Pulihkan akun — pengguna bisa login lagi">↩️ Pulihkan</button>
+                    </>
                   ) : (
                     <>
                       {/* Owner: atur jenjang peran / turunkan ke pengguna biasa. */}
@@ -3154,6 +3196,11 @@ function StaffPanel({ profile, toast }) {
                           disabled={busyId === p.id} onClick={() => setRole(p, 'inactive')}
                           title="Nonaktifkan — pengguna tidak bisa login">🚫 Nonaktifkan</button>
                       )}
+                      {/* Hapus (soft delete). Owner: siapa pun (kecuali owner). Admin:
+                          hanya baris pengguna — RLS 0010 menolak jika ia coba staf. */}
+                      <button type="button" className="btn btn-sm btn-ghost st-delete"
+                        disabled={busyId === p.id} onClick={() => softDelete(p)}
+                        title="Hapus akun — masih bisa dipulihkan">🗑️ Hapus</button>
                     </>
                   )}
                 </div>
@@ -6046,15 +6093,17 @@ export default function App() {
       console.warn('[PROFILE] Tidak ada baris profiles untuk user', session.user.id,
         '— role tak bisa ditentukan (trigger signup / backfill belum jalan?)')
     }
-    // Peran 'inactive' (Tanpa Akses, migrasi 0010) = akses dicabut. Ini blokir
-    // LUNAK: auth tak tahu soal 'inactive', jadi login tetap lolos — lalu di sini
-    // sesi langsung ditutup. (Blokir keras/ban sejati butuh Edge Function
-    // service_role men-disable auth.users.) Cukup untuk mencegah pemakaian app.
-    if (data && data.role === 'inactive') {
-      console.warn('[PROFILE] Akun dinonaktifkan — keluar paksa.')
+    // Akses dicabut → tutup sesi. Dua jalur: role 'inactive' (Nonaktifkan, 0010)
+    // dan deleted_at != null (Hapus, 0011). Blokir LUNAK: auth tak tahu keduanya,
+    // jadi login tetap lolos — lalu di sini sesi langsung ditutup. (Ban keras
+    // butuh Edge Function service_role men-disable auth.users.) Cukup mencegah
+    // pemakaian app.
+    if (data && (data.deleted_at || data.role === 'inactive')) {
+      const deleted = Boolean(data.deleted_at)
+      console.warn('[PROFILE]', deleted ? 'Akun dihapus' : 'Akun dinonaktifkan', '— keluar paksa.')
       setProfile(null); setProfileErr(''); setProfileReady(true)
       await supabase.auth.signOut()
-      toast('Akun kamu dinonaktifkan admin. Hubungi kami jika ini keliru.')
+      toast((deleted ? 'Akun kamu telah dihapus.' : 'Akun kamu dinonaktifkan admin.') + ' Hubungi kami jika ini keliru.')
       return
     }
     setProfile(data); setProfileErr(''); setProfileReady(true)
