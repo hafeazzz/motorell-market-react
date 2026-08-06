@@ -1642,6 +1642,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* aksen kicker hero saat ada motor unggulan */
 .feat-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;
   vertical-align:middle;background:var(--accent)}
+/* pengguna dinonaktifkan (Tanpa Akses) di panel staf */
+.a-row.is-inactive{opacity:.62}
+.btn.st-deactivate{color:var(--warn)}
+.btn.st-activate{color:var(--ok)}
 .a-edit-btn{margin-top:8px;font-family:var(--mono);font-size:10.5px;font-weight:600;
   letter-spacing:.06em;padding:5px 12px;border-radius:999px;border:1px solid var(--line-2);
   background:var(--panel);color:var(--ink);cursor:pointer}
@@ -3022,14 +3026,14 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
 }
 
 // ---------- Kelola staf (khusus role admin) ----------
-const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', kurator: 'Kurator', null: 'Tanpa akses' }
+const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', kurator: 'Kurator', buyer: 'Pengguna', inactive: 'Tanpa akses', null: 'Pengguna' }
 
 function StaffPanel({ profile, toast }) {
   const [rows, setRows] = useState(null)
   const [err, setErr] = useState('')
   const [busyId, setBusyId] = useState(null)
   const [q, setQ] = useState('')
-  const [roleFilter, setRoleFilter] = useState('all')  // 'all' (semua user) | 'staff' (admin/kurator saja)
+  const [userGroup, setUserGroup] = useState('all')  // 'all' | 'users' (pengguna biasa) | 'staff'
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('profiles')
@@ -3055,10 +3059,13 @@ function StaffPanel({ profile, toast }) {
     load()
   }
 
-  const isStaffRow = (p) => p.role === 'admin' || p.role === 'kurator'
+  // Staf = admin/kurator/owner. Pengguna = buyer/null/inactive (termasuk yang
+  // dinonaktifkan, agar admin bisa mengaktifkannya lagi dari grup ini).
+  const isStaffRow = (p) => p.role === 'admin' || p.role === 'kurator' || p.role === 'owner'
+  const isUserRow = (p) => !isStaffRow(p)
   const term = q.trim().toLowerCase()
   const filtered = (rows || []).filter((p) =>
-    (roleFilter === 'all' || isStaffRow(p)) &&
+    (userGroup === 'all' || (userGroup === 'staff' ? isStaffRow(p) : isUserRow(p))) &&
     (!term || (p.email || '').toLowerCase().includes(term) || (p.full_name || '').toLowerCase().includes(term)))
 
   return (
@@ -3070,11 +3077,14 @@ function StaffPanel({ profile, toast }) {
 
       {rows && rows.length > 0 && (
         <div className="switcher staff-filter">
-          <button type="button" className={roleFilter === 'all' ? 'on' : ''} onClick={() => setRoleFilter('all')}>
-            Semua pengguna ({rows.length})
+          <button type="button" className={userGroup === 'all' ? 'on' : ''} onClick={() => setUserGroup('all')}>
+            Semua ({rows.length})
           </button>
-          <button type="button" className={roleFilter === 'staff' ? 'on' : ''} onClick={() => setRoleFilter('staff')}>
-            Staf saja ({rows.filter(isStaffRow).length})
+          <button type="button" className={userGroup === 'users' ? 'on' : ''} onClick={() => setUserGroup('users')}>
+            Pengguna ({rows.filter(isUserRow).length})
+          </button>
+          <button type="button" className={userGroup === 'staff' ? 'on' : ''} onClick={() => setUserGroup('staff')}>
+            Staf ({rows.filter(isStaffRow).length})
           </button>
         </div>
       )}
@@ -3106,7 +3116,7 @@ function StaffPanel({ profile, toast }) {
           {filtered.map((p) => {
             const isSelf = p.id === profile.id
             return (
-              <div className="a-row" key={p.id}>
+              <div className={'a-row' + (p.role === 'inactive' ? ' is-inactive' : '')} key={p.id}>
                 <div className="a-info">
                   <b>{p.full_name || 'Tanpa nama'}{isSelf ? ' (kamu)' : ''}</b>
                   {/* Email diisi migrasi 0005 (disalin dari auth.users saat signup).
@@ -3117,20 +3127,34 @@ function StaffPanel({ profile, toast }) {
                   {isSelf ? (
                     <span className="f-info" style={{ margin: 0 }}>
                       {ROLE_LABEL[p.role] || p.role} — minta owner untuk mengubah aksesmu sendiri</span>
-                  ) : profile.role !== 'owner' ? (
-                    // Hierarki: HANYA owner yang boleh mengubah peran. Admin lihat read-only.
-                    <span className="f-info" style={{ margin: 0 }}>{ROLE_LABEL[p.role] || p.role}</span>
                   ) : p.role === 'owner' ? (
                     <span className="f-info" style={{ margin: 0 }}>🔒 Owner — tak bisa diubah</span>
+                  ) : (profile.role !== 'owner' && isStaffRow(p)) ? (
+                    // Admin (non-owner) TIDAK boleh mengubah staf — itu hak owner (RLS
+                    // 0010 pun menolaknya). Hanya baris pengguna yang bisa ia kelola.
+                    <span className="f-info" style={{ margin: 0 }}>{ROLE_LABEL[p.role] || p.role} — hanya owner yang bisa ubah</span>
                   ) : (
-                    ['admin', 'kurator', null].map((r) => (
-                      <button key={String(r)} type="button"
-                        className={'btn btn-sm ' + (p.role === r ? 'btn-dark' : 'btn-ghost')}
-                        disabled={busyId === p.id}
-                        onClick={() => setRole(p, r)}>
-                        {ROLE_LABEL[r]}
-                      </button>
-                    ))
+                    <>
+                      {/* Owner: atur jenjang peran / turunkan ke pengguna biasa. */}
+                      {profile.role === 'owner' && ['admin', 'kurator', 'buyer'].map((r) => (
+                        <button key={r} type="button"
+                          className={'btn btn-sm ' + ((p.role === r || (r === 'buyer' && p.role == null)) ? 'btn-dark' : 'btn-ghost')}
+                          disabled={busyId === p.id}
+                          onClick={() => setRole(p, r)}>
+                          {ROLE_LABEL[r]}
+                        </button>
+                      ))}
+                      {/* Aktif/nonaktif — untuk admin & owner pada baris pengguna. */}
+                      {p.role === 'inactive' ? (
+                        <button type="button" className="btn btn-sm btn-ghost st-activate"
+                          disabled={busyId === p.id} onClick={() => setRole(p, 'buyer')}
+                          title="Aktifkan kembali — pengguna bisa login lagi">✅ Aktifkan</button>
+                      ) : (
+                        <button type="button" className="btn btn-sm btn-ghost st-deactivate"
+                          disabled={busyId === p.id} onClick={() => setRole(p, 'inactive')}
+                          title="Nonaktifkan — pengguna tidak bisa login">🚫 Nonaktifkan</button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -6022,8 +6046,19 @@ export default function App() {
       console.warn('[PROFILE] Tidak ada baris profiles untuk user', session.user.id,
         '— role tak bisa ditentukan (trigger signup / backfill belum jalan?)')
     }
+    // Peran 'inactive' (Tanpa Akses, migrasi 0010) = akses dicabut. Ini blokir
+    // LUNAK: auth tak tahu soal 'inactive', jadi login tetap lolos — lalu di sini
+    // sesi langsung ditutup. (Blokir keras/ban sejati butuh Edge Function
+    // service_role men-disable auth.users.) Cukup untuk mencegah pemakaian app.
+    if (data && data.role === 'inactive') {
+      console.warn('[PROFILE] Akun dinonaktifkan — keluar paksa.')
+      setProfile(null); setProfileErr(''); setProfileReady(true)
+      await supabase.auth.signOut()
+      toast('Akun kamu dinonaktifkan admin. Hubungi kami jika ini keliru.')
+      return
+    }
     setProfile(data); setProfileErr(''); setProfileReady(true)
-  }, [session])
+  }, [session, toast])
 
   useEffect(() => { loadProfile() }, [loadProfile])
 
