@@ -1112,6 +1112,13 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .card-wa:hover{transform:scale(1.08);box-shadow:0 5px 18px rgba(37,211,102,.55)}
 .card-wa:active{transform:scale(.97)}
 .card-wa svg{width:15px;height:15px;fill:currentColor;flex:none}
+/* Tombol "Bayar DP" di kartu (mode Doku). Di atas .card-hit (z-index 3) supaya
+   klik-nya tak ditelan lapisan navigasi kartu. */
+.card-dp{position:relative;z-index:5;width:100%;margin-top:11px;padding:10px 12px;border-radius:9px;
+  background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;letter-spacing:.01em;
+  border:none;cursor:pointer;transition:filter .15s ease,transform .12s ease}
+.card-dp:hover{filter:brightness(1.09)}
+.card-dp:active{transform:scale(.98)}
 
 /* ---------- kepala etalase: hitungan + urutan + tombol filter ---------- */
 .et-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;
@@ -4414,6 +4421,11 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
   const wrapRef = useRef(null)
   const cardRef = useRef(null)
   const [shown, setShown] = useState(false)
+  const [payOpen, setPayOpen] = useState(false)
+  // Tombol "Bayar DP" hanya untuk unit RESMI yang masih bisa di-booking, saat
+  // gateway Doku aktif. Unit titip (harga penjual, DP-nya beda) & unit non-tayang
+  // tidak menampilkannya.
+  const canPayDp = PAYMENT_MODE === 'doku' && !isTitip(l) && l.status === 'published'
   const reduced = useRef(false)
 
   // Muncul SEKALI saat kartu pertama masuk layar, lalu TETAP tampil (Tugas 2).
@@ -4480,9 +4492,17 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
           <h3>{l.title}</h3>
           <span className="card-meta">{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' KM' : 'KM —'}{l.color ? ' · ' + l.color.toUpperCase() : ''}{l.kota ? ' · 📍 ' + l.kota.toUpperCase() : ''}</span>
           <span className="card-price">{rupiah(l.price)}</span>
+          {canPayDp && (
+            <button type="button" className="card-dp"
+              onClick={(e) => { e.stopPropagation(); bumpStat(l, 'click'); setPayOpen(true) }}
+              title="Bayar DP untuk mengamankan unit ini">
+              💳 Bayar DP {rupiah(PAYMENT_AMOUNTS.etalase)}
+            </button>
+          )}
         </div>
         <span className="card-go"><span>Lihat detail</span><span className="aro">→</span></span>
       </div>
+      {payOpen && <DokuCheckout type="etalase" listing={l} onClose={() => setPayOpen(false)} />}
     </div>
   )
 }
