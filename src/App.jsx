@@ -60,10 +60,16 @@ const WARRANTIES = [
 const warrantiesForGrade = (grade) =>
   grade === 'B' ? WARRANTIES.filter((w) => w.code === 'standard') : WARRANTIES
 
-// Payment gateway QRIS belum siap produksi — untuk sementara tombol booking
-// mengarahkan ke WhatsApp CS. Ganti balik ke 'qris' saat gateway sudah siap;
-// BookingModal & invokeCreatePayment tetap utuh, tidak dihapus.
-const PAYMENT_MODE = 'whatsapp' // 'whatsapp' | 'qris'
+// Payment gateway. Default 'whatsapp' (aman); 'doku' mengaktifkan checkout Doku
+// (Edge Function create-doku-payment + tabel payments + webhook). Bisa di-override
+// per-browser via localStorage 'mm-pay-mode' → rollout bertahap TANPA redeploy
+// (mis. set 'doku' hanya di perangkat internal untuk uji live sebelum go-public).
+// Aktifkan 'doku' HANYA setelah: migrasi 0013 dijalankan, secret Doku di-set di
+// Supabase, kedua Edge Function di-deploy, & Notification URL didaftarkan di Doku.
+const PAYMENT_MODE = (typeof localStorage !== 'undefined' && localStorage.getItem('mm-pay-mode')) || 'whatsapp' // 'whatsapp' | 'qris' | 'doku'
+// DP yang ditampilkan di UI. Server (create-doku-payment PRICES) tetap SUMBER
+// KEBENARAN & memvalidasi ulang — nilai di sini hanya untuk tampilan.
+const PAYMENT_AMOUNTS = { etalase: 505000, titip: 18000 }
 const CS_WHATSAPP_NUMBER = '6285180643531'
 
 // ---------- Lokasi showroom ----------
@@ -273,6 +279,103 @@ async function invokeCreatePayment(listing_id, warranty_code) {
     throw new Error(msg)
   }
   return data
+}
+
+// Mulai pembayaran Doku via Edge Function (secret & validasi amount di server).
+// Mengembalikan { checkout_url, invoice_number } untuk redirect.
+async function startDokuPayment({ type, listing_id, full_name, email, phone }) {
+  const { data, error } = await supabase.functions.invoke('create-doku-payment', {
+    body: { type, listing_id, full_name, email, phone, origin: window.location.origin },
+  })
+  if (error) {
+    let msg = 'Gagal memulai pembayaran.'
+    try { const b = await error.context.json(); if (b && b.error) msg = b.error } catch { /* pakai default */ }
+    throw new Error(msg)
+  }
+  if (!data || !data.checkout_url) throw new Error('Gateway tidak mengembalikan URL pembayaran.')
+  return data
+}
+
+// Modal checkout Doku (etalase DP / titip DP). Amount ditampilkan untuk info;
+// server yang menetapkannya. Submit → redirect ke halaman bayar Doku.
+function DokuCheckout({ type, listing, profile, onClose }) {
+  const [f, setF] = useState({ full_name: profile?.full_name || '', email: profile?.email || '', phone: '' })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const amount = PAYMENT_AMOUNTS[type] || 0
+  const label = type === 'etalase' ? 'DP Pembelian Motor' : 'DP Titip Jual'
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+  async function submit(e) {
+    e.preventDefault()
+    if (!f.full_name.trim() || !f.email.trim() || !f.phone.trim()) { setErr('Nama, email, dan nomor WhatsApp wajib diisi.'); return }
+    setBusy(true); setErr('')
+    try {
+      const res = await startDokuPayment({ type, listing_id: listing?.id || null, full_name: f.full_name.trim(), email: f.email.trim(), phone: f.phone.trim() })
+      try { localStorage.setItem('mm-last-invoice', res.invoice_number) } catch { /* ok */ }
+      window.location.href = res.checkout_url
+    } catch (ex) { setErr(ex.message); setBusy(false) }
+  }
+  return (
+    <div className="overlay" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal">
+        <div className="m-head">
+          <div><h3>{label}</h3><span className="sub">{listing?.title || 'Motorell Market'}</span></div>
+          <button className="m-close" onClick={onClose} aria-label="Tutup">✕</button>
+        </div>
+        <div className="m-body">
+          <div className="rows"><div className="row hl"><span>Total DP</span><b>{rupiah(amount)}</b></div></div>
+          <form onSubmit={submit} className="f-grid" style={{ marginTop: 14 }}>
+            <div className="field full"><label htmlFor="dk-name">Nama lengkap</label>
+              <input id="dk-name" value={f.full_name} onChange={set('full_name')} placeholder="Nama Anda" required /></div>
+            <div className="field full"><label htmlFor="dk-email">Email</label>
+              <input id="dk-email" type="email" value={f.email} onChange={set('email')} placeholder="email@contoh.com" required /></div>
+            <div className="field full"><label htmlFor="dk-phone">Nomor WhatsApp</label>
+              <input id="dk-phone" type="tel" value={f.phone} onChange={set('phone')} placeholder="62812xxxxxxx" required /></div>
+            {err && <div className="f-err">{err}</div>}
+            <button className="btn btn-accent btn-full" type="submit" disabled={busy}>
+              {busy ? 'Memproses…' : 'Bayar ' + rupiah(amount) + ' via Doku'}</button>
+            <p className="fine" style={{ marginTop: 4 }}>Kamu akan diarahkan ke halaman pembayaran aman Doku (QRIS / Virtual Account).</p>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Halaman kembali dari Doku (#/payment-success). Membaca invoice terakhir dari
+// localStorage lalu menampilkan status dari tabel payments (butuh login/RLS;
+// guest melihat konfirmasi umum).
+function PaymentSuccessView({ nav }) {
+  const [pay, setPay] = useState(undefined) // undefined=loading, null=tak ketemu
+  useEffect(() => {
+    const inv = (() => { try { return localStorage.getItem('mm-last-invoice') } catch { return null } })()
+    if (!inv) { setPay(null); return }
+    supabase.from('payments').select('*').eq('invoice_number', inv).maybeSingle()
+      .then(({ data }) => setPay(data || null))
+  }, [])
+  const done = pay && pay.status === 'success'
+  return (
+    <section className="section">
+      <div className="container" style={{ maxWidth: 560 }}>
+        <div className="pay-done">
+          <div className="pay-done-ic">{done ? '✅' : '⏳'}</div>
+          <h1>{done ? 'Pembayaran berhasil' : 'Pembayaran diproses'}</h1>
+          <p className="muted">{done
+            ? 'Terima kasih. Pembayaranmu sudah kami terima.'
+            : 'Kalau kamu baru menyelesaikan pembayaran, statusnya menyusul beberapa saat lagi (konfirmasi dari gateway).'}</p>
+          {pay && (
+            <div className="rows" style={{ marginTop: 16, textAlign: 'left' }}>
+              <div className="row"><span>Tipe</span><b>{pay.type === 'etalase' ? 'DP Pembelian Motor' : 'DP Titip Jual'}</b></div>
+              <div className="row"><span>Jumlah</span><b>{rupiah(pay.amount)}</b></div>
+              <div className="row"><span>Referensi</span><b className="mono" style={{ fontSize: 12 }}>{pay.invoice_number}</b></div>
+              <div className="row"><span>Status</span><b>{pay.status === 'success' ? 'Sukses' : pay.status === 'failed' ? 'Gagal' : 'Menunggu konfirmasi'}</b></div>
+            </div>
+          )}
+          <button className="btn btn-dark btn-full" style={{ marginTop: 20 }} onClick={() => nav('#/')}>Kembali ke beranda</button>
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function useCountdown(expiresAt) {
@@ -1649,6 +1752,16 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* akun dihapus (soft delete) */
 .a-row.is-deleted{opacity:.55;background:rgba(198,40,40,.05)}
 .btn.st-delete{color:#c62828}
+/* panel pembayaran (Doku) */
+.pay-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px}
+.pay-stat{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel-2)}
+.pay-stat span{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.pay-stat b{font-size:22px;font-weight:750;color:var(--ink)}
+.pay-done{border:1px solid var(--line);border-radius:16px;padding:34px 30px;text-align:center;
+  background:var(--panel)}
+.pay-done-ic{font-size:52px;line-height:1;margin-bottom:14px}
+.pay-done h1{font-size:26px;font-weight:760;letter-spacing:-.02em;margin-bottom:8px}
 .a-edit-btn{margin-top:8px;font-family:var(--mono);font-size:10.5px;font-weight:600;
   letter-spacing:.06em;padding:5px 12px;border-radius:999px;border:1px solid var(--line-2);
   background:var(--panel);color:var(--ink);cursor:pointer}
@@ -3611,6 +3724,49 @@ function FeaturedPanel({ toast }) {
   )
 }
 
+// ---------- Pembayaran (Doku) — hanya baca; server yang menulis ----------
+function PaymentsPanel() {
+  const [rows, setRows] = useState(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    supabase.from('payments').select('*').order('created_at', { ascending: false }).limit(300)
+      .then(({ data, error }) => { if (error) { setErr(error.message); setRows([]) } else { setErr(''); setRows(data || []) } })
+  }, [])
+  const succ = (rows || []).filter((p) => p.status === 'success')
+  const sum = (arr) => arr.reduce((s, p) => s + (p.amount || 0), 0)
+  return (
+    <div>
+      <p className="f-info" style={{ marginBottom: 18 }}>
+        Pembayaran DP via Doku. Baris dibuat &amp; diperbarui server (Edge Function + webhook) —
+        panel ini hanya membaca. Total menghitung DP berstatus <b>sukses</b>.
+      </p>
+      <div className="pay-stats">
+        <div className="pay-stat"><span>DP sukses (total)</span><b>{rupiah(sum(succ))}</b></div>
+        <div className="pay-stat"><span>DP Etalase</span><b>{rupiah(sum(succ.filter((p) => p.type === 'etalase')))}</b></div>
+        <div className="pay-stat"><span>DP Titip Jual</span><b>{rupiah(sum(succ.filter((p) => p.type === 'titip')))}</b></div>
+      </div>
+      {rows === null && !err && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
+      {err && <div className="empty" style={{ textAlign: 'left' }}>Tidak bisa memuat pembayaran: <span className="mono">{err}</span></div>}
+      {rows && rows.length === 0 && !err && <div className="empty">Belum ada pembayaran.</div>}
+      {rows && rows.length > 0 && (
+        <div className="a-list">
+          {rows.map((p) => (
+            <div className="a-row" key={p.id}>
+              <div className="a-info">
+                <b>{p.type === 'etalase' ? '🏪 DP Etalase' : '📦 DP Titip'} · {rupiah(p.amount)}</b>
+                <span className="mono" style={{ fontSize: 11.5 }}>{new Date(p.created_at).toLocaleString('id-ID')} · {p.email || '—'} · {p.invoice_number}</span>
+              </div>
+              <span className={'st ' + (p.status === 'success' ? 'published' : p.status === 'pending' ? 'booked' : 'rejected')}>
+                {p.status === 'success' ? 'Sukses' : p.status === 'pending' ? 'Menunggu' : p.status === 'failed' ? 'Gagal' : p.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---------- Audit log (riwayat hapus/pulihkan akun) ----------
 function AuditLog() {
   const [rows, setRows] = useState(null)
@@ -3697,7 +3853,7 @@ function AdminPanel({ profile, toast, nav }) {
         <div className="a-head">
           <div>
             <p className="kicker">Panel admin — {profile.full_name}</p>
-            <h1>{view === 'staff' ? 'Kelola staf' : view === 'featured' ? 'Motor unggulan' : view === 'audit' ? 'Audit log' : 'Kelola etalase'}</h1>
+            <h1>{view === 'staff' ? 'Kelola staf' : view === 'featured' ? 'Motor unggulan' : view === 'audit' ? 'Audit log' : view === 'payments' ? 'Pembayaran' : 'Kelola etalase'}</h1>
           </div>
           {view === 'units' && (
             <button className="btn btn-accent" onClick={() => setForm({})}>+ Tambah unit</button>)}
@@ -3711,6 +3867,7 @@ function AdminPanel({ profile, toast, nav }) {
             <button type="button" className={view === 'archive' ? 'on' : ''} onClick={() => setView('archive')}>Arsip{archiveRows.length ? ' (' + archiveRows.length + ')' : ''}</button>
             <button type="button" className={view === 'featured' ? 'on' : ''} onClick={() => setView('featured')}>Featured</button>
             <button type="button" className={view === 'audit' ? 'on' : ''} onClick={() => setView('audit')}>Audit</button>
+            <button type="button" className={view === 'payments' ? 'on' : ''} onClick={() => setView('payments')}>Pembayaran</button>
           </div>
         )}
 
@@ -3719,6 +3876,8 @@ function AdminPanel({ profile, toast, nav }) {
         {view === 'featured' && canManageStaff && <FeaturedPanel toast={toast} />}
 
         {view === 'audit' && canManageStaff && <AuditLog />}
+
+        {view === 'payments' && canManageStaff && <PaymentsPanel />}
 
         {view === 'titip' && canManageStaff && <TitipReview profile={profile} toast={toast} nav={nav} />}
 
@@ -5286,6 +5445,7 @@ function parseHash() {
   if (path === '#/kebijakan') return { name: 'kebijakan', q, panel, sort }
   if (path === '#/titip-jual') return { name: 'titip', q, panel, sort }
   if (path === '#/birojasa') return { name: 'birojasa', q, panel, sort }
+  if (path === '#/payment-success') return { name: 'payment-success', q, panel, sort }
   return { name: 'home', q, panel, sort }
 }
 
@@ -5503,7 +5663,7 @@ const PHOTO_GUIDE_EXAMPLES = [
   '/reference-photos/mesin.jpg',
 ]
 
-function TitipJualView({ session, nav, toast, onLoginClick }) {
+function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
   const empty = {
     seller_name: '', seller_phone: '', seller_email: '',
     merek: '', model: '', tahun: new Date().getFullYear(), odometer: '',
@@ -5680,6 +5840,12 @@ function TitipJualView({ session, nav, toast, onLoginClick }) {
         <p className="titip-lead">Punya motor yang ingin dijual? Titipkan ke Motorell Market.
           Tim kami review dulu (1–2 hari kerja) sebelum unitmu tayang di etalase. Setelah tayang,
           calon pembeli menghubungimu langsung lewat WhatsApp.</p>
+
+        {onPayDp && (
+          <button className="btn btn-accent" style={{ marginBottom: 20 }} onClick={onPayDp}>
+            💳 Bayar DP Titip Jual {rupiah(PAYMENT_AMOUNTS.titip)}
+          </button>
+        )}
 
         {done && (
           <div className="titip-ok">
@@ -6405,7 +6571,15 @@ export default function App() {
     setPending(null)
   }, [session, pending, listings])
 
+  // Checkout Doku (etalase DP / titip DP). null | { type, listing }.
+  const [dokuCheckout, setDokuCheckout] = useState(null)
+
   const requestBooking = useCallback((listing, warranty) => {
+    if (PAYMENT_MODE === 'doku') {
+      // Gateway aktif: buka modal checkout Doku (bukan WA, bukan Midtrans lama).
+      setDokuCheckout({ type: 'etalase', listing })
+      return
+    }
     if (PAYMENT_MODE === 'whatsapp') {
       // window.open harus tetap sinkron di dalam gesture klik (supaya tidak
       // diblokir popup blocker) — overlay handoff cuma lapisan visual di
@@ -6560,9 +6734,12 @@ export default function App() {
 
         {route.name === 'titip' && (
           <TitipJualView session={session} nav={nav} toast={toast}
-            onLoginClick={() => setAuthOpen(true)} />)}
+            onLoginClick={() => setAuthOpen(true)}
+            onPayDp={PAYMENT_MODE === 'doku' ? (() => setDokuCheckout({ type: 'titip', listing: null })) : null} />)}
 
         {route.name === 'birojasa' && <BirojasaView nav={nav} />}
+
+        {route.name === 'payment-success' && <PaymentSuccessView nav={nav} />}
 
         {route.name === 'unit' && (current
           ? <DetailView listing={current} nav={nav} onBook={requestBooking} />
@@ -6684,6 +6861,9 @@ export default function App() {
       {authOpen && <AuthModal toast={toast} onClose={() => setAuthOpen(false)} onDone={() => setAuthOpen(false)} />}
       {booking && <BookingModal listing={booking.listing} warranty={booking.warranty}
         toast={toast} onClose={() => setBooking(null)} />}
+
+      {dokuCheckout && <DokuCheckout type={dokuCheckout.type} listing={dokuCheckout.listing}
+        profile={profile} onClose={() => setDokuCheckout(null)} />}
       <WaHandoff show={waHandoff} />
 
       <div className={'toast' + (toastMsg ? ' show' : '')} role="status">{toastMsg}</div>
