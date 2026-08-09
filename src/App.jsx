@@ -3030,6 +3030,20 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
 
 // ---------- Kelola staf (khusus role admin) ----------
 const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', kurator: 'Kurator', buyer: 'Pengguna', inactive: 'Tanpa akses', null: 'Pengguna' }
+const AUDIT_LABEL = { soft_delete: '🗑️ Hapus (soft)', hard_delete: '💀 Hapus permanen', restore: '↩️ Pulihkan' }
+const HARD_DELETE_GRACE_DAYS = 30
+
+// Waktu relatif ringkas dalam bahasa Indonesia (ganti date-fns — hindari
+// dependensi baru hanya untuk "x hari lalu").
+function sejakLalu(iso) {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  if (s < 60) return 'baru saja'
+  const m = Math.floor(s / 60); if (m < 60) return m + ' menit lalu'
+  const h = Math.floor(m / 60); if (h < 24) return h + ' jam lalu'
+  const d = Math.floor(h / 24); if (d < 30) return d + ' hari lalu'
+  const mo = Math.floor(d / 30); if (mo < 12) return mo + ' bulan lalu'
+  return Math.floor(mo / 12) + ' tahun lalu'
+}
 
 function StaffPanel({ profile, toast }) {
   const [rows, setRows] = useState(null)
@@ -3062,6 +3076,18 @@ function StaffPanel({ profile, toast }) {
     load()
   }
 
+  // Catat ke audit_log (best-effort — jangan blok aksi utama bila RLS/tabel
+  // belum siap). Hard delete TIDAK dicatat di sini: Edge Function yang menulis
+  // entri hard_delete secara otoritatif (service_role).
+  async function logAudit(action, p, reason) {
+    try {
+      await supabase.from('audit_log').insert({
+        admin_id: profile.id, admin_email: profile.email || null,
+        action, target_user_id: p.id, target_email: p.email || null, reason: reason || null,
+      })
+    } catch { /* abaikan */ }
+  }
+
   // Soft delete: set deleted_at (peran TIDAK diubah supaya info & grup tetap).
   // loadProfile menutup sesi pengguna ber-deleted_at. RLS 0010: admin hanya bisa
   // pada baris pengguna; staf hanya owner (di-select() untuk deteksi penolakan).
@@ -3078,18 +3104,47 @@ function StaffPanel({ profile, toast }) {
       toast('Penghapusan DITOLAK (0 baris). Menghapus staf hanya bisa oleh owner; akunmu juga harus ber-role admin/owner di database.')
       return
     }
+    logAudit('soft_delete', p, null)
     toast('Akun ' + (p.full_name || 'pengguna') + ' dihapus — masih bisa dipulihkan')
     load()
   }
 
   async function restore(p) {
     setBusyId(p.id)
+    // Hanya deleted_at yang dibersihkan — peran DIPERTAHANKAN (snippet men-set
+    // role:'buyer' → itu diam-diam men-demote admin yang dipulihkan; salah).
     const { data, error } = await supabase.from('profiles')
       .update({ deleted_at: null }).eq('id', p.id).select()
     setBusyId(null)
     if (error) { toast('Gagal memulihkan: ' + error.message); return }
     if (!data || data.length === 0) { toast('Pemulihan DITOLAK (0 baris diubah).'); return }
+    logAudit('restore', p, null)
     toast('Akun ' + (p.full_name || 'pengguna') + ' dipulihkan')
+    load()
+  }
+
+  // Hard delete: hapus PERMANEN dari auth.users lewat Edge Function auth-delete-user
+  // (service_role). Semua penjaga (owner/self/tenggang/soft-dulu) ditegakkan ULANG
+  // di server; UI ini hanya lapisan pertama. Cascade menghapus baris profiles;
+  // catatan tetap ada di audit_log.
+  async function hardDelete(p) {
+    if (p.id === profile.id) { toast('Tidak bisa menghapus akun sendiri.'); return }
+    if (p.role === 'owner') { toast('Owner tidak bisa dihapus.'); return }
+    const reason = window.prompt('Alasan HAPUS PERMANEN ' + (p.email || p.full_name || 'akun ini') + '?\n(wajib — tersimpan di audit log)')
+    if (!reason || !reason.trim()) { toast('Dibatalkan — alasan wajib diisi.'); return }
+    if (!window.confirm('HAPUS PERMANEN ' + (p.email || p.full_name || 'akun ini') + '?\n\n• Dihapus dari auth.users — email bebas dipakai daftar lagi\n• TIDAK bisa dipulihkan\n\nAlasan: ' + reason.trim())) return
+    if (!window.confirm('FINAL: benar-benar hapus permanen? Tindakan ini tidak bisa dibatalkan.')) return
+    setBusyId(p.id)
+    const { error } = await supabase.functions.invoke('auth-delete-user', {
+      body: { user_id: p.id, reason: reason.trim() },
+    })
+    setBusyId(null)
+    if (error) {
+      let msg = 'Gagal menghapus permanen.'
+      try { const b = await error.context.json(); if (b && b.error) msg = b.error } catch { /* default */ }
+      toast(msg); return
+    }
+    toast('Akun ' + (p.email || 'pengguna') + ' dihapus permanen. Email dibebaskan.')
     load()
   }
 
@@ -3168,13 +3223,30 @@ function StaffPanel({ profile, toast }) {
                     // 0010 pun menolaknya). Hanya baris pengguna yang bisa ia kelola.
                     <span className="f-info" style={{ margin: 0 }}>{ROLE_LABEL[p.role] || p.role} — hanya owner yang bisa ubah</span>
                   ) : p.deleted_at ? (
-                    // Akun terhapus → sembunyikan aksi peran; hanya tawarkan pulihkan.
-                    <>
-                      <span className="f-info" style={{ margin: 0 }}>💀 Akun dihapus</span>
-                      <button type="button" className="btn btn-sm btn-ghost st-activate"
-                        disabled={busyId === p.id} onClick={() => restore(p)}
-                        title="Pulihkan akun — pengguna bisa login lagi">↩️ Pulihkan</button>
-                    </>
+                    // Akun terhapus (soft) → pulihkan ATAU hapus permanen. Hapus
+                    // permanen terkunci sampai masa tenggang 30 hari lewat; owner
+                    // bisa memaksa kapan saja. Penjaga penuh ditegakkan ulang di
+                    // Edge Function auth-delete-user.
+                    (() => {
+                      const days = Math.floor((Date.now() - new Date(p.deleted_at).getTime()) / 86400000)
+                      const remaining = Math.max(0, HARD_DELETE_GRACE_DAYS - days)
+                      const canHard = profile.role === 'owner' || remaining === 0
+                      return (
+                        <>
+                          <span className="f-info" style={{ margin: 0 }}>💀 Dihapus {sejakLalu(p.deleted_at)}</span>
+                          <button type="button" className="btn btn-sm btn-ghost st-activate"
+                            disabled={busyId === p.id} onClick={() => restore(p)}
+                            title="Pulihkan akun — pengguna bisa login lagi">↩️ Pulihkan</button>
+                          <button type="button" className="btn btn-sm btn-ghost st-delete"
+                            disabled={busyId === p.id || !canHard} onClick={() => hardDelete(p)}
+                            title={canHard
+                              ? 'Hapus PERMANEN dari auth.users — email dibebaskan, tak bisa dipulihkan'
+                              : 'Masa tenggang ' + HARD_DELETE_GRACE_DAYS + ' hari belum lewat — tunggu ' + remaining + ' hari lagi (owner bisa memaksa)'}>
+                            💀 {canHard ? 'Hapus permanen' : remaining + ' hari'}
+                          </button>
+                        </>
+                      )
+                    })()
                   ) : (
                     <>
                       {/* Owner: atur jenjang peran / turunkan ke pengguna biasa. */}
@@ -3539,6 +3611,45 @@ function FeaturedPanel({ toast }) {
   )
 }
 
+// ---------- Audit log (riwayat hapus/pulihkan akun) ----------
+function AuditLog() {
+  const [rows, setRows] = useState(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(200)
+      .then(({ data, error }) => { if (error) { setErr(error.message); setRows([]) } else { setErr(''); setRows(data || []) } })
+  }, [])
+  return (
+    <div className="audit-panel">
+      <p className="f-info" style={{ marginBottom: 18 }}>
+        Riwayat penghapusan &amp; pemulihan akun — siapa, apa, kapan, dan alasannya.
+        Hanya-baca (tak bisa diubah/dihapus dari sini).
+      </p>
+      {rows === null && !err && <p style={{ color: 'var(--muted)' }}>Memuat…</p>}
+      {err && <div className="empty" style={{ textAlign: 'left' }}>Tidak bisa memuat audit log: <span className="mono">{err}</span></div>}
+      {rows && rows.length === 0 && !err && <div className="empty">Belum ada riwayat.</div>}
+      {rows && rows.length > 0 && (
+        <div className="a-list">
+          {rows.map((l) => (
+            <div className="a-row" key={l.id}>
+              <div className="a-info">
+                <b>{l.target_email || String(l.target_user_id || '').slice(0, 8) + '…'}</b>
+                <span className="mono" style={{ fontSize: 11.5 }}>
+                  {new Date(l.created_at).toLocaleString('id-ID')} · oleh {l.admin_email || 'sistem'}
+                  {l.reason ? ' · “' + l.reason + '”' : ''}
+                </span>
+              </div>
+              <span className={'st ' + (l.action === 'hard_delete' ? 'rejected' : l.action === 'restore' ? 'published' : 'booked')}>
+                {AUDIT_LABEL[l.action] || l.action}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AdminPanel({ profile, toast, nav }) {
   const [view, setView] = useState('units') // units | staff
   const [rows, setRows] = useState(null)
@@ -3586,7 +3697,7 @@ function AdminPanel({ profile, toast, nav }) {
         <div className="a-head">
           <div>
             <p className="kicker">Panel admin — {profile.full_name}</p>
-            <h1>{view === 'staff' ? 'Kelola staf' : view === 'featured' ? 'Motor unggulan' : 'Kelola etalase'}</h1>
+            <h1>{view === 'staff' ? 'Kelola staf' : view === 'featured' ? 'Motor unggulan' : view === 'audit' ? 'Audit log' : 'Kelola etalase'}</h1>
           </div>
           {view === 'units' && (
             <button className="btn btn-accent" onClick={() => setForm({})}>+ Tambah unit</button>)}
@@ -3599,12 +3710,15 @@ function AdminPanel({ profile, toast, nav }) {
             <button type="button" className={view === 'titip' ? 'on' : ''} onClick={() => setView('titip')}>Titip Jual</button>
             <button type="button" className={view === 'archive' ? 'on' : ''} onClick={() => setView('archive')}>Arsip{archiveRows.length ? ' (' + archiveRows.length + ')' : ''}</button>
             <button type="button" className={view === 'featured' ? 'on' : ''} onClick={() => setView('featured')}>Featured</button>
+            <button type="button" className={view === 'audit' ? 'on' : ''} onClick={() => setView('audit')}>Audit</button>
           </div>
         )}
 
         {view === 'staff' && canManageStaff && <StaffPanel profile={profile} toast={toast} />}
 
         {view === 'featured' && canManageStaff && <FeaturedPanel toast={toast} />}
+
+        {view === 'audit' && canManageStaff && <AuditLog />}
 
         {view === 'titip' && canManageStaff && <TitipReview profile={profile} toast={toast} nav={nav} />}
 
