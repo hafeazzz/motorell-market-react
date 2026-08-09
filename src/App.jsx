@@ -300,8 +300,43 @@ async function startDokuPayment({ type, listing_id, full_name, email, phone }) {
 // server yang menetapkannya. Submit → redirect ke halaman bayar Doku.
 function DokuCheckout({ type, listing, profile, onClose }) {
   const [f, setF] = useState({ full_name: profile?.full_name || '', email: profile?.email || '', phone: '' })
+  const [prefilled, setPrefilled] = useState({ name: Boolean(profile?.full_name), email: Boolean(profile?.email), phone: false })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+
+  // Prefill data pembeli yang login. `profile` prop dipakai bila ada (jalur detail);
+  // jalur kartu tak mengopernya → ambil sendiri dari sesi. Nomor HP TIDAK ada di
+  // tabel profiles, jadi diambil dari pembayaran terakhir user (nyaman utk repeat
+  // buyer). Hanya MENGISI field kosong — tidak menimpa yang sudah diketik user.
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const { data: u } = await supabase.auth.getUser()
+      const uid = u?.user?.id || null
+      let prof = profile || null
+      if (!prof && uid) {
+        const { data } = await supabase.from('profiles').select('full_name, email').eq('id', uid).maybeSingle()
+        prof = data || null
+      }
+      let lastPhone = ''
+      if (uid) {
+        const { data: lp } = await supabase.from('payments').select('phone')
+          .eq('user_id', uid).not('phone', 'is', null)
+          .order('created_at', { ascending: false }).limit(1).maybeSingle()
+        lastPhone = lp?.phone || ''
+      }
+      if (!alive) return
+      const email = prof?.email || u?.user?.email || ''
+      setF((cur) => ({
+        full_name: cur.full_name || prof?.full_name || '',
+        email: cur.email || email,
+        phone: cur.phone || lastPhone || '',
+      }))
+      setPrefilled({ name: Boolean(prof?.full_name), email: Boolean(email), phone: Boolean(lastPhone) })
+    })().catch(() => { /* prefill best-effort */ })
+    return () => { alive = false }
+  }, [profile])
+
   const amount = PAYMENT_AMOUNTS[type] || 0
   const label = type === 'etalase' ? 'DP Pembelian Motor' : 'DP Titip Jual'
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
@@ -325,11 +360,11 @@ function DokuCheckout({ type, listing, profile, onClose }) {
         <div className="m-body">
           <div className="rows"><div className="row hl"><span>Total DP</span><b>{rupiah(amount)}</b></div></div>
           <form onSubmit={submit} className="f-grid" style={{ marginTop: 14 }}>
-            <div className="field full"><label htmlFor="dk-name">Nama lengkap</label>
+            <div className="field full"><label htmlFor="dk-name">Nama lengkap{prefilled.name && <span className="pf-tag">✓ dari profil</span>}</label>
               <input id="dk-name" value={f.full_name} onChange={set('full_name')} placeholder="Nama Anda" required /></div>
-            <div className="field full"><label htmlFor="dk-email">Email</label>
+            <div className="field full"><label htmlFor="dk-email">Email{prefilled.email && <span className="pf-tag">✓ dari profil</span>}</label>
               <input id="dk-email" type="email" value={f.email} onChange={set('email')} placeholder="email@contoh.com" required /></div>
-            <div className="field full"><label htmlFor="dk-phone">Nomor WhatsApp</label>
+            <div className="field full"><label htmlFor="dk-phone">Nomor WhatsApp{prefilled.phone && <span className="pf-tag">✓ terakhir dipakai</span>}</label>
               <input id="dk-phone" type="tel" value={f.phone} onChange={set('phone')} placeholder="62812xxxxxxx" required /></div>
             {err && <div className="f-err">{err}</div>}
             <button className="btn btn-accent btn-full" type="submit" disabled={busy}>
@@ -1769,6 +1804,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   background:var(--panel)}
 .pay-done-ic{font-size:52px;line-height:1;margin-bottom:14px}
 .pay-done h1{font-size:26px;font-weight:760;letter-spacing:-.02em;margin-bottom:8px}
+/* penanda "✓ dari profil" di label checkout (prefill) */
+.field label .pf-tag{float:right;text-transform:none;letter-spacing:0;font-family:var(--font);
+  font-size:10px;font-weight:600;color:var(--ok)}
 .a-edit-btn{margin-top:8px;font-family:var(--mono);font-size:10.5px;font-weight:600;
   letter-spacing:.06em;padding:5px 12px;border-radius:999px;border:1px solid var(--line-2);
   background:var(--panel);color:var(--ink);cursor:pointer}
