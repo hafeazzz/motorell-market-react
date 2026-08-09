@@ -4354,16 +4354,22 @@ function DetailView({ listing, nav, onBook }) {
               <button className="btn btn-accent btn-full" disabled={!canBook}
                 onClick={() => { bumpStat(listing, 'click'); onBook(listing, warranty) }}>
                 {canBook
-                  ? (PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : 'Booking DP via QRIS')
+                  ? (PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp'
+                    : PAYMENT_MODE === 'doku' ? '💳 Bayar DP ' + rupiah(PAYMENT_AMOUNTS.etalase)
+                      : 'Booking DP via QRIS')
                   : listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
               </button>
               <p className="fine">{PAYMENT_MODE === 'whatsapp'
                 ? 'Tim Motorell akan membalas chat WhatsApp-mu untuk konfirmasi ketersediaan dan proses DP ' +
                   rupiah(DP_FIXED) + ' yang mengunci unit selama 3 hari. DP direfund 100% apabila kondisi ' +
                   'unit tidak sesuai deskripsi yang tercantum.'
-                : 'DP ' + rupiah(DP_FIXED) + ' mengunci unit 3 hari. Sisa pembayaran + paket perlindungan ' +
-                  'dibayar saat serah terima di Motorell. DP direfund 100% apabila kondisi unit tidak sesuai ' +
-                  'deskripsi yang tercantum.'}</p>
+                : PAYMENT_MODE === 'doku'
+                  ? 'DP ' + rupiah(PAYMENT_AMOUNTS.etalase) + ' via Doku (QRIS / Virtual Account) mengunci unit 3 hari. ' +
+                    'Sisa pembayaran + paket perlindungan dibayar saat serah terima di Motorell. DP direfund 100% ' +
+                    'apabila kondisi unit tidak sesuai deskripsi yang tercantum.'
+                  : 'DP ' + rupiah(DP_FIXED) + ' mengunci unit 3 hari. Sisa pembayaran + paket perlindungan ' +
+                    'dibayar saat serah terima di Motorell. DP direfund 100% apabila kondisi unit tidak sesuai ' +
+                    'deskripsi yang tercantum.'}</p>
             </div>
           </aside>
           )}
@@ -4385,7 +4391,7 @@ function DetailView({ listing, nav, onBook }) {
               <b>{rupiah(listing.price)}</b>
             </div>
             <button className="btn btn-accent" onClick={() => { bumpStat(listing, 'click'); onBook(listing, warranty) }}>
-              {PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : 'Booking DP via QRIS'}
+              {PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : PAYMENT_MODE === 'doku' ? '💳 Bayar DP' : 'Booking DP via QRIS'}
             </button>
           </div>
         )}
