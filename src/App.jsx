@@ -60,13 +60,14 @@ const WARRANTIES = [
 const warrantiesForGrade = (grade) =>
   grade === 'B' ? WARRANTIES.filter((w) => w.code === 'standard') : WARRANTIES
 
-// Payment gateway. Default 'whatsapp' (aman); 'doku' mengaktifkan checkout Doku
-// (Edge Function create-doku-payment + tabel payments + webhook). Bisa di-override
-// per-browser via localStorage 'mm-pay-mode' → rollout bertahap TANPA redeploy
-// (mis. set 'doku' hanya di perangkat internal untuk uji live sebelum go-public).
-// Aktifkan 'doku' HANYA setelah: migrasi 0013 dijalankan, secret Doku di-set di
-// Supabase, kedua Edge Function di-deploy, & Notification URL didaftarkan di Doku.
-const PAYMENT_MODE = (typeof localStorage !== 'undefined' && localStorage.getItem('mm-pay-mode')) || 'whatsapp' // 'whatsapp' | 'qris' | 'doku'
+// Payment gateway. Default 'doku' — GATEWAY LIVE (2026-08-17): backend Doku
+// (migrasi 0013, secret di Supabase, Edge Function create-doku-payment +
+// doku-webhook ter-deploy, Notification URL terdaftar) sudah aktif & lolos uji
+// sandbox. Semua pengunjung kini melihat tombol "Bayar DP".
+// Override per-browser tetap ada via localStorage 'mm-pay-mode' → untuk ROLLBACK
+// cepat ke WhatsApp di perangkat sendiri ('whatsapp') tanpa redeploy; rollback
+// global = kembalikan default ke 'whatsapp' lalu push.
+const PAYMENT_MODE = (typeof localStorage !== 'undefined' && localStorage.getItem('mm-pay-mode')) || 'doku' // 'whatsapp' | 'qris' | 'doku'
 // DP yang ditampilkan di UI. Server (create-doku-payment PRICES) tetap SUMBER
 // KEBENARAN & memvalidasi ulang — nilai di sini hanya untuk tampilan.
 const PAYMENT_AMOUNTS = { etalase: 505000, titip: 18000 }
