@@ -71,6 +71,10 @@ const PAYMENT_MODE = (typeof localStorage !== 'undefined' && localStorage.getIte
 // DP yang ditampilkan di UI. Server (create-doku-payment PRICES) tetap SUMBER
 // KEBENARAN & memvalidasi ulang — nilai di sini hanya untuk tampilan.
 const PAYMENT_AMOUNTS = { etalase: 505000, titip: 18000 }
+// DP Titip Jual DINONAKTIFKAN sementara — titip jual GRATIS selama Agustus 2026.
+// Set true untuk memunculkan lagi tombol "Bayar DP Titip Jual". (DP etalase tak
+// terpengaruh.) Ini hanya menyembunyikan pintu masuk UI; Edge Function tetap ada.
+const TITIP_DP_ENABLED = false
 const CS_WHATSAPP_NUMBER = '6285180643531'
 
 // ---------- Lokasi showroom ----------
@@ -6800,7 +6804,7 @@ export default function App() {
         {route.name === 'titip' && (
           <TitipJualView session={session} nav={nav} toast={toast}
             onLoginClick={() => setAuthOpen(true)}
-            onPayDp={PAYMENT_MODE === 'doku' ? (() => setDokuCheckout({ type: 'titip', listing: null })) : null} />)}
+            onPayDp={(TITIP_DP_ENABLED && PAYMENT_MODE === 'doku') ? (() => setDokuCheckout({ type: 'titip', listing: null })) : null} />)}
 
         {route.name === 'birojasa' && <BirojasaView nav={nav} />}
 
