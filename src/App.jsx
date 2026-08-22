@@ -3213,7 +3213,18 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
 
 // ---------- Kelola staf (khusus role admin) ----------
 const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', kurator: 'Kurator', buyer: 'Pengguna', inactive: 'Tanpa akses', null: 'Pengguna' }
-const AUDIT_LABEL = { soft_delete: '🗑️ Hapus (soft)', hard_delete: '💀 Hapus permanen', restore: '↩️ Pulihkan' }
+const AUDIT_LABEL = {
+  soft_delete: '🗑️ Hapus (soft)', hard_delete: '💀 Hapus permanen', restore: '↩️ Pulihkan',
+  titip_jual_archived: '📦 Titip jual diarsip',
+  titip_jual_restored: '↩️ Titip jual dipulihkan',
+  titip_jual_deleted: '💀 Titip jual dihapus',
+}
+// Warna pil di audit log. Merah = tak bisa dibatalkan, hijau = pemulihan,
+// kuning (default 'booked') = tindakan yang masih bisa diurungkan.
+const AUDIT_TONE = {
+  hard_delete: 'rejected', titip_jual_deleted: 'rejected',
+  restore: 'published', titip_jual_restored: 'published',
+}
 const HARD_DELETE_GRACE_DAYS = 30
 
 // Waktu relatif ringkas dalam bahasa Indonesia (ganti date-fns — hindari
@@ -3469,12 +3480,27 @@ function StaffPanel({ profile, toast }) {
 }
 
 // ---------- Review Titip Jual (khusus admin) ----------
+// Empat filter pertama menyaring `status`; 'archived' berbeda — ia menyaring
+// kolom archived_at, LINTAS status. Unit terarsip sengaja tidak muncul di tab
+// status mana pun supaya antrean review tidak tercampur barang yang sudah
+// disingkirkan admin.
 const TITIP_FILTERS = [
   { code: 'pending', label: 'Perlu review' },
   { code: 'approved', label: 'Disetujui' },
   { code: 'rejected', label: 'Ditolak' },
   { code: 'sold', label: 'Terjual' },
+  { code: 'archived', label: 'Arsip' },
 ]
+
+// Error RLS/kolom-hilang terbaca sangat teknis ("new row violates row-level
+// security policy…"). Untuk panel admin, terjemahkan jadi petunjuk yang bisa
+// ditindaklanjuti: migrasinya belum dijalankan.
+function migrasiHint(error, nomor) {
+  const m = error.message || String(error)
+  return /row-level|policy|permission|denied|column .* does not exist/i.test(m)
+    ? m + ' — kemungkinan migrasi ' + nomor + ' belum dijalankan di Supabase.'
+    : m
+}
 
 function TitipReview({ profile, toast, nav }) {
   const [tab, setTab] = useState('pending')
@@ -3483,6 +3509,7 @@ function TitipReview({ profile, toast, nav }) {
   const [busyId, setBusyId] = useState(null)
   const [openId, setOpenId] = useState(null)   // baris yang detail-nya dibuka
   const [sort, setSort] = useState('newest')   // 'newest' | 'oldest'
+  const [actOn, setActOn] = useState(null)     // baris yang modal Arsip/Hapus-nya dibuka
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('titip_jual_units')
@@ -3509,7 +3536,72 @@ function TitipReview({ profile, toast, nav }) {
     load()
   }
 
-  const shown = (rows || []).filter((r) => r.status === tab).sort((a, b) => {
+  // Jejak audit — best-effort, TAK PERNAH memblok aksi utama (pola sama seperti
+  // logAudit di StaffPanel). target_* diisi data PENJUAL supaya baris audit tetap
+  // terbaca setelah unitnya lenyap; nama unit dititipkan di `reason` karena
+  // audit_log tak punya kolom untuk unit.
+  async function logTitipAudit(action, row, reason) {
+    const label = [row.merek, row.model, row.tahun].filter(Boolean).join(' ')
+    try {
+      await supabase.from('audit_log').insert({
+        admin_id: profile.id, admin_email: profile.email || null,
+        action, target_user_id: row.seller_id || null, target_email: row.seller_email || null,
+        reason: label + (reason ? ' — ' + reason : ''),
+      })
+    } catch { /* abaikan */ }
+  }
+
+  // ARSIP = soft delete. Baris tetap utuh, hanya disembunyikan dari etalase
+  // (query publik memfilter archived_at, dan policy RLS 0015 menegakkannya).
+  async function archive(row, reason) {
+    setBusyId(row.id)
+    const { data, error } = await supabase.from('titip_jual_units').update({
+      archived_at: new Date().toISOString(), archived_by: profile.id,
+      archived_reason: reason.trim(),
+    }).eq('id', row.id).select()
+    setBusyId(null)
+    if (error) { toast('Gagal mengarsipkan: ' + migrasiHint(error, '0015')); return }
+    // RLS menolak dengan 0 baris & TANPA error — tanpa cek ini, admin melihat
+    // pesan sukses palsu padahal tak ada yang berubah.
+    if (!data || data.length === 0) { toast('Arsip DITOLAK (0 baris) — cek policy admin di migrasi 0015.'); return }
+    logTitipAudit('titip_jual_archived', row, reason)
+    toast('Unit diarsipkan — hilang dari etalase, data tetap tersimpan')
+    load()
+  }
+
+  async function restore(row) {
+    setBusyId(row.id)
+    const { data, error } = await supabase.from('titip_jual_units').update({
+      archived_at: null, archived_by: null, archived_reason: null,
+    }).eq('id', row.id).select()
+    setBusyId(null)
+    if (error) { toast('Gagal memulihkan: ' + migrasiHint(error, '0015')); return }
+    if (!data || data.length === 0) { toast('Pemulihan DITOLAK (0 baris diubah).'); return }
+    logTitipAudit('titip_jual_restored', row, null)
+    toast(row.status === 'approved'
+      ? 'Unit dipulihkan & tayang kembali di etalase'
+      : 'Unit dipulihkan ke antrean ' + row.status)
+    load()
+  }
+
+  // HAPUS PERMANEN. Audit ditulis SEBELUM delete: setelah barisnya lenyap,
+  // seller_id/seller_email tak bisa dibaca lagi untuk mengisi jejaknya.
+  async function hardDelete(row, reason) {
+    const label = [row.merek, row.model, row.tahun].filter(Boolean).join(' ')
+    if (!window.confirm('Hapus PERMANEN "' + label + '"?\n\nBaris beserta datanya lenyap dan TIDAK BISA dipulihkan. Untuk sekadar menyembunyikan dari etalase, pakai Arsip.')) return
+    setBusyId(row.id)
+    await logTitipAudit('titip_jual_deleted', row, reason)
+    const { data, error } = await supabase.from('titip_jual_units').delete().eq('id', row.id).select()
+    setBusyId(null)
+    if (error) { toast('Gagal menghapus: ' + migrasiHint(error, '0015')); return }
+    if (!data || data.length === 0) { toast('Hapus DITOLAK (0 baris) — policy titip_jual_delete_admin belum ada (migrasi 0015).'); return }
+    toast('Unit dihapus permanen — jejaknya tercatat di Audit')
+    load()
+  }
+
+  const shown = (rows || []).filter((r) => (
+    tab === 'archived' ? !!r.archived_at : (!r.archived_at && r.status === tab)
+  )).sort((a, b) => {
     const d = new Date(a.created_at) - new Date(b.created_at)
     return sort === 'oldest' ? d : -d
   })
@@ -3518,7 +3610,9 @@ function TitipReview({ profile, toast, nav }) {
     <div>
       <div className="a-tabs" style={{ marginTop: 4 }}>
         {TITIP_FILTERS.map((t) => {
-          const n = (rows || []).filter((r) => r.status === t.code).length
+          const n = (rows || []).filter((r) => (
+            t.code === 'archived' ? !!r.archived_at : (!r.archived_at && r.status === t.code)
+          )).length
           return (
             <button key={t.code} type="button" className={tab === t.code ? 'on' : ''}
               onClick={() => setTab(t.code)}>{t.label}{n ? ' (' + n + ')' : ''}</button>
@@ -3542,7 +3636,9 @@ function TitipReview({ profile, toast, nav }) {
         </div>
       )}
       {rows && !err && shown.length === 0 && (
-        <div className="empty">Tidak ada submission {TITIP_FILTERS.find((t) => t.code === tab).label.toLowerCase()}.</div>
+        <div className="empty">{tab === 'archived'
+          ? 'Arsip kosong — belum ada unit titip jual yang disingkirkan dari etalase.'
+          : 'Tidak ada submission ' + TITIP_FILTERS.find((t) => t.code === tab).label.toLowerCase() + '.'}</div>
       )}
       {shown.length > 0 && (
         <div className="a-list">
@@ -3570,9 +3666,16 @@ function TitipReview({ profile, toast, nav }) {
                         onClick={() => review(r, 'rejected')}>Reject</button>
                     </>
                   )}
-                  {r.status === 'approved' && (
+                  {r.status === 'approved' && !r.archived_at && (
                     <button className="btn btn-ghost btn-sm"
                       onClick={() => nav('#/unit/tj-' + String(r.id).slice(0, 8))}>Lihat →</button>
+                  )}
+                  {r.archived_at ? (
+                    <button className="btn btn-sm btn-dark" disabled={busyId === r.id}
+                      onClick={() => restore(r)}>↩️ Pulihkan</button>
+                  ) : (
+                    <button className="btn btn-ghost btn-sm" disabled={busyId === r.id}
+                      onClick={() => setActOn(r)}>Kelola…</button>
                   )}
                 </div>
               </div>
@@ -3588,6 +3691,9 @@ function TitipReview({ profile, toast, nav }) {
                     {r.deskripsi && <div><dt>Deskripsi</dt><dd>{r.deskripsi}</dd></div>}
                     {r.kelengkapan && <div><dt>Kelengkapan</dt><dd>{r.kelengkapan}</dd></div>}
                     {r.rejection_reason && <div><dt>Alasan tolak</dt><dd>{r.rejection_reason}</dd></div>}
+                    {r.archived_at && (
+                      <div><dt>Diarsip</dt><dd>{new Date(r.archived_at).toLocaleString('id-ID')} · “{r.archived_reason || '—'}”</dd></div>
+                    )}
                   </dl>
                 </div>
               )}
@@ -3595,6 +3701,74 @@ function TitipReview({ profile, toast, nav }) {
           ))}
         </div>
       )}
+
+      {actOn && (
+        <TitipActionModal row={actOn} busy={busyId === actOn.id}
+          onArchive={(reason) => archive(actOn, reason).then(() => setActOn(null))}
+          onDelete={(reason) => hardDelete(actOn, reason).then(() => setActOn(null))}
+          onClose={() => setActOn(null)} />
+      )}
+    </div>
+  )
+}
+
+// Modal Arsip/Hapus untuk satu unit titip jual. Dua langkah SENGAJA: admin
+// memilih tindakan dulu, baru menulis alasan — supaya "Hapus permanen" tak
+// pernah kepencet sebagai lanjutan refleks dari satu tombol serbaguna.
+function TitipActionModal({ row, busy, onArchive, onDelete, onClose }) {
+  const [act, setAct] = useState(null)   // null | 'archive' | 'delete'
+  const [reason, setReason] = useState('')
+  const label = [row.merek, row.model, row.tahun].filter(Boolean).join(' ')
+  const ok = reason.trim().length > 0
+
+  return (
+    <div className="overlay" role="dialog" aria-modal="true"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal">
+        <div className="m-head">
+          <div><h3>Kelola unit titip jual</h3><span className="sub">{label}</span></div>
+          <button className="m-close" onClick={onClose} aria-label="Tutup">✕</button>
+        </div>
+        <div className="m-body">
+          {!act ? (
+            <>
+              <p className="fine" style={{ marginTop: 0, marginBottom: 16 }}>
+                <b>Arsip</b> menyembunyikan unit dari etalase tapi menyimpan datanya — bisa
+                dipulihkan kapan saja. <b>Hapus permanen</b> melenyapkan barisnya dan tidak
+                bisa dibatalkan. Keduanya tercatat di Audit.
+              </p>
+              <div className="m-actions">
+                <button type="button" className="btn btn-dark btn-full"
+                  onClick={() => setAct('archive')}>📦 Arsipkan</button>
+                <button type="button" className="btn btn-ghost btn-full"
+                  onClick={() => setAct('delete')}>💀 Hapus permanen</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="stnote warn" style={{ marginBottom: 15 }}>
+                {act === 'archive'
+                  ? 'Unit hilang dari etalase publik. Penjual masih melihatnya di halaman "Titip jual saya".'
+                  : 'TIDAK BISA DIBATALKAN. Baris & datanya lenyap permanen.'}
+              </p>
+              <div className="field full">
+                <label htmlFor="tj-reason">Alasan {act === 'archive' ? 'arsip' : 'hapus'} (wajib)</label>
+                <textarea id="tj-reason" rows={3} value={reason} autoFocus
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Contoh: foto tidak jelas, harga tidak realistis, unit duplikat" />
+              </div>
+              <div className="m-actions m-actions-2">
+                <button type="button" className="btn btn-ghost" disabled={busy}
+                  onClick={() => { setAct(null); setReason('') }}>Kembali</button>
+                <button type="button" className="btn btn-accent" disabled={!ok || busy}
+                  onClick={() => (act === 'archive' ? onArchive(reason) : onDelete(reason))}>
+                  {busy ? 'Memproses…' : act === 'archive' ? 'Arsipkan' : 'Hapus permanen'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -3865,7 +4039,7 @@ function AuditLog() {
                   {l.reason ? ' · “' + l.reason + '”' : ''}
                 </span>
               </div>
-              <span className={'st ' + (l.action === 'hard_delete' ? 'rejected' : l.action === 'restore' ? 'published' : 'booked')}>
+              <span className={'st ' + (AUDIT_TONE[l.action] || 'booked')}>
                 {AUDIT_LABEL[l.action] || l.action}
               </span>
             </div>
@@ -6059,8 +6233,11 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
                     {(m.status === 'approved' || m.status === 'sold') && (
                       <span className="a-stat">{(m.view_count || 0)} dilihat · {(m.click_count || 0)} chat</span>
                     )}
-                    {m.status === 'pending' && (
+                    {m.status === 'pending' && !m.archived_at && (
                       <span className="a-note">Menunggu persetujuan admin — otomatis tayang di etalase setelah disetujui. Kamu masih bisa mengubah detail & foto selama menunggu.</span>
+                    )}
+                    {m.archived_at && (
+                      <span className="a-note">Unit ini disingkirkan dari etalase oleh admin{m.archived_reason ? ' — alasan: ' + m.archived_reason : ''}. Perbaiki lalu hubungi CS bila ingin ditayangkan lagi.</span>
                     )}
                     {editId !== m.id && (
                       <span className="a-mine-actions">
@@ -6071,7 +6248,12 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
                       </span>
                     )}
                   </div>
-                  <span className={'st ' + m.status}>{TITIP_STATUS_LABEL[m.status] || m.status}</span>
+                  {/* Unit terarsip admin masih ber-status 'approved' di database,
+                      jadi tanpa cabang ini penjual membaca "Tayang di etalase"
+                      untuk unit yang justru sudah disingkirkan. */}
+                  <span className={'st ' + (m.archived_at ? 'rejected' : m.status)}>
+                    {m.archived_at ? 'Disingkirkan admin' : (TITIP_STATUS_LABEL[m.status] || m.status)}
+                  </span>
                   {editId === m.id && (
                     <div className="a-edit">
                       <div className="a-ep-label">Foto ({editPhotos.length}/{MAX_PHOTOS})</div>
@@ -6568,8 +6750,21 @@ export default function App() {
   // atau error, titip jual kosong tapi etalase resmi tetap tampil.
   const loadTitipJual = useCallback(async () => {
     if (!supabase) return
-    const { data, error } = await supabase.from('titip_jual_units')
+    // .is('archived_at', null) WAJIB: tanpa ini unit yang diarsipkan admin tetap
+    // tayang di etalase — arsip jadi tak ada artinya. Policy RLS 0015 menegakkan
+    // hal yang sama di sisi server; filter ini menjaga admin (yang policy-nya
+    // boleh melihat semua) tak ikut melihat unit terarsip di etalase publik.
+    const base = () => supabase.from('titip_jual_units')
       .select('*').eq('status', 'approved').order('reviewed_at', { ascending: false })
+    let { data, error } = await base().is('archived_at', null)
+    // Migrasi 0015 dijalankan MANUAL di SQL Editor, jadi deploy frontend bisa
+    // mendahuluinya. Tanpa cadangan ini, kolom yang belum ada = query gagal =
+    // SELURUH titip jual lenyap dari etalase sampai migrasinya jalan. Saat kolom
+    // belum ada, belum ada pula yang bisa diarsipkan — query tanpa filter aman.
+    if (error && /archived_at/.test(error.message || '')) {
+      console.warn('[TITIP] Kolom archived_at belum ada — jalankan migrasi 0015. Sementara memuat tanpa filter arsip.')
+      ;({ data, error } = await base())
+    }
     if (error) {
       console.warn('[TITIP] Gagal memuat titip jual (etalase resmi tetap jalan):', error.message)
       setTitipUnits([])
