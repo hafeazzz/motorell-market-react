@@ -16,6 +16,7 @@ import { parseCaption } from './captionParser';
 import { uploadPhoto, thumbKey, ALLOWED_PHOTO_TYPES, PHOTO_MAX_MB } from './photoUpload';
 import { PROVINCES, citiesOf } from './cities';
 import { openSocialApp } from './utils/deepLink';
+import { normalizeBrand, dedupeBrands, collectBrands, canonicalBrand, brandSuggestions } from './utils/brandReader';
 
 // ---------- Konfigurasi ----------
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL
@@ -107,6 +108,18 @@ const MAPS_ADDRESS = 'Hb. 2 JI No.2, RT.007/RW.016, Uwung Jaya, Cibodas, Kota Ta
 const MAPS_LINK = 'https://maps.app.goo.gl/W8rsqGtkCVjdy3Ug7?g_st=iw'
 const MAPS_EMBED = 'https://maps.google.com/maps?q=' +
   encodeURIComponent('Motorell Garage, ' + MAPS_ADDRESS) + '&z=16&output=embed'
+
+// Tanggal unggah. Admin butuh JAM (menengahi sengketa "kapan persisnya masuk"),
+// pembeli tidak — baginya jam hanya derau, cukup tanggalnya. Satu fungsi, dua
+// tingkat rincian, supaya formatnya tak pernah berbeda antar halaman.
+const formatUploadTime = (iso, withTime = false) => {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const tanggal = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
+  if (!withTime) return tanggal
+  return tanggal + ', ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+}
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n) || 0))
 const fmt = (n) => new Intl.NumberFormat('id-ID').format(Number(n) || 0)
@@ -605,7 +618,13 @@ function matchPanel(l, p) {
   if (p.priceMin && Number(l.price) < p.priceMin) return false
   if (p.priceMax && Number(l.price) > p.priceMax) return false
   if (p.year && Number(l.year) !== Number(p.year)) return false
-  if (p.brands.length && !p.brands.includes(String(l.brand || '').trim())) return false
+  // Dicocokkan lewat normalizeBrand, BUKAN string mentah: chip filter memakai
+  // satu ejaan resmi ("Honda") sedangkan baris bisa menyimpan "HONDA"/"honda".
+  // Perbandingan mentah akan menyembunyikan unit yang mereknya beda huruf saja.
+  if (p.brands.length) {
+    const keys = p.brands.map(normalizeBrand)
+    if (!keys.includes(normalizeBrand(l.brand))) return false
+  }
   if (p.grades.length && !p.grades.includes(String(l.grade || '').toUpperCase())) return false
   return true
 }
@@ -633,8 +652,11 @@ function sortListings(arr, sort) {
 function facetsOf(listings) {
   const prices = listings.map((l) => Number(l.price)).filter((n) => Number.isFinite(n) && n > 0)
   const years = [...new Set(listings.map((l) => Number(l.year)).filter(Boolean))].sort((a, b) => b - a)
-  const brands = [...new Set(listings.map((l) => String(l.brand || '').trim()).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b))
+  // dedupeBrands menggabungkan "Honda"/"HONDA"/"honda" jadi SATU chip dengan
+  // satu ejaan resmi. Sebelumnya new Set() atas string mentah membuat tiap
+  // varian huruf jadi chip sendiri — dan memilih salah satunya menyembunyikan
+  // unit dari varian lain.
+  const brands = dedupeBrands(collectBrands(listings, 'brand'))
   const grades = [...new Set(listings.map((l) => String(l.grade || '').toUpperCase()).filter(Boolean))]
     .sort()
   // Slider butuh rentang yang tidak nol-lebar walau etalase cuma berisi 1 unit.
@@ -1659,6 +1681,15 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   font-size:15px;line-height:1;flex:none;transition:border-color .2s,color .2s}
 .m-close:hover{border-color:var(--accent);color:var(--accent)}
 .m-body{padding:20px}
+/* Chip saran merek di modal edit titip jual — sekali klik menyalin ejaan yang
+   SUDAH ada, jadi admin tak menambah varian huruf baru. */
+.tj-brands{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:7px}
+.tj-brands > span{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+  color:var(--dim);text-transform:uppercase}
+.tj-brand{padding:5px 11px;border-radius:999px;border:1px solid var(--line-2);
+  background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;
+  transition:border-color .18s,color .18s}
+.tj-brand:hover{border-color:var(--accent);color:var(--accent)}
 .tag-qris{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);
   font-size:10.5px;font-weight:600;letter-spacing:.06em;color:var(--muted);
   border:1px solid var(--line-2);padding:6px 11px;border-radius:999px;margin-bottom:15px}
@@ -3218,6 +3249,7 @@ const AUDIT_LABEL = {
   titip_jual_archived: '📦 Titip jual diarsip',
   titip_jual_restored: '↩️ Titip jual dipulihkan',
   titip_jual_deleted: '💀 Titip jual dihapus',
+  titip_jual_edited: '✏️ Titip jual diedit',
 }
 // Warna pil di audit log. Merah = tak bisa dibatalkan, hijau = pemulihan,
 // kuning (default 'booked') = tindakan yang masih bisa diurungkan.
@@ -3495,6 +3527,32 @@ const TITIP_FILTERS = [
 // Error RLS/kolom-hilang terbaca sangat teknis ("new row violates row-level
 // security policy…"). Untuk panel admin, terjemahkan jadi petunjuk yang bisa
 // ditindaklanjuti: migrasinya belum dijalankan.
+// Label field titip jual — dipakai form edit admin & ringkasan audit.
+const TITIP_FIELD_LABEL = {
+  merek: 'Merek', model: 'Model', tahun: 'Tahun', odometer: 'Odometer',
+  harga_diinginkan: 'Harga', kondisi: 'Kondisi', warna: 'Warna',
+  plat_nomor: 'Plat', kota: 'Kota', deskripsi: 'Deskripsi', kelengkapan: 'Kelengkapan',
+}
+
+// Audit yang berguna menyebut APA yang berubah, bukan sekadar "diedit".
+// Rancangan awal hanya mencatat "Edit titip jual: <merek> <model>" — tak
+// terlihat bedanya kalau admin diam-diam menurunkan harga.
+function ringkasPatch(before, patch) {
+  const ubah = Object.keys(patch)
+    .filter((k) => String(before?.[k] ?? '') !== String(patch[k] ?? ''))
+    .map((k) => {
+      const lama = before?.[k]
+      const baru = patch[k]
+      const ringkas = (v) => {
+        const s = String(v ?? '').trim()
+        if (!s) return '—'
+        return s.length > 40 ? s.slice(0, 40) + '…' : s
+      }
+      return (TITIP_FIELD_LABEL[k] || k) + ': ' + ringkas(lama) + ' → ' + ringkas(baru)
+    })
+  return ubah.length ? ubah.join('; ') : 'tanpa perubahan'
+}
+
 function migrasiHint(error, nomor) {
   const m = error.message || String(error)
   return /row-level|policy|permission|denied|column .* does not exist/i.test(m)
@@ -3510,6 +3568,11 @@ function TitipReview({ profile, toast, nav }) {
   const [openId, setOpenId] = useState(null)   // baris yang detail-nya dibuka
   const [sort, setSort] = useState('newest')   // 'newest' | 'oldest'
   const [actOn, setActOn] = useState(null)     // baris yang modal Arsip/Hapus-nya dibuka
+  const [editOn, setEditOn] = useState(null)   // baris yang modal Edit-nya dibuka
+
+  // Merek yang SUDAH ada, untuk saran & penyeragaman ejaan. Diambil dari baris
+  // yang memang sudah dimuat — tanpa query tambahan, apalagi per ketikan.
+  const knownBrands = useMemo(() => dedupeBrands(collectBrands(rows || [], 'merek')), [rows])
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('titip_jual_units')
@@ -3599,6 +3662,22 @@ function TitipReview({ profile, toast, nav }) {
     load()
   }
 
+  // Edit oleh admin: hanya KONTEN unit. status/reviewed_*/archived_* sengaja
+  // TIDAK ikut — masing-masing punya alurnya sendiri (Approve/Reject, Arsip),
+  // dan menumpangkannya di sini membuat dua jalur menulis kolom yang sama.
+  async function saveEdit(patch) {
+    setBusyId(editOn.id)
+    const { data, error } = await supabase.from('titip_jual_units')
+      .update(patch).eq('id', editOn.id).select()
+    setBusyId(null)
+    if (error) { toast('Gagal menyimpan: ' + migrasiHint(error, '0003')); return }
+    if (!data || data.length === 0) { toast('Simpan DITOLAK (0 baris) — policy titip_jual_update_admin belum ada.'); return }
+    logTitipAudit('titip_jual_edited', { ...editOn, ...patch }, ringkasPatch(editOn, patch))
+    toast('Detail unit diperbarui')
+    setEditOn(null)
+    load()
+  }
+
   const shown = (rows || []).filter((r) => (
     tab === 'archived' ? !!r.archived_at : (!r.archived_at && r.status === tab)
   )).sort((a, b) => {
@@ -3653,6 +3732,7 @@ function TitipReview({ profile, toast, nav }) {
                 <div className="a-info">
                   <b>{[r.merek, r.model, r.tahun].filter(Boolean).join(' ')}</b>
                   <span>{rupiah(r.harga_diinginkan)} · {r.kondisi || '—'} · {(r.photos || []).length} foto · {r.seller_name} ({r.seller_phone})</span>
+                  <span className="a-stat">🕐 Diupload: {formatUploadTime(r.created_at, true)}</span>
                 </div>
                 <div className="a-actions">
                   <button className="btn btn-ghost btn-sm"
@@ -3669,6 +3749,10 @@ function TitipReview({ profile, toast, nav }) {
                   {r.status === 'approved' && !r.archived_at && (
                     <button className="btn btn-ghost btn-sm"
                       onClick={() => nav('#/unit/tj-' + String(r.id).slice(0, 8))}>Lihat →</button>
+                  )}
+                  {!r.archived_at && (
+                    <button className="btn btn-ghost btn-sm" disabled={busyId === r.id}
+                      onClick={() => setEditOn(r)}>✏️ Edit</button>
                   )}
                   {r.archived_at ? (
                     <button className="btn btn-sm btn-dark" disabled={busyId === r.id}
@@ -3702,12 +3786,139 @@ function TitipReview({ profile, toast, nav }) {
         </div>
       )}
 
+      {editOn && (
+        <TitipEditModal row={editOn} busy={busyId === editOn.id} knownBrands={knownBrands}
+          onSave={saveEdit} onClose={() => setEditOn(null)} />
+      )}
+
       {actOn && (
         <TitipActionModal row={actOn} busy={busyId === actOn.id}
           onArchive={(reason) => archive(actOn, reason).then(() => setActOn(null))}
           onDelete={(reason) => hardDelete(actOn, reason).then(() => setActOn(null))}
           onClose={() => setActOn(null)} />
       )}
+    </div>
+  )
+}
+
+// Modal edit detail unit titip jual (admin). Memakai .field/.f-grid — sistem
+// form yang sama dengan form unit resmi & form penjual, jadi tampilannya tak
+// menyimpang dan otomatis ikut tema gelap.
+function TitipEditModal({ row, busy, knownBrands, onSave, onClose }) {
+  const [f, setF] = useState({
+    merek: row.merek || '', model: row.model || '',
+    tahun: row.tahun ?? '', odometer: row.odometer ?? '',
+    harga_diinginkan: row.harga_diinginkan ?? '',
+    kondisi: row.kondisi || '', warna: row.warna || '',
+    plat_nomor: row.plat_nomor || '', kota: row.kota || '',
+    deskripsi: row.deskripsi || '', kelengkapan: row.kelengkapan || '',
+  })
+  const [err, setErr] = useState('')
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+
+  // Merek lain (selain ejaan baris ini) yang cocok dengan yang sedang diketik.
+  const saran = brandSuggestions(f.merek, knownBrands, 6)
+    .filter((b) => normalizeBrand(b) !== normalizeBrand(f.merek))
+  // Ejaan berbeda untuk merek yang SAMA → peringatkan, jangan diam-diam
+  // menambah varian keempat ke filter etalase.
+  const ejaanResmi = canonicalBrand(f.merek, knownBrands)
+  const bedaEjaan = f.merek.trim() && ejaanResmi !== f.merek.trim()
+
+  function submit() {
+    const harga = Number(f.harga_diinginkan)
+    if (!f.merek.trim()) { setErr('Merek wajib diisi.'); return }
+    if (!harga || harga <= 0) { setErr('Harga harus angka lebih dari 0.'); return }
+    const tahun = parseInt(f.tahun, 10)
+    const odo = String(f.odometer).trim() === '' ? null : parseInt(f.odometer, 10)
+    setErr('')
+    // canonicalBrand: kalau merek ini sudah ada dengan ejaan lain, simpan pakai
+    // ejaan yang SUDAH ADA — inilah yang mencegah filter etalase beranak.
+    onSave({
+      merek: canonicalBrand(f.merek, knownBrands),
+      model: f.model.trim() || null,
+      tahun: Number.isFinite(tahun) ? tahun : null,
+      odometer: Number.isFinite(odo) ? odo : null,
+      harga_diinginkan: harga,
+      kondisi: f.kondisi || null,
+      warna: f.warna.trim() || null,
+      plat_nomor: f.plat_nomor.trim() || null,
+      kota: f.kota.trim() || null,
+      deskripsi: f.deskripsi.trim() || null,
+      kelengkapan: f.kelengkapan.trim() || null,
+    })
+  }
+
+  return (
+    <div className="overlay" role="dialog" aria-modal="true"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal" style={{ width: 'min(620px,100%)' }}>
+        <div className="m-head">
+          <div><h3>Edit unit titip jual</h3>
+            <span className="sub">Diupload {formatUploadTime(row.created_at, true)}</span></div>
+          <button className="m-close" onClick={onClose} aria-label="Tutup">✕</button>
+        </div>
+        <div className="m-body">
+          <p className="fine" style={{ marginTop: 0, marginBottom: 16 }}>
+            Perbaiki data yang salah ketik penjual. Status review, arsip, dan foto
+            TIDAK diubah di sini. Setiap perubahan tercatat di Audit.
+          </p>
+          <div className="f-grid">
+            <div className="field full">
+              <label htmlFor="te-merek">{TITIP_FIELD_LABEL.merek} *</label>
+              <input id="te-merek" value={f.merek} onChange={set('merek')}
+                placeholder="Honda" autoComplete="off" />
+              {bedaEjaan && (
+                <span className="f-info" style={{ margin: '2px 0 0' }}>
+                  Merek ini sudah terdaftar sebagai <b>{ejaanResmi}</b> — akan disimpan
+                  memakai ejaan itu supaya filter etalase tidak bercabang.
+                </span>
+              )}
+              {saran.length > 0 && (
+                <div className="tj-brands">
+                  <span>Merek yang sudah ada:</span>
+                  {saran.map((b) => (
+                    <button key={b} type="button" className="tj-brand"
+                      onClick={() => setF((p) => ({ ...p, merek: b }))}>{b}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="field"><label htmlFor="te-model">{TITIP_FIELD_LABEL.model}</label>
+              <input id="te-model" value={f.model} onChange={set('model')} /></div>
+            <div className="field"><label htmlFor="te-tahun">{TITIP_FIELD_LABEL.tahun}</label>
+              <input id="te-tahun" type="text" inputMode="numeric" value={f.tahun} onChange={set('tahun')} /></div>
+            <div className="field"><label htmlFor="te-odo">{TITIP_FIELD_LABEL.odometer} (km)</label>
+              <input id="te-odo" type="text" inputMode="numeric" value={f.odometer} onChange={set('odometer')} /></div>
+            <div className="field"><label htmlFor="te-harga">{TITIP_FIELD_LABEL.harga_diinginkan} (Rp) *</label>
+              <input id="te-harga" type="text" inputMode="numeric" value={f.harga_diinginkan} onChange={set('harga_diinginkan')} /></div>
+            <div className="field"><label htmlFor="te-kondisi">{TITIP_FIELD_LABEL.kondisi}</label>
+              <select id="te-kondisi" value={f.kondisi} onChange={set('kondisi')}>
+                <option value="">—</option>
+                {KONDISI_OPTS.map((k) => <option key={k} value={k}>{k}</option>)}
+              </select></div>
+            <div className="field"><label htmlFor="te-warna">{TITIP_FIELD_LABEL.warna}</label>
+              <input id="te-warna" value={f.warna} onChange={set('warna')} /></div>
+            <div className="field"><label htmlFor="te-plat">{TITIP_FIELD_LABEL.plat_nomor}</label>
+              <input id="te-plat" value={f.plat_nomor} onChange={set('plat_nomor')} /></div>
+            <div className="field"><label htmlFor="te-kota">{TITIP_FIELD_LABEL.kota}</label>
+              <input id="te-kota" value={f.kota} onChange={set('kota')} list="te-kota-opts" />
+              <datalist id="te-kota-opts">
+                {PROVINCES.flatMap((p) => citiesOf(p)).map((c) => <option key={c} value={c} />)}
+              </datalist></div>
+            <div className="field full"><label htmlFor="te-desk">{TITIP_FIELD_LABEL.deskripsi}</label>
+              <textarea id="te-desk" value={f.deskripsi} onChange={set('deskripsi')} /></div>
+            <div className="field full"><label htmlFor="te-keleng">{TITIP_FIELD_LABEL.kelengkapan}</label>
+              <input id="te-keleng" value={f.kelengkapan} onChange={set('kelengkapan')} /></div>
+          </div>
+          {err && <p className="f-err">{err}</p>}
+          <div className="m-actions m-actions-2">
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={onClose}>Batal</button>
+            <button type="button" className="btn btn-accent" disabled={busy} onClick={submit}>
+              {busy ? 'Menyimpan…' : '💾 Simpan'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -4496,6 +4707,11 @@ function DetailView({ listing, nav, onBook }) {
               <div className="row"><span>Penjual</span><b>{listing.seller_name || '—'}</b></div>
               {listing.kota && <div className="row"><span>Lokasi</span><b>📍 {listing.kota}</b></div>}
               {listing.plat_nomor && <div className="row"><span>Plat</span><b>{listing.plat_nomor}</b></div>}
+              {/* Tanpa jam: bagi pembeli yang relevan cuma "iklan ini seberapa
+                  baru", dan jam justru membuat unit lama terasa basi. */}
+              {listing.created_at && (
+                <div className="row"><span>Diupload</span><b>📅 {formatUploadTime(listing.created_at, false)}</b></div>
+              )}
             </div>
             <div className="panel-cta has-sticky-twin">
               <a className="btn btn-accent btn-full" href={sellerWaLink(listing)}
