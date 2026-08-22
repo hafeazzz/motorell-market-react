@@ -67,7 +67,29 @@ const warrantiesForGrade = (grade) =>
 // Override per-browser tetap ada via localStorage 'mm-pay-mode' → untuk ROLLBACK
 // cepat ke WhatsApp di perangkat sendiri ('whatsapp') tanpa redeploy; rollback
 // global = kembalikan default ke 'whatsapp' lalu push.
-const PAYMENT_MODE = (typeof localStorage !== 'undefined' && localStorage.getItem('mm-pay-mode')) || 'doku' // 'whatsapp' | 'qris' | 'doku'
+//
+// try/catch + whitelist WAJIB: di Safari (macOS/iOS) dengan "Block all cookies"
+// atau di jendela private, MENYENTUH localStorage melempar SecurityError — kalau
+// dibiarkan, throw ini terjadi saat modul dievaluasi dan seluruh app mati. Nilai
+// sampah/basi di storage juga tak boleh membajak mode: hanya 3 nilai sah yang
+// dipakai, selain itu jatuh ke default 'doku'.
+const PAYMENT_MODES = ['whatsapp', 'qris', 'doku']
+const readPayModeOverride = () => {
+  try {
+    return localStorage.getItem('mm-pay-mode')
+  } catch {
+    return null // Safari memblokir storage → pakai default, jangan sampai crash
+  }
+}
+const PAYMENT_MODE_OVERRIDE = readPayModeOverride()
+const PAYMENT_MODE = PAYMENT_MODES.includes(PAYMENT_MODE_OVERRIDE) ? PAYMENT_MODE_OVERRIDE : 'doku'
+// Diagnostik lapangan (senyap — tidak menulis apa pun ke console). Di perangkat
+// yang bermasalah, buka console lalu ketik `__mmPay` untuk melihat mode yang
+// BENAR-BENAR aktif + versi bundle, tanpa perlu build khusus debug. Berguna
+// untuk membedakan "env/override salah" vs "bundle lama nyangkut di cache".
+if (typeof window !== 'undefined') {
+  window.__mmPay = { mode: PAYMENT_MODE, override: PAYMENT_MODE_OVERRIDE, build: '2026-08-22-dp-detail-only' }
+}
 // DP yang ditampilkan di UI. Server (create-doku-payment PRICES) tetap SUMBER
 // KEBENARAN & memvalidasi ulang — nilai di sini hanya untuk tampilan.
 const PAYMENT_AMOUNTS = { etalase: 505000, titip: 18000 }
@@ -825,7 +847,11 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);
   -webkit-font-smoothing:antialiased;overflow-x:hidden;line-height:1.5}
 img{display:block;max-width:100%}
 a{color:inherit;text-decoration:none}
-button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+/* -webkit-appearance:none WAJIB untuk Safari (macOS/iOS): tanpa itu Safari
+   memaksakan gaya tombol native-nya sendiri — background & border yang kita set
+   bisa diabaikan, teks terpotong, dan CTA jadi nyaris tak terbaca. */
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;
+  -webkit-appearance:none;appearance:none}
 input,select,textarea{font-family:inherit;color:var(--ink)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
 ::selection{background:var(--ink);color:#fff}
@@ -1152,13 +1178,6 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .card-wa:hover{transform:scale(1.08);box-shadow:0 5px 18px rgba(37,211,102,.55)}
 .card-wa:active{transform:scale(.97)}
 .card-wa svg{width:15px;height:15px;fill:currentColor;flex:none}
-/* Tombol "Bayar DP" di kartu (mode Doku). Di atas .card-hit (z-index 3) supaya
-   klik-nya tak ditelan lapisan navigasi kartu. */
-.card-dp{position:relative;z-index:5;width:100%;margin-top:11px;padding:10px 12px;border-radius:9px;
-  background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;letter-spacing:.01em;
-  border:none;cursor:pointer;transition:filter .15s ease,transform .12s ease}
-.card-dp:hover{filter:brightness(1.09)}
-.card-dp:active{transform:scale(.98)}
 
 /* ---------- kepala etalase: hitungan + urutan + tombol filter ---------- */
 .et-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;
@@ -1486,7 +1505,8 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    @media(min-width:768px) di bagian bawah, karena di situ CTA di dalam
    panel sudah cukup dekat/terlihat tanpa perlu jalan pintas. */
 .sticky-cta{display:flex;align-items:center;gap:8px;position:fixed;left:0;right:0;bottom:0;
-  z-index:70;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);
+  z-index:70;background:rgba(255,255,255,.94);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
   border-top:1px solid var(--line);box-shadow:0 -6px 24px rgba(17,17,20,.1);
   padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
 .sticky-cta-price{display:flex;flex-direction:column;line-height:1.2;flex:none}
@@ -4464,11 +4484,9 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
   const wrapRef = useRef(null)
   const cardRef = useRef(null)
   const [shown, setShown] = useState(false)
-  const [payOpen, setPayOpen] = useState(false)
-  // Tombol "Bayar DP" hanya untuk unit RESMI yang masih bisa di-booking, saat
-  // gateway Doku aktif. Unit titip (harga penjual, DP-nya beda) & unit non-tayang
-  // tidak menampilkannya.
-  const canPayDp = PAYMENT_MODE === 'doku' && !isTitip(l) && l.status === 'published'
+  // Kartu etalase SENGAJA tanpa tombol "Bayar DP": grid tetap bersih & satu
+  // maksud (buka detail). Pembayaran DP hanya dari halaman unit, di mana
+  // pembeli sudah melihat foto, spesifikasi, dan ketentuan refund lebih dulu.
   const reduced = useRef(false)
 
   // Muncul SEKALI saat kartu pertama masuk layar, lalu TETAP tampil (Tugas 2).
@@ -4535,17 +4553,9 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
           <h3>{l.title}</h3>
           <span className="card-meta">{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' KM' : 'KM —'}{l.color ? ' · ' + l.color.toUpperCase() : ''}{l.kota ? ' · 📍 ' + l.kota.toUpperCase() : ''}</span>
           <span className="card-price">{rupiah(l.price)}</span>
-          {canPayDp && (
-            <button type="button" className="card-dp"
-              onClick={(e) => { e.stopPropagation(); bumpStat(l, 'click'); setPayOpen(true) }}
-              title="Bayar DP untuk mengamankan unit ini">
-              💳 Bayar DP {rupiah(PAYMENT_AMOUNTS.etalase)}
-            </button>
-          )}
         </div>
         <span className="card-go"><span>Lihat detail</span><span className="aro">→</span></span>
       </div>
-      {payOpen && <DokuCheckout type="etalase" listing={l} onClose={() => setPayOpen(false)} />}
     </div>
   )
 }
