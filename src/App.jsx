@@ -433,7 +433,6 @@ function PaymentSuccessView({ nav }) {
     <section className="section">
       <div className="container" style={{ maxWidth: 560 }}>
         <div className="pay-done">
-          <div className="pay-done-ic">{done ? '✅' : '⏳'}</div>
           <h1>{done ? 'Pembayaran berhasil' : 'Pembayaran diproses'}</h1>
           <p className="muted">{done
             ? 'Terima kasih. Pembayaranmu sudah kami terima.'
@@ -672,7 +671,7 @@ function facetsOf(listings) {
 // cabangnya di sini dan longgarkan query-nya bersamaan.
 const NEW_UNIT_DAYS = 3
 function statusBadge(l) {
-  if (l.status === 'booked') return { label: '🔥 Hampir Terjual', cls: 'st-booked' }
+  if (l.status === 'booked') return { label: 'Hampir Terjual', cls: 'st-booked' }
   const created = l.created_at ? new Date(l.created_at) : null
   if (created && !Number.isNaN(created.getTime())) {
     const days = (Date.now() - created.getTime()) / 86_400_000
@@ -1063,6 +1062,15 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 }
 .hero-copy.intro h1 em{animation:heroAccentGlow 1.5s ease-out 1.15s both}
 .hero-copy p{font-size:16.5px;line-height:1.62;color:var(--muted);max-width:440px;margin-bottom:26px}
+/* Teks kecil hero (kicker + subjudul) berdiri di atas model 3D → kontras dinaikkan:
+   warna solid --ink, sedikit lebih tebal, plus halo putih tipis agar tetap terbaca
+   saat kebetulan menimpa bagian gelap motor. */
+.hero .kicker{color:var(--ink);font-weight:600;
+  text-shadow:0 1px 10px rgba(255,255,255,.9),0 0 2px rgba(255,255,255,.9)}
+.hero-copy p{color:var(--ink);font-weight:500;
+  text-shadow:0 1px 10px rgba(255,255,255,.85),0 0 2px rgba(255,255,255,.85)}
+[data-theme="dark"] .hero .kicker,[data-theme="dark"] .hero-copy p{
+  text-shadow:0 1px 12px rgba(0,0,0,.75),0 0 3px rgba(0,0,0,.7)}
 .hero-copy .from{font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:28px}
 .hero-copy .from b{color:var(--accent)}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
@@ -1858,7 +1866,6 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .pay-stat b{font-size:22px;font-weight:750;color:var(--ink)}
 .pay-done{border:1px solid var(--line);border-radius:16px;padding:34px 30px;text-align:center;
   background:var(--panel)}
-.pay-done-ic{font-size:52px;line-height:1;margin-bottom:14px}
 .pay-done h1{font-size:26px;font-weight:760;letter-spacing:-.02em;margin-bottom:8px}
 /* penanda "✓ dari profil" di label checkout (prefill) */
 .field label .pf-tag{float:right;text-transform:none;letter-spacing:0;font-family:var(--font);
@@ -1886,7 +1893,6 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .biro-feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:48px}
 .biro-feat{border:1px solid var(--line);border-radius:14px;padding:20px;background:var(--panel);
   display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow)}
-.biro-feat .biro-ic{font-size:30px}
 .biro-feat b{font-size:16px;font-weight:700}
 .biro-feat span:last-child{font-size:13.5px;color:var(--muted);line-height:1.55}
 .biro-faq{max-width:640px}
@@ -3245,11 +3251,11 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
 // ---------- Kelola staf (khusus role admin) ----------
 const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', kurator: 'Kurator', buyer: 'Pengguna', inactive: 'Tanpa akses', null: 'Pengguna' }
 const AUDIT_LABEL = {
-  soft_delete: '🗑️ Hapus (soft)', hard_delete: '💀 Hapus permanen', restore: '↩️ Pulihkan',
-  titip_jual_archived: '📦 Titip jual diarsip',
-  titip_jual_restored: '↩️ Titip jual dipulihkan',
-  titip_jual_deleted: '💀 Titip jual dihapus',
-  titip_jual_edited: '✏️ Titip jual diedit',
+  soft_delete: 'Hapus (soft)', hard_delete: 'Hapus permanen', restore: 'Pulihkan',
+  titip_jual_archived: 'Titip jual diarsip',
+  titip_jual_restored: 'Titip jual dipulihkan',
+  titip_jual_deleted: 'Titip jual dihapus',
+  titip_jual_edited: 'Titip jual diedit',
 }
 // Warna pil di audit log. Merah = tak bisa dibatalkan, hijau = pemulihan,
 // kuning (default 'booked') = tindakan yang masih bisa diurungkan.
@@ -3436,14 +3442,14 @@ function StaffPanel({ profile, toast }) {
                   <b>{p.full_name || 'Tanpa nama'}{isSelf ? ' (kamu)' : ''}</b>
                   {/* Email diisi migrasi 0005 (disalin dari auth.users saat signup).
                       Kalau belum ada (baris lama sebelum migrasi) → tampilkan potongan id. */}
-                  <span className="mono" style={{ fontSize: 11.5 }}>{p.email || String(p.id).slice(0, 8) + '…'} · {ROLE_LABEL[p.role] || p.role}{p.deleted_at ? ' · 💀 Dihapus' : ''}</span>
+                  <span className="mono" style={{ fontSize: 11.5 }}>{p.email || String(p.id).slice(0, 8) + '…'} · {ROLE_LABEL[p.role] || p.role}{p.deleted_at ? ' · Dihapus' : ''}</span>
                 </div>
                 <div className="a-actions">
                   {isSelf ? (
                     <span className="f-info" style={{ margin: 0 }}>
                       {ROLE_LABEL[p.role] || p.role} — minta owner untuk mengubah aksesmu sendiri</span>
                   ) : p.role === 'owner' ? (
-                    <span className="f-info" style={{ margin: 0 }}>🔒 Owner — tak bisa diubah</span>
+                    <span className="f-info" style={{ margin: 0 }}>Owner — tak bisa diubah</span>
                   ) : (profile.role !== 'owner' && isStaffRow(p)) ? (
                     // Admin (non-owner) TIDAK boleh mengubah staf — itu hak owner (RLS
                     // 0010 pun menolaknya). Hanya baris pengguna yang bisa ia kelola.
@@ -3459,16 +3465,16 @@ function StaffPanel({ profile, toast }) {
                       const canHard = profile.role === 'owner' || remaining === 0
                       return (
                         <>
-                          <span className="f-info" style={{ margin: 0 }}>💀 Dihapus {sejakLalu(p.deleted_at)}</span>
+                          <span className="f-info" style={{ margin: 0 }}>Dihapus {sejakLalu(p.deleted_at)}</span>
                           <button type="button" className="btn btn-sm btn-ghost st-activate"
                             disabled={busyId === p.id} onClick={() => restore(p)}
-                            title="Pulihkan akun — pengguna bisa login lagi">↩️ Pulihkan</button>
+                            title="Pulihkan akun — pengguna bisa login lagi">Pulihkan</button>
                           <button type="button" className="btn btn-sm btn-ghost st-delete"
                             disabled={busyId === p.id || !canHard} onClick={() => hardDelete(p)}
                             title={canHard
                               ? 'Hapus PERMANEN dari auth.users — email dibebaskan, tak bisa dipulihkan'
                               : 'Masa tenggang ' + HARD_DELETE_GRACE_DAYS + ' hari belum lewat — tunggu ' + remaining + ' hari lagi (owner bisa memaksa)'}>
-                            💀 {canHard ? 'Hapus permanen' : remaining + ' hari'}
+                            {canHard ? 'Hapus permanen' : remaining + ' hari'}
                           </button>
                         </>
                       )
@@ -3488,17 +3494,17 @@ function StaffPanel({ profile, toast }) {
                       {p.role === 'inactive' ? (
                         <button type="button" className="btn btn-sm btn-ghost st-activate"
                           disabled={busyId === p.id} onClick={() => setRole(p, 'buyer')}
-                          title="Aktifkan kembali — pengguna bisa login lagi">✅ Aktifkan</button>
+                          title="Aktifkan kembali — pengguna bisa login lagi">Aktifkan</button>
                       ) : (
                         <button type="button" className="btn btn-sm btn-ghost st-deactivate"
                           disabled={busyId === p.id} onClick={() => setRole(p, 'inactive')}
-                          title="Nonaktifkan — pengguna tidak bisa login">🚫 Nonaktifkan</button>
+                          title="Nonaktifkan — pengguna tidak bisa login">Nonaktifkan</button>
                       )}
                       {/* Hapus (soft delete). Owner: siapa pun (kecuali owner). Admin:
                           hanya baris pengguna — RLS 0010 menolak jika ia coba staf. */}
                       <button type="button" className="btn btn-sm btn-ghost st-delete"
                         disabled={busyId === p.id} onClick={() => softDelete(p)}
-                        title="Hapus akun — masih bisa dipulihkan">🗑️ Hapus</button>
+                        title="Hapus akun — masih bisa dipulihkan">Hapus</button>
                     </>
                   )}
                 </div>
@@ -3732,7 +3738,7 @@ function TitipReview({ profile, toast, nav }) {
                 <div className="a-info">
                   <b>{[r.merek, r.model, r.tahun].filter(Boolean).join(' ')}</b>
                   <span>{rupiah(r.harga_diinginkan)} · {r.kondisi || '—'} · {(r.photos || []).length} foto · {r.seller_name} ({r.seller_phone})</span>
-                  <span className="a-stat">🕐 Diupload: {formatUploadTime(r.created_at, true)}</span>
+                  <span className="a-stat">Diupload: {formatUploadTime(r.created_at, true)}</span>
                 </div>
                 <div className="a-actions">
                   <button className="btn btn-ghost btn-sm"
@@ -3752,11 +3758,11 @@ function TitipReview({ profile, toast, nav }) {
                   )}
                   {!r.archived_at && (
                     <button className="btn btn-ghost btn-sm" disabled={busyId === r.id}
-                      onClick={() => setEditOn(r)}>✏️ Edit</button>
+                      onClick={() => setEditOn(r)}>Edit</button>
                   )}
                   {r.archived_at ? (
                     <button className="btn btn-sm btn-dark" disabled={busyId === r.id}
-                      onClick={() => restore(r)}>↩️ Pulihkan</button>
+                      onClick={() => restore(r)}>Pulihkan</button>
                   ) : (
                     <button className="btn btn-ghost btn-sm" disabled={busyId === r.id}
                       onClick={() => setActOn(r)}>Kelola…</button>
@@ -3914,7 +3920,7 @@ function TitipEditModal({ row, busy, knownBrands, onSave, onClose }) {
           <div className="m-actions m-actions-2">
             <button type="button" className="btn btn-ghost" disabled={busy} onClick={onClose}>Batal</button>
             <button type="button" className="btn btn-accent" disabled={busy} onClick={submit}>
-              {busy ? 'Menyimpan…' : '💾 Simpan'}
+              {busy ? 'Menyimpan…' : 'Simpan'}
             </button>
           </div>
         </div>
@@ -3950,9 +3956,9 @@ function TitipActionModal({ row, busy, onArchive, onDelete, onClose }) {
               </p>
               <div className="m-actions">
                 <button type="button" className="btn btn-dark btn-full"
-                  onClick={() => setAct('archive')}>📦 Arsipkan</button>
+                  onClick={() => setAct('archive')}>Arsipkan</button>
                 <button type="button" className="btn btn-ghost btn-full"
-                  onClick={() => setAct('delete')}>💀 Hapus permanen</button>
+                  onClick={() => setAct('delete')}>Hapus permanen</button>
               </div>
             </>
           ) : (
@@ -4145,7 +4151,7 @@ function FeaturedPanel({ toast }) {
                 {m.is_active ? 'Aktif' : 'Nonaktif'}</span>
             </div>
             <div className="feat-card-actions">
-              <button className="btn btn-accent btn-sm" onClick={() => scheduleMotor(m)}>📅 Jadwalkan</button>
+              <button className="btn btn-accent btn-sm" onClick={() => scheduleMotor(m)}>Jadwalkan</button>
               <button className="btn btn-ghost btn-sm" onClick={() => editMotor(m)}>Edit</button>
               <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(m)}>{m.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button>
               <button className="btn btn-ghost btn-sm a-del-btn" onClick={() => removeMotor(m)}>Hapus</button>
@@ -4168,7 +4174,7 @@ function FeaturedPanel({ toast }) {
                   <span className="feat-meta">mulai {start.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                 </div>
                 <span className={'st ' + (isActive ? 'published' : upcoming ? 'booked' : 'draft')}>
-                  {isActive ? '🟢 Tayang' : upcoming ? '🟡 Menunggu' : '⚪ Lewat'}</span>
+                  {isActive ? 'Tayang' : upcoming ? 'Menunggu' : 'Lewat'}</span>
                 <button className="btn btn-ghost btn-sm a-del-btn" onClick={() => removeSchedule(s.id)}>Hapus</button>
               </div>
             )
@@ -4208,7 +4214,7 @@ function PaymentsPanel() {
           {rows.map((p) => (
             <div className="a-row" key={p.id}>
               <div className="a-info">
-                <b>{p.type === 'etalase' ? '🏪 DP Etalase' : '📦 DP Titip'} · {rupiah(p.amount)}</b>
+                <b>{p.type === 'etalase' ? 'DP Etalase' : 'DP Titip'} · {rupiah(p.amount)}</b>
                 <span className="mono" style={{ fontSize: 11.5 }}>{new Date(p.created_at).toLocaleString('id-ID')} · {p.email || '—'} · {p.invoice_number}</span>
               </div>
               <span className={'st ' + (p.status === 'success' ? 'published' : p.status === 'pending' ? 'booked' : 'rejected')}>
@@ -4705,12 +4711,12 @@ function DetailView({ listing, nav, onBook }) {
             </div>
             <div className="rows">
               <div className="row"><span>Penjual</span><b>{listing.seller_name || '—'}</b></div>
-              {listing.kota && <div className="row"><span>Lokasi</span><b>📍 {listing.kota}</b></div>}
+              {listing.kota && <div className="row"><span>Lokasi</span><b>{listing.kota}</b></div>}
               {listing.plat_nomor && <div className="row"><span>Plat</span><b>{listing.plat_nomor}</b></div>}
               {/* Tanpa jam: bagi pembeli yang relevan cuma "iklan ini seberapa
                   baru", dan jam justru membuat unit lama terasa basi. */}
               {listing.created_at && (
-                <div className="row"><span>Diupload</span><b>📅 {formatUploadTime(listing.created_at, false)}</b></div>
+                <div className="row"><span>Diupload</span><b>{formatUploadTime(listing.created_at, false)}</b></div>
               )}
             </div>
             <div className="panel-cta has-sticky-twin">
@@ -4815,7 +4821,7 @@ function DetailView({ listing, nav, onBook }) {
                 onClick={() => { bumpStat(listing, 'click'); onBook(listing, warranty) }}>
                 {canBook
                   ? (PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp'
-                    : PAYMENT_MODE === 'doku' ? '💳 Bayar DP ' + rupiah(PAYMENT_AMOUNTS.etalase)
+                    : PAYMENT_MODE === 'doku' ? 'Bayar DP ' + rupiah(PAYMENT_AMOUNTS.etalase)
                       : 'Booking DP via QRIS')
                   : listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
               </button>
@@ -4851,7 +4857,7 @@ function DetailView({ listing, nav, onBook }) {
               <b>{rupiah(listing.price)}</b>
             </div>
             <button className="btn btn-accent" onClick={() => { bumpStat(listing, 'click'); onBook(listing, warranty) }}>
-              {PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : PAYMENT_MODE === 'doku' ? '💳 Bayar DP' : 'Booking DP via QRIS'}
+              {PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : PAYMENT_MODE === 'doku' ? 'Bayar DP' : 'Booking DP via QRIS'}
             </button>
           </div>
         )}
@@ -4941,7 +4947,7 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
         </div>
         <div className="card-body">
           <h3>{l.title}</h3>
-          <span className="card-meta">{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' KM' : 'KM —'}{l.color ? ' · ' + l.color.toUpperCase() : ''}{l.kota ? ' · 📍 ' + l.kota.toUpperCase() : ''}</span>
+          <span className="card-meta">{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' KM' : 'KM —'}{l.color ? ' · ' + l.color.toUpperCase() : ''}{l.kota ? ' · ' + l.kota.toUpperCase() : ''}</span>
           <span className="card-price">{rupiah(l.price)}</span>
         </div>
         <span className="card-go"><span>Lihat detail</span><span className="aro">→</span></span>
@@ -5096,7 +5102,7 @@ function RecentlyViewed({ listings, recent, nav, onClear }) {
   return (
     <div className="recent">
       <div className="recent-head">
-        <h3>🕐 Terakhir Dilihat</h3>
+        <h3>Terakhir Dilihat</h3>
         <button className="recent-clear" onClick={onClear}>Hapus riwayat</button>
       </div>
       <div className="recent-rail">
@@ -6312,7 +6318,7 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
 
         {onPayDp && (
           <button className="btn btn-accent" style={{ marginBottom: 20 }} onClick={onPayDp}>
-            💳 Bayar DP Titip Jual {rupiah(PAYMENT_AMOUNTS.titip)}
+            Bayar DP Titip Jual {rupiah(PAYMENT_AMOUNTS.titip)}
           </button>
         )}
 
@@ -6547,10 +6553,10 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
 // Layanan perpanjangan STNK: pengunjung diarahkan ke WhatsApp Motorell (nomor CS
 // asli, bukan placeholder). Copy dari pemilik; tanpa klaim yang dibuat-buat.
 const BIRO_FEATURES = [
-  { ic: '⚡', t: 'Cepat', d: 'Proses 1–3 hari kerja.' },
-  { ic: '💬', t: 'Lewat WhatsApp', d: 'Cukup kirim foto STNK & dokumen.' },
-  { ic: '🏠', t: 'Tanpa ke Samsat', d: 'Kamu tak perlu antre; kami yang urus.' },
-  { ic: '✅', t: 'Aman & jelas', d: 'Biaya diinfokan di depan sebelum mulai.' },
+  { t: 'Cepat', d: 'Proses 1–3 hari kerja.' },
+  { t: 'Lewat WhatsApp', d: 'Cukup kirim foto STNK & dokumen.' },
+  { t: 'Tanpa ke Samsat', d: 'Kamu tak perlu antre; kami yang urus.' },
+  { t: 'Aman & jelas', d: 'Biaya diinfokan di depan sebelum mulai.' },
 ]
 const BIRO_FAQ = [
   { q: 'Berapa lama prosesnya?', a: 'Umumnya 1–3 hari kerja, tergantung antrean & kelengkapan dokumen.' },
@@ -6577,7 +6583,6 @@ function BirojasaView({ nav }) {
         <div className="biro-feats">
           {BIRO_FEATURES.map((f) => (
             <div className="biro-feat" key={f.t}>
-              <span className="biro-ic" aria-hidden="true">{f.ic}</span>
               <b>{f.t}</b><span>{f.d}</span>
             </div>
           ))}
