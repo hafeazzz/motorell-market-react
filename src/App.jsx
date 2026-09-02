@@ -940,6 +940,15 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .btn-admin svg{width:15px;height:15px;flex:none}
 .btn-sm{padding:9px 17px;font-size:13px}
 .btn-full{width:100%}
+/* Tombol WhatsApp sekunder di halaman unit — hijau WA, sejajar "Bayar DP". */
+.btn-wa{background:#25D366;color:#fff}
+.btn-wa:hover:not(:disabled){background:#1ebe5a}
+.btn-wa svg{width:18px;height:18px;fill:currentColor;flex:none}
+/* Pasangan CTA "Bayar DP" + WhatsApp di panel harga (layar >=768px). Membungkus
+   ke bawah kalau kolom panel terlalu sempit untuk sebaris. */
+.cta-pair{display:flex;flex-wrap:wrap;gap:10px}
+.cta-pair .btn{flex:1 1 auto;min-width:150px;min-height:48px}
+.cta-pair .btn-wa{flex:0 1 auto;min-width:132px}
 
 /* ---------- hero (full-bleed, 3D as ambient background) ----------
    Basis mobile dulu (tinggi otomatis, padding atas secukupnya untuk lolos
@@ -1544,6 +1553,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   color:var(--muted);text-transform:uppercase}
 .sticky-cta-price b{font-size:13.5px;font-weight:760;white-space:nowrap;letter-spacing:-.01em}
 .sticky-cta .btn{flex:1;white-space:nowrap;min-height:46px;font-size:13px;padding:12px 14px}
+/* WhatsApp di sticky bar = ikon saja (layar sempit) → sisakan ruang untuk "Bayar DP". */
+.sticky-cta .sticky-wa{flex:none;min-width:46px;padding-left:0;padding-right:0}
+.sticky-cta .sticky-wa svg{width:20px;height:20px}
 /* tombol besar di panel disembunyikan kalau sticky bar kembar sudah tampil,
    supaya tidak ada dua CTA identik terlihat berbarengan di layar sempit */
 .panel-cta.has-sticky-twin{display:none}
@@ -4639,7 +4651,7 @@ function DetailTabs({ listing }) {
 }
 
 // ---------- Halaman detail unit ----------
-function DetailView({ listing, nav, onBook }) {
+function DetailView({ listing, nav, onPayDp }) {
   const [wcode, setWcode] = useState('standard')
   const [selectedModPartIds, setSelectedModPartIds] = useState([]);
   const photos = Array.isArray(listing.photos) ? listing.photos : []
@@ -4817,25 +4829,27 @@ function DetailView({ listing, nav, onBook }) {
             </div>
 
             <div className={'panel-cta' + (canBook ? ' has-sticky-twin' : '')}>
-              <button className="btn btn-accent btn-full" disabled={!canBook}
-                onClick={() => { bumpStat(listing, 'click'); onBook(listing, warranty) }}>
-                {canBook
-                  ? (PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp'
-                    : PAYMENT_MODE === 'doku' ? 'Bayar DP ' + rupiah(PAYMENT_AMOUNTS.etalase)
-                      : 'Booking DP via QRIS')
-                  : listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
-              </button>
-              <p className="fine">{PAYMENT_MODE === 'whatsapp'
-                ? 'Tim Motorell akan membalas chat WhatsApp-mu untuk konfirmasi ketersediaan dan proses DP ' +
-                  rupiah(DP_FIXED) + ' yang mengunci unit selama 3 hari. DP direfund 100% apabila kondisi ' +
-                  'unit tidak sesuai deskripsi yang tercantum.'
-                : PAYMENT_MODE === 'doku'
-                  ? 'DP ' + rupiah(PAYMENT_AMOUNTS.etalase) + ' via Doku (QRIS / Virtual Account) mengunci unit 3 hari. ' +
-                    'Sisa pembayaran + paket perlindungan dibayar saat serah terima di Motorell. DP direfund 100% ' +
-                    'apabila kondisi unit tidak sesuai deskripsi yang tercantum.'
-                  : 'DP ' + rupiah(DP_FIXED) + ' mengunci unit 3 hari. Sisa pembayaran + paket perlindungan ' +
-                    'dibayar saat serah terima di Motorell. DP direfund 100% apabila kondisi unit tidak sesuai ' +
-                    'deskripsi yang tercantum.'}</p>
+              {canBook ? (
+                <div className="cta-pair">
+                  <button className="btn btn-accent" type="button"
+                    onClick={() => { bumpStat(listing, 'click'); onPayDp(listing) }}>
+                    Bayar DP {rupiah(PAYMENT_AMOUNTS.etalase)}
+                  </button>
+                  <a className="btn btn-wa" href={unitWaLink(listing)}
+                    target="_blank" rel="noopener noreferrer"
+                    onClick={() => bumpStat(listing, 'click')}>
+                    <WaIcon /><span>WhatsApp</span>
+                  </a>
+                </div>
+              ) : (
+                <button className="btn btn-accent btn-full" type="button" disabled>
+                  {listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
+                </button>
+              )}
+              <p className="fine">DP {rupiah(PAYMENT_AMOUNTS.etalase)} via Doku (QRIS / Virtual Account)
+                mengunci unit 3 hari. Sisa pembayaran + paket perlindungan dibayar saat serah terima di
+                Motorell. DP direfund 100% apabila kondisi unit tidak sesuai deskripsi yang tercantum.
+                Masih ada pertanyaan? Klik WhatsApp untuk tanya langsung ke tim Motorell.</p>
             </div>
           </aside>
           )}
@@ -4852,12 +4866,14 @@ function DetailView({ listing, nav, onBook }) {
           </div>
         ) : canBook && (
           <div className="sticky-cta">
-            <div className="sticky-cta-price">
-              <span>Harga unit</span>
-              <b>{rupiah(listing.price)}</b>
-            </div>
-            <button className="btn btn-accent" onClick={() => { bumpStat(listing, 'click'); onBook(listing, warranty) }}>
-              {PAYMENT_MODE === 'whatsapp' ? 'Hubungi CS via WhatsApp' : PAYMENT_MODE === 'doku' ? 'Bayar DP' : 'Booking DP via QRIS'}
+            <a className="btn btn-wa sticky-wa" href={unitWaLink(listing)}
+              target="_blank" rel="noopener noreferrer"
+              onClick={() => bumpStat(listing, 'click')} aria-label="Tanya via WhatsApp">
+              <WaIcon />
+            </a>
+            <button className="btn btn-accent" type="button"
+              onClick={() => { bumpStat(listing, 'click'); onPayDp(listing) }}>
+              Bayar DP {rupiah(PAYMENT_AMOUNTS.etalase)}
             </button>
           </div>
         )}
@@ -4938,12 +4954,9 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
           {isTitip(l)
             ? <span className="badge badge-titip">TITIP JUAL</span>
             : <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>}
-          {/* Chat cepat. Titip jual → langsung ke penjual; resmi → CS Motorell. */}
-          <a className="card-wa" href={isTitip(l) ? sellerWaLink(l) : unitWaLink(l)}
-            target="_blank" rel="noopener noreferrer"
-            aria-label={'Chat WhatsApp tentang ' + l.title}>
-            <WaIcon /><span>Chat Sekarang</span>
-          </a>
+          {/* Tombol WhatsApp SENGAJA tidak di kartu etalase: grid tetap bersih &
+              satu maksud (buka detail). Kontak WhatsApp muncul di halaman unit,
+              sebelah tombol "Bayar DP", setelah pembeli lihat foto & spesifikasi. */}
         </div>
         <div className="card-body">
           <h3>{l.title}</h3>
@@ -7069,6 +7082,11 @@ export default function App() {
   // Checkout Doku (etalase DP / titip DP). null | { type, listing }.
   const [dokuCheckout, setDokuCheckout] = useState(null)
 
+  // CATATAN: halaman unit kini memanggil setDokuCheckout LANGSUNG lewat prop
+  // onPayDp (tombol "Bayar DP" selalu buka checkout Doku, tak lagi bercabang
+  // lewat PAYMENT_MODE — override basi di localStorage pada Safari iOS/macOS
+  // sempat menyembunyikan tombolnya). requestBooking + jalur 'whatsapp'/'qris'
+  // di bawah dipertahankan untuk rollback cepat bila perlu, tapi tidak terpasang.
   const requestBooking = useCallback((listing, warranty) => {
     if (PAYMENT_MODE === 'doku') {
       // Gateway aktif: buka modal checkout Doku (bukan WA, bukan Midtrans lama).
@@ -7237,7 +7255,8 @@ export default function App() {
         {route.name === 'payment-success' && <PaymentSuccessView nav={nav} />}
 
         {route.name === 'unit' && (current
-          ? <DetailView listing={current} nav={nav} onBook={requestBooking} />
+          ? <DetailView listing={current} nav={nav}
+              onPayDp={(l) => setDokuCheckout({ type: 'etalase', listing: l })} />
           : <section className="detail"><div className="container">
               <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
               <p style={{ color: 'var(--muted)' }}>Unit tidak ditemukan atau sudah tidak tayang.</p>
