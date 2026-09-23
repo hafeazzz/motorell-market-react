@@ -101,11 +101,25 @@ const TITIP_DP_ENABLED = false
 const CS_WHATSAPP_NUMBER = '6285180643531'
 
 // ---------- Lokasi showroom ----------
-// Alamat & titik peta diambil dari link Google Maps resmi Motorell Garage.
-// MAPS_EMBED memakai output=embed (tanpa perlu API key) supaya peta ASLI-nya
-// tampil langsung di halaman; MAPS_LINK membuka Maps penuh untuk rute.
-const MAPS_ADDRESS = 'Hb. 2 JI No.2, RT.007/RW.016, Uwung Jaya, Cibodas, Kota Tangerang, Banten 15138'
-const MAPS_LINK = 'https://maps.app.goo.gl/W8rsqGtkCVjdy3Ug7?g_st=iw'
+// Alamat pindah 2026-09 (dari Cibodas → Poris Plawad Indah, Cipondoh).
+// MAPS_ADDRESS = SATU-SATUNYA sumber alamat di seluruh app (dipakai di
+// tampilan "Alamat" + query MAPS_EMBED + MAPS_LINK) — ganti di sini saja
+// kalau pindah lagi, jangan taruh alamat literal di tempat lain.
+// MAPS_PLUS_CODE dipisah dari MAPS_ADDRESS SENGAJA: cuma dipakai di teks
+// tampilan (li "Alamat"), TIDAK ikut ke query MAPS_LINK/MAPS_EMBED — kalau
+// "(Plus Code: ...)" ikut ke-geocode, teks non-standarnya berisiko bikin
+// Google Maps salah/gagal menemukan titiknya.
+// MAPS_LINK SENGAJA diturunkan dari MAPS_ADDRESS (Google Maps URL resmi
+// `/maps/search/?api=1&query=...`, tanpa API key) — dulu ini short-link
+// (maps.app.goo.gl) yang di-hardcode terpisah dari MAPS_ADDRESS, jadi waktu
+// alamat pindah, link-nya diam-diam masih nunjuk ke lokasi LAMA (persis bug
+// yang mau dihindari di sini). MAPS_EMBED juga sudah otomatis ikut alamat
+// baru (memakai output=embed, tanpa perlu API key) untuk peta ASLI di halaman.
+const MAPS_ADDRESS = 'Jl. Nn No.1 Blok P1, RT.003/RW.008, Poris Plawad Indah, ' +
+  'Kec. Cipondoh, Kota Tangerang, Banten 15138'
+const MAPS_PLUS_CODE = 'RM47+HQ'
+const MAPS_LINK = 'https://www.google.com/maps/search/?api=1&query=' +
+  encodeURIComponent('Motorell Garage, ' + MAPS_ADDRESS)
 const MAPS_EMBED = 'https://maps.google.com/maps?q=' +
   encodeURIComponent('Motorell Garage, ' + MAPS_ADDRESS) + '&z=16&output=embed'
 
@@ -5667,7 +5681,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <h3>Mampir ke showroom kami</h3>
                 <p>Koleksi motor terkurasi Motorell bisa kamu lihat dan cek langsung di tempat.</p>
                 <ul className="lokasi-facts">
-                  <li><span>Alamat</span><b>{MAPS_ADDRESS}</b></li>
+                  <li><span>Alamat</span><b>{MAPS_ADDRESS} <small>(Plus Code: {MAPS_PLUS_CODE})</small></b></li>
                   <li><span>Jam buka</span><b>Senin–Minggu · 09.00–18.00 WIB</b></li>
                   <li><span>Kontak</span><b>
                     <a href={'https://wa.me/' + CS_WHATSAPP_NUMBER} target="_blank" rel="noopener noreferrer">WhatsApp kami</a>
