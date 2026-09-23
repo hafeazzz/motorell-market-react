@@ -2078,10 +2078,15 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .foot-base{flex-direction:column;align-items:flex-start;gap:14px}
   .foot-brand{text-align:left}
 }
-/* Mobile (≤720px): deretan tombol aksi dilipat ke menu dropdown yang dibuka
-   lewat hamburger — supaya nav tidak meluber/terpotong (mis. tombol "Keluar ·
-   Nama" yang dulu terpotong). Logo + search + hamburger tetap di bar. */
-@media(max-width:720px){
+/* Mobile & tablet (≤1024px): deretan tombol aksi dilipat ke menu dropdown yang
+   dibuka lewat hamburger — supaya nav tidak meluber/terpotong (mis. tombol
+   "Keluar · Nama" yang dulu terpotong). Logo + search + hamburger tetap di
+   bar. Breakpoint dinaikkan dari 720px → 1024px (2026-09): diukur langsung,
+   logo + 4 tombol nav-links ("Titip Jual"/"Birojasa"/"Lokasi"/"Masuk") masih
+   memepetkan .nav-search sampai ~5-90px lebar di rentang 721-1000px (mis.
+   768px = tablet potret, iPad) — kotak cari jadi nyaris tak kepakai & dropdown
+   sarannya ikut sempit/tumpang tindih. 1024px baru benar-benar lega diukur. */
+@media(max-width:1024px){
   .nav-burger{display:inline-flex}
   .nav-links{display:none}
   .nav-links.open{display:flex;flex-direction:column;align-items:stretch;gap:8px;
@@ -2120,6 +2125,13 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 /* ---------- Tugas 4: search bar di header (typewriter placeholder) ---------- */
 .nav-search{flex:1 1 auto;min-width:0;max-width:360px;position:relative;
   margin:0 clamp(10px,3vw,26px)}
+/* Ikon kaca-pembesar & tombol bersihkan (✕) posisinya absolute relatif ke
+   <form>, BUKAN ke .nav-search langsung — sengaja dipisah dari .ns-pop (lihat
+   ns-pop lebih bawah) supaya override ≤720px yang melepas position:relative
+   dari .nav-search (biar dropdown saran bisa melebar) tidak ikut membuat ikon
+   ini "kabur" ke pojok nav. <form> selalu sepenuhnya mengisi kotak
+   .nav-search (block, tanpa padding sendiri) jadi visualnya identik. */
+.nav-search form{position:relative}
 .nav-search input{width:100%;background:var(--panel);border:1.5px solid var(--line-2);
   border-radius:999px;padding:9px 16px 9px 38px;font-size:13.5px;transition:border-color .2s}
 .nav-search input:focus{outline:none;border-color:var(--ink)}
@@ -2289,10 +2301,16 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   border:1px solid var(--line)}
 .ns-thumb-empty{width:52px;height:40px;border-radius:7px;flex:none;background:var(--bg-3);
   border:1px solid var(--line)}
-.ns-body{flex:1;min-width:0}
+.ns-body{flex:1;min-width:0;overflow:hidden}
 .ns-body b{display:block;font-size:13.5px;font-weight:660;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
-.ns-body span{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+/* Dulu baris ini (tahun · grade · warna) tanpa nowrap/ellipsis sama sekali —
+   begitu .ns-body kehabisan lebar (mis. dropdown ikut menyempit), teks ini
+   meluber keluar kotaknya dan tumpang tindih sama .ns-price/konten lain
+   (persis skenario bug layar sempit). Disamakan perlakuannya dengan <b> di
+   atas: potong rapi pakai "…", jangan biarkan meluber. */
+.ns-body span{display:block;font-family:var(--mono);font-size:10.5px;color:var(--dim);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ns-body mark{background:rgba(26,47,94,.16);color:var(--accent);border-radius:3px;padding:0 1px}
 .ns-price{font-size:13px;font-weight:720;white-space:nowrap;flex:none}
 .ns-all{width:100%;padding:12px;font-size:12.5px;font-weight:600;color:var(--accent);
@@ -2392,6 +2410,27 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
      mana pun saat berputar, termasuk tampak samping yang paling panjang. */
   .hero-embed-frame{aspect-ratio:auto;min-height:520px}
   .spec-rail{max-width:100%}
+}
+/* BUG (dilaporkan iOS Safari, tapi berlaku SEMUA browser/OS ≤1024px — samakan
+   dengan breakpoint hamburger di atas, sudah dinaikkan dari 720px): begitu
+   nav-links masuk ke baris nav (logo+search+theme-toggle+hamburger saja,
+   nav-links di menu), .nav-search (flex:1, min-width:0 → boleh menyusut
+   sampai 0) bisa terjepit sampai cuma ~5-100px, tergantung lebar layar persis
+   (dites: 375px → ~93px, 768px tablet potret → ~5px). Dropdown saran (.ns-pop)
+   ikut menyusut ke lebar itu karena posisinya absolute relatif ke .nav-search
+   sendiri — di dalamnya .ns-body (kolom judul+tahun+grade) sampai mengempis
+   ke 0px lebar dan teksnya meluber ke luar kotak, tumpang-tindih dengan
+   harga/konten lain (ini yang kelihatan di laporan screenshot).
+   Perbaikan: lepas .nav-search dari position:relative-nya di lebar ini →
+   .ns-pop (position:absolute; left:0;right:0) otomatis "naik" mengacu ke
+   .nav-in (position:relative, baris 901) yang lebarnya penuh satu baris nav
+   — pola yang SAMA seperti .nav-links.open (baris 2087) pakai, bukan
+   workaround baru. Kotak input sendiri tetap sempit (cukup untuk mengetik —
+   ikon kaca-pembesar & tombol ✕ tetap benar posisinya, lihat komentar di
+   .nav-search form); yang penting dropdown SARAN-nya lebar & terbaca. */
+@media(max-width:1024px){
+  .nav-search{position:static}
+  .ns-pop{left:12px;right:12px}
 }
 /* layar sempit: sembunyikan label "MARKET" di logo supaya search bar & tombol
    Masuk tetap muat tanpa memicu horizontal scroll di HP kecil (≤560px) */

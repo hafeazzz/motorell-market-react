@@ -5,3 +5,8 @@ dist
 
 # Supabase CLI local
 supabase/.temp/
+
+# Personal access token for migration work — never commit
+.supabase-token
+# Migration secrets (db password, service_role keys) — never commit
+.migration-secrets
