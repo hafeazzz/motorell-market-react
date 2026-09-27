@@ -2,13 +2,14 @@
 // MOTORELL MARKET — src/App.jsx (single-file SPA)
 // Tema: showroom terang ala Porsche (putih, lapang, bersih)
 // Stack: React + Vite + Supabase (auth, DB, storage, realtime)
-// Pembayaran: Edge Function create-dp-payment -> Midtrans QRIS
+// Booking DP: langsung ke WhatsApp CS (2026-09) — bukan gateway pembayaran.
+// Integrasi Doku (create-doku-payment) masih ada untuk titip jual, tapi
+// pintu masuknya di UI etalase sedang dimatikan (TITIP_DP_ENABLED = false).
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion'
 import { supabase } from './supabaseClient'
-import QRCode from 'qrcode'
 import MotorCarousel from './MotorCarousel';
 import Blueprint from './Blueprint';
 import { MOD_CATEGORIES, catOf } from './modParts';
@@ -46,20 +47,11 @@ const MAX_PHOTOS = 10
 // PHOTO_MAX_MB (5MB) diimpor dari sana supaya UI, pra-filter, dan upload satu
 // sumber kebenaran.
 
-// Paket perlindungan — HARGA FINAL divalidasi ulang di Edge Function.
-// Kalau mengubah harga di sini, ubah juga di create-dp-payment.
-// Nama paket sengaja tanpa kata "Garansi" (branding), tapi deskripsi tetap
-// menjelaskan cakupan garansi mesinnya secara eksplisit.
-const WARRANTIES = [
-  { code: 'standard', name: 'Avantgard', desc: 'Garansi mesin 7 hari', price: 0 },
-  { code: 'plus', name: 'Spectre', desc: 'Garansi mesin 21 hari + free 1× ganti oli', price: 350000 },
-  { code: 'max', name: 'Cullinan', desc: 'Garansi mesin 37 hari + free 1× servis & tune up', price: 750000 },
-]
-
-// Paket yang boleh dipilih per grade. Unit grade B hanya kebagian paket dasar
-// (Avantgard) — Spectre & Cullinan disembunyikan untuk grade B.
-const warrantiesForGrade = (grade) =>
-  grade === 'B' ? WARRANTIES.filter((w) => w.code === 'standard') : WARRANTIES
+// Paket perlindungan (Avantgard/Spectre/Cullinan) DIHAPUS 2026-09 atas
+// permintaan pemilik — etalase & halaman unit disederhanakan, tanpa pilihan
+// tingkatan garansi. Motorell tetap memberi garansi mesin flat untuk semua
+// unit resmi (lihat teks di FEATURE_SECTIONS & DetailTabs), hanya saja tidak
+// lagi ditampilkan berjenjang/berbayar tambahan.
 
 // Payment gateway. Default 'doku' — GATEWAY LIVE (2026-08-17): backend Doku
 // (migrasi 0013, secret di Supabase, Edge Function create-doku-payment +
@@ -173,8 +165,8 @@ const FEATURE_SECTIONS = [
   },
   {
     kicker: 'Perlindungan',
-    title: 'Garansi mesin sampai 37 hari.',
-    text: 'Tiga paket perlindungan bisa dipilih saat booking — dari 7 hari standar sampai 37 hari plus servis & tune up. Semua tertulis, bukan janji lisan.',
+    title: 'Garansi mesin.',
+    text: 'Setiap unit resmi Motorell dijamin garansi mesin sejak serah terima. Cakupan & durasinya dijelaskan langsung oleh tim kami — semua tertulis, bukan janji lisan.',
     photoUrl: STORAGE_BASE + '/garansi-mesin.jpeg',
   },
   {
@@ -290,49 +282,6 @@ async function compressImage(file) {
     // Kompresi gagal → unggah file asli apa adanya (jangan blokir upload).
     return { full: file, thumb: null, ext: 'jpg', type: file.type || 'image/jpeg' }
   }
-}
-
-// Pesan CS menyebut paket perlindungan yang SEDANG disorot di panel — CS jadi
-// tahu paket mana yang dimaksud tanpa harus bertanya balik.
-// Tidak ada state baru untuk ini: DetailView sudah memegang `warranty` (turunan
-// dari wcode, default avail[0] = Avantgard) dan sudah mengopernya ke onBook →
-// requestBooking. Sebelumnya nilai itu berhenti di situ dan tidak pernah
-// sampai ke pesannya.
-function buildWaMessage(listing, warranty) {
-  const url = window.location.origin + window.location.pathname + '#/unit/' + listing.slug
-  // Tanpa emoji: di sebagian perangkat/versi WhatsApp emoji (apalagi yang pakai
-  // variation selector seperti 🏍️) bisa tampil sebagai kotak/karakter aneh.
-  // Teks polos konsisten di semua perangkat.
-  return 'Halo Motorell! Saya tertarik dengan unit ini:\n' +
-    // `title` sudah memuat tahun (kolomnya "brand + model + year"), jadi tahun
-    // tidak ditempel lagi di sini — lihat catatan yang sama di unitWaLink.
-    'Unit: ' + listing.title + '\n' +
-    'Harga: ' + rupiah(listing.price) + '\n' +
-    (warranty ? 'Paket perlindungan: ' + warranty.name + '\n' : '') +
-    'Link: ' + url + '\n\n' +
-    'Apakah unit ini masih tersedia?'
-}
-
-function openWhatsAppCS(listing, toast, warranty) {
-  toast('Kamu akan diarahkan ke WhatsApp CS kami untuk melanjutkan pembayaran')
-  const url = 'https://wa.me/' + CS_WHATSAPP_NUMBER + '?text=' +
-    encodeURIComponent(buildWaMessage(listing, warranty))
-  window.open(url, '_blank', 'noopener,noreferrer')
-}
-
-async function invokeCreatePayment(listing_id, warranty_code) {
-  const { data, error } = await supabase.functions.invoke('create-dp-payment', {
-    body: { listing_id, warranty_code },
-  })
-  if (error) {
-    let msg = 'Gagal membuat pembayaran. Coba lagi.'
-    try {
-      const body = await error.context.json()
-      if (body && body.error) msg = body.error
-    } catch { /* pakai pesan default */ }
-    throw new Error(msg)
-  }
-  return data
 }
 
 // Mulai pembayaran Doku via Edge Function (secret & validasi amount di server).
@@ -464,21 +413,6 @@ function PaymentSuccessView({ nav }) {
       </div>
     </section>
   )
-}
-
-function useCountdown(expiresAt) {
-  const [left, setLeft] = useState(() =>
-    expiresAt ? Math.max(0, Math.floor((new Date(expiresAt) - Date.now()) / 1000)) : 0)
-  useEffect(() => {
-    if (!expiresAt) return
-    const t = setInterval(() => {
-      setLeft(Math.max(0, Math.floor((new Date(expiresAt) - Date.now()) / 1000)))
-    }, 1000)
-    return () => clearInterval(t)
-  }, [expiresAt])
-  const mm = String(Math.floor(left / 60)).padStart(2, '0')
-  const ss = String(left % 60).padStart(2, '0')
-  return { left, text: mm + ':' + ss }
 }
 
 const prefersReduced = () =>
@@ -954,15 +888,6 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .btn-admin svg{width:15px;height:15px;flex:none}
 .btn-sm{padding:9px 17px;font-size:13px}
 .btn-full{width:100%}
-/* Tombol WhatsApp sekunder di halaman unit — hijau WA, sejajar "Bayar DP". */
-.btn-wa{background:#25D366;color:#fff}
-.btn-wa:hover:not(:disabled){background:#1ebe5a}
-.btn-wa svg{width:18px;height:18px;fill:currentColor;flex:none}
-/* Pasangan CTA "Bayar DP" + WhatsApp di panel harga (layar >=768px). Membungkus
-   ke bawah kalau kolom panel terlalu sempit untuk sebaris. */
-.cta-pair{display:flex;flex-wrap:wrap;gap:10px}
-.cta-pair .btn{flex:1 1 auto;min-width:150px;min-height:48px}
-.cta-pair .btn-wa{flex:0 1 auto;min-width:132px}
 
 /* ---------- hero (full-bleed, 3D as ambient background) ----------
    Basis mobile dulu (tinggi otomatis, padding atas secukupnya untuk lolos
@@ -1567,9 +1492,6 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   color:var(--muted);text-transform:uppercase}
 .sticky-cta-price b{font-size:13.5px;font-weight:760;white-space:nowrap;letter-spacing:-.01em}
 .sticky-cta .btn{flex:1;white-space:nowrap;min-height:46px;font-size:13px;padding:12px 14px}
-/* WhatsApp di sticky bar = ikon saja (layar sempit) → sisakan ruang untuk "Bayar DP". */
-.sticky-cta .sticky-wa{flex:none;min-width:46px;padding-left:0;padding-right:0}
-.sticky-cta .sticky-wa svg{width:20px;height:20px}
 /* tombol besar di panel disembunyikan kalau sticky bar kembar sudah tampil,
    supaya tidak ada dua CTA identik terlihat berbarengan di layar sempit */
 .panel-cta.has-sticky-twin{display:none}
@@ -1649,12 +1571,6 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .dtab-panel.on{opacity:1;visibility:visible}
 @media(prefers-reduced-motion:reduce){.dtab-panel{transition:none}}
 .dtab-body .muted{color:var(--muted)}
-.dtab-warranty{list-style:none;max-width:540px}
-.dtab-warranty li{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;
-  padding:13px 0;border-bottom:1px solid var(--line)}
-.dtab-warranty b{font-size:14.5px;font-weight:680;flex:none}
-.dtab-warranty span{color:var(--muted);font-size:13px;flex:1;min-width:150px}
-.dtab-warranty em{font-style:normal;font-family:var(--mono);font-size:12.5px;font-weight:600}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:28px;position:static;top:98px;box-shadow:var(--shadow)}
 .panel h1{font-size:clamp(25px,2.6vw,33px);font-weight:760;letter-spacing:-.02em;line-height:1.06}
@@ -2120,16 +2036,6 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   display:flex;align-items:center;justify-content:center}
 .portal-reveal-glow{width:300px;height:300px;border-radius:50%;
   background:radial-gradient(closest-side, rgba(26,47,94,.42), rgba(26,47,94,0) 72%)}
-.wa-handoff{position:fixed;inset:0;z-index:150;display:flex;align-items:center;
-  justify-content:center;background:rgba(255,255,255,.82);backdrop-filter:blur(14px);
-  pointer-events:none}
-.wa-handoff-spinner{position:absolute;width:38px;height:38px;border-radius:50%;
-  border:3px solid var(--line-2);border-top-color:var(--accent);
-  animation:wa-spin .7s linear infinite}
-@keyframes wa-spin{to{transform:rotate(360deg)}}
-.wa-handoff-logo{font-weight:800;font-size:22px;letter-spacing:.01em;
-  display:flex;align-items:center;gap:8px;color:var(--ink)}
-.wa-handoff-logo i{font-style:normal;color:var(--accent);font-size:17px}
 .cfg{min-height:100svh;display:flex;align-items:center;justify-content:center;padding:24px}
 .cfg div{max-width:520px;border:1px solid var(--line);border-radius:14px;padding:32px;
   background:var(--panel);font-size:14.5px;line-height:1.65;color:var(--muted);box-shadow:var(--shadow)}
@@ -2761,154 +2667,6 @@ function AuthModal({ onClose, onDone, toast }) {
             </svg>
             Masuk dengan Google
           </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ---------- Modal booking DP (QRIS) ----------
-// ---------- Transisi "handoff" ke WhatsApp: loading → logo, blur-to-focus ----------
-// (pola dari video referensi animasi: spinner memudar jadi logo brand dengan
-// latar belakang blur, dipakai sebagai momen serah-terima ke WhatsApp CS)
-function WaHandoff({ show }) {
-  return (
-    <AnimatePresence>
-      {show && (
-        <motion.div className="wa-handoff" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }} transition={{ duration: 0.3 }} aria-hidden="true">
-          <motion.span className="wa-handoff-spinner"
-            initial={{ opacity: 1, scale: 1 }} animate={{ opacity: 0, scale: 0.7 }}
-            transition={{ delay: 0.45, duration: 0.35 }} />
-          <motion.div className="wa-handoff-logo"
-            initial={{ opacity: 0, scale: 0.92, filter: 'blur(10px)' }}
-            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-            transition={{ delay: 0.5, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
-            MOTORELL<i>●</i>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
-
-function BookingModal({ listing, warranty, onClose, toast }) {
-  const [step, setStep] = useState('confirm') // confirm -> qr -> paid
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState('')
-  const [pay, setPay] = useState(null)
-  const [qrImg, setQrImg] = useState(null)
-  const chanRef = useRef(null)
-  const pollRef = useRef(null)
-  const { left, text: timerText } = useCountdown(pay ? pay.expires_at : null)
-
-  useEffect(() => () => cleanup(), [])
-  function cleanup() {
-    if (chanRef.current) { supabase.removeChannel(chanRef.current); chanRef.current = null }
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-  }
-
-  function markPaid() {
-    cleanup()
-    setStep('paid')
-    toast('DP diterima — unit terkunci untukmu')
-  }
-
-  async function createPayment() {
-    setBusy(true); setErr('')
-    try {
-      const data = await invokeCreatePayment(listing.id, warranty.code)
-      setPay(data)
-      if (data.qr_string) {
-        const url = await QRCode.toDataURL(data.qr_string, {
-          width: 520, margin: 1, color: { dark: '#111114', light: '#ffffff' },
-        })
-        setQrImg(url)
-      }
-      setStep('qr')
-      chanRef.current = supabase
-        .channel('bk-' + data.booking_code)
-        .on('postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'bookings', filter: 'code=eq.' + data.booking_code },
-          (payload) => { if (payload.new && payload.new.status === 'paid') markPaid() })
-        .subscribe()
-      pollRef.current = setInterval(async () => {
-        const { data: b } = await supabase.from('bookings')
-          .select('status').eq('code', data.booking_code).maybeSingle()
-        if (b && b.status === 'paid') markPaid()
-      }, 8000)
-    } catch (ex) {
-      setErr(ex.message)
-    } finally { setBusy(false) }
-  }
-
-  return (
-    <div className="overlay" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal">
-        <div className="m-head">
-          <div><h3>Booking DP</h3><span className="sub">{listing.title}</span></div>
-          <button className="m-close" onClick={onClose} aria-label="Tutup">✕</button>
-        </div>
-        <div className="m-body">
-          {step === 'confirm' && (
-            <>
-              <div className="rows">
-                <div className="row"><span>Harga unit</span><b>{rupiah(listing.price)}</b></div>
-                <div className="row"><span>{warranty.name}<small>dibayar saat pelunasan</small></span><b>{warranty.price ? rupiah(warranty.price) : 'Termasuk'}</b></div>
-                <div className="row hl"><span>DP kunci unit<small>Book melalui Contact Kami</small></span><b>{rupiah(DP_FIXED)}</b></div>
-              </div>
-              <p className="fine">DP {rupiah(DP_FIXED)} mengunci unit selama 3 hari untuk pelunasan dan
-                serah terima. DP direfund 100% apabila kondisi unit tidak sesuai deskripsi yang tercantum.</p>
-              {err && <p className="f-err">{err}</p>}
-              <div className="m-actions">
-                <button className="btn btn-accent btn-full" onClick={createPayment} disabled={busy}>
-                  {busy ? 'Membuat kode QRIS…' : 'Buat kode QRIS'}
-                </button>
-                <button className="btn btn-ghost btn-full" onClick={onClose}>Batal</button>
-              </div>
-            </>
-          )}
-
-          {step === 'qr' && pay && (
-            <>
-              <span className="tag-qris">● QRIS — kode booking {pay.booking_code}</span>
-              <div className="qr-tile">
-                {qrImg
-                  ? <img src={qrImg} alt={'Kode QRIS untuk ' + rupiah(pay.dp_amount)} />
-                  : pay.qr_url
-                    ? <img src={pay.qr_url} alt="Kode QRIS" />
-                    : <p style={{ color: '#111114', padding: 20 }}>QR tidak tersedia</p>}
-              </div>
-              <p className="qr-amount">{rupiah(pay.dp_amount)}</p>
-              <p className="qr-timer">{left > 0
-                ? <>Selesaikan dalam <b>{timerText}</b></>
-                : <b>Kode kedaluwarsa — tutup dan ulangi</b>}</p>
-              <div className="waiting"><span className="dotp" />Menunggu pembayaran… status berubah otomatis</div>
-              <p className="m-note">Scan dengan GoPay, OVO, DANA, ShopeePay, atau m-banking apa pun yang mendukung QRIS.</p>
-              <div className="m-actions">
-                <button className="btn btn-ghost btn-full" onClick={onClose}>Tutup</button>
-              </div>
-            </>
-          )}
-
-          {step === 'paid' && pay && (
-            <>
-              <div className="ok-mark"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 7" /></svg></div>
-              <h4 className="ok-title">DP diterima</h4>
-              <p className="ok-sub">{listing.title} kini terkunci atas namamu.</p>
-              <div className="rows">
-                <div className="row"><span>Kode booking</span><b>{pay.booking_code}</b></div>
-                <div className="row"><span>Jumlah DP</span><b>{rupiah(pay.dp_amount)}</b></div>
-                <div className="row"><span>Perlindungan dipilih</span><b>{warranty.name}</b></div>
-                <div className="row"><span>Status</span><b><span className="chip-ok">LUNAS DP</span></b></div>
-              </div>
-              <p className="m-note">Tim Motorell akan menghubungimu lewat WhatsApp untuk jadwal pelunasan
-                dan serah terima. Simpan kode booking di atas.</p>
-              <div className="m-actions">
-                <button className="btn btn-accent btn-full" onClick={onClose}>Selesai</button>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>
@@ -4633,13 +4391,12 @@ function FadeItem({ children, className = '', style, as = 'div', direction = 'up
 const DETAIL_TABS = [
   { id: 'unit', label: 'Tentang unit' },
   { id: 'kurasi', label: 'Catatan kurasi' },
-  { id: 'garansi', label: 'Perlindungan' },
 ]
 
 function DetailTabs({ listing }) {
   const titip = isTitip(listing)
-  // Titip jual bukan hasil kurasi Motorell → tanpa tab "Catatan kurasi" &
-  // "Perlindungan"; sebagai gantinya tab "Kelengkapan" (dokumen dari penjual).
+  // Titip jual bukan hasil kurasi Motorell → tanpa tab "Catatan kurasi";
+  // sebagai gantinya tab "Kelengkapan" (dokumen dari penjual).
   const tabs = titip
     ? [{ id: 'unit', label: 'Tentang unit' }, { id: 'kelengkapan', label: 'Kelengkapan' }]
     : DETAIL_TABS
@@ -4677,26 +4434,12 @@ function DetailTabs({ listing }) {
               : <p className="muted">Kelengkapan dokumen belum dicantumkan penjual — tanyakan langsung via WhatsApp.</p>}
           </div>
         ) : (
-          <>
-            <div className={'dtab-panel' + (tab === 'kurasi' ? ' on' : '')}
-              role="tabpanel" aria-hidden={tab !== 'kurasi'}>
-              {listing.known_issues
-                ? <p>{listing.known_issues}</p>
-                : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>}
-            </div>
-            <div className={'dtab-panel' + (tab === 'garansi' ? ' on' : '')}
-              role="tabpanel" aria-hidden={tab !== 'garansi'}>
-              <ul className="dtab-warranty">
-                {warrantiesForGrade(listing.grade).map((w) => (
-                  <li key={w.code}>
-                    <b>{w.name}</b>
-                    <span>{w.desc}</span>
-                    <em>{w.price ? '+' + rupiah(w.price) : 'Termasuk'}</em>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </>
+          <div className={'dtab-panel' + (tab === 'kurasi' ? ' on' : '')}
+            role="tabpanel" aria-hidden={tab !== 'kurasi'}>
+            {listing.known_issues
+              ? <p>{listing.known_issues}</p>
+              : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>}
+          </div>
         )}
       </div>
     </div>
@@ -4704,8 +4447,7 @@ function DetailTabs({ listing }) {
 }
 
 // ---------- Halaman detail unit ----------
-function DetailView({ listing, nav, onPayDp }) {
-  const [wcode, setWcode] = useState('standard')
+function DetailView({ listing, nav }) {
   const [selectedModPartIds, setSelectedModPartIds] = useState([]);
   const photos = Array.isArray(listing.photos) ? listing.photos : []
   // listing.mod_parts adalah baris mod_parts itu sendiri (lihat loadListings),
@@ -4724,9 +4466,6 @@ function DetailView({ listing, nav, onPayDp }) {
   const toggleModPart = (id) =>
     setSelectedModPartIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  // Tugas 7: unit grade B hanya boleh paket Avantgard
-  const avail = warrantiesForGrade(listing.grade)
-  const warranty = avail.find((w) => w.code === wcode) || avail[0]
   const canBook = listing.status === 'published'
   // Titip jual: TANPA paket perlindungan / DP / booking (eksklusif unit resmi).
   // Panel kanan & CTA-nya diganti total (kontak langsung ke penjual).
@@ -4810,19 +4549,6 @@ function DetailView({ listing, nav, onPayDp }) {
               <div><small>Warna</small><b>{listing.color || '—'}</b></div>
             </div>
 
-            <p className="w-title">Pilih paket perlindungan</p>
-            <div className="w-opts" role="radiogroup" aria-label="Paket perlindungan">
-              {avail.map((w) => (
-                <button key={w.code} type="button" role="radio" aria-checked={wcode === w.code}
-                  className={'w-opt' + (wcode === w.code ? ' on' : '')}
-                  onClick={() => setWcode(w.code)}>
-                  <span className="w-dot" />
-                  <span className="w-body"><b>{w.name}</b><span>{w.desc}</span></span>
-                  <span className="w-price">{w.price ? '+' + rupiah(w.price) : 'Termasuk'}</span>
-                </button>
-              ))}
-            </div>
-
             {availableModParts.length > 0 && (
               <>
                 <p className="w-title" style={{ marginTop: '20px' }}>
@@ -4870,7 +4596,6 @@ function DetailView({ listing, nav, onPayDp }) {
 
             <div className="rows">
               <div className="row"><span>Harga unit</span><b>{rupiah(listing.price)}</b></div>
-              <div className="row"><span>{warranty.name}<small>dibayar saat pelunasan</small></span><b>{warranty.price ? rupiah(warranty.price) : 'Termasuk'}</b></div>
               {selectedModParts.map(part => (
                 <div className="row" key={part.id}>
                   <span>{part.name}<small>{catOf(part)} · part modifikasi</small></span>
@@ -4883,26 +4608,19 @@ function DetailView({ listing, nav, onPayDp }) {
 
             <div className={'panel-cta' + (canBook ? ' has-sticky-twin' : '')}>
               {canBook ? (
-                <div className="cta-pair">
-                  <button className="btn btn-accent" type="button"
-                    onClick={() => { bumpStat(listing, 'click'); onPayDp(listing) }}>
-                    Bayar DP {rupiah(PAYMENT_AMOUNTS.etalase)}
-                  </button>
-                  <a className="btn btn-wa" href={unitWaLink(listing)}
-                    target="_blank" rel="noopener noreferrer"
-                    onClick={() => bumpStat(listing, 'click')}>
-                    <WaIcon /><span>WhatsApp</span>
-                  </a>
-                </div>
+                <a className="btn btn-accent btn-full" href={unitWaLink(listing)}
+                  target="_blank" rel="noopener noreferrer"
+                  onClick={() => bumpStat(listing, 'click')}>
+                  Hubungi CS via WhatsApp
+                </a>
               ) : (
                 <button className="btn btn-accent btn-full" type="button" disabled>
                   {listing.status === 'booked' ? 'Sudah di-booking' : listing.status === 'sold' ? 'Terjual' : 'Belum tersedia'}
                 </button>
               )}
-              <p className="fine">DP {rupiah(PAYMENT_AMOUNTS.etalase)} via Doku (QRIS / Virtual Account)
-                mengunci unit 3 hari. Sisa pembayaran + paket perlindungan dibayar saat serah terima di
-                Motorell. DP direfund 100% apabila kondisi unit tidak sesuai deskripsi yang tercantum.
-                Masih ada pertanyaan? Klik WhatsApp untuk tanya langsung ke tim Motorell.</p>
+              <p className="fine">Tim Motorell akan membalas chat WhatsApp-mu untuk konfirmasi ketersediaan
+                dan proses DP {rupiah(DP_FIXED)} yang mengunci unit selama 3 hari. DP direfund 100% apabila
+                kondisi unit tidak sesuai deskripsi yang tercantum.</p>
             </div>
           </aside>
           )}
@@ -4919,15 +4637,15 @@ function DetailView({ listing, nav, onPayDp }) {
           </div>
         ) : canBook && (
           <div className="sticky-cta">
-            <a className="btn btn-wa sticky-wa" href={unitWaLink(listing)}
+            <div className="sticky-cta-price">
+              <span>Harga unit</span>
+              <b>{rupiah(listing.price)}</b>
+            </div>
+            <a className="btn btn-accent" href={unitWaLink(listing)}
               target="_blank" rel="noopener noreferrer"
-              onClick={() => bumpStat(listing, 'click')} aria-label="Tanya via WhatsApp">
-              <WaIcon />
+              onClick={() => bumpStat(listing, 'click')}>
+              Hubungi CS via WhatsApp
             </a>
-            <button className="btn btn-accent" type="button"
-              onClick={() => { bumpStat(listing, 'click'); onPayDp(listing) }}>
-              Bayar DP {rupiah(PAYMENT_AMOUNTS.etalase)}
-            </button>
           </div>
         )}
       </div>
@@ -4936,12 +4654,6 @@ function DetailView({ listing, nav, onPayDp }) {
 }
 
 // ---------- Kartu & beranda ----------
-// Ikon WhatsApp resmi (glyph tunggal) — dipakai di tombol chat per unit.
-const WaIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.47-1.75-1.65-2.05-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.47 0 1.46 1.06 2.87 1.21 3.07.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.69.25-1.28.17-1.41-.07-.13-.27-.2-.57-.35zM12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.87 9.87 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.25-8.23a8.2 8.2 0 0 1 8.24 8.24c0 4.54-3.7 8.23-8.24 8.23z" />
-  </svg>
-)
 
 function CardBase({ l, nav, index = 0, highlight = false }) {
   const photos = Array.isArray(l.photos) ? l.photos : []
@@ -5593,7 +5305,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
           </div>
           <div className="spec-rail">
             <span>titik inspeksi<b>50+</b></span>
-            <span>Garansi mesin s.d.<b>37 hari</b></span>
+            <span>Garansi mesin<b>Termasuk</b></span>
             <span>Kunci unit<b>{rupiah(DP_FIXED)}</b></span>
             <span>Unit Terjual<b>100+</b></span>
           </div>
@@ -6137,9 +5849,9 @@ const POLICY = [
   {
     q: 'Garansi mesin',
     body: [
-      'Setiap paket perlindungan Motorell adalah jaminan atas performa mesin motor yang kamu bawa pulang. Ada tiga pilihan yang bisa kamu ambil saat booking. Avantgard memberi garansi mesin 7 hari, Spectre memperpanjangnya menjadi 21 hari plus satu kali ganti oli gratis, dan Cullinan mencakup 37 hari plus satu kali servis dan tune up gratis. Masa garansi mulai dihitung sejak unit kamu terima.',
+      'Setiap unit resmi Motorell dijamin garansi mesin — jaminan atas performa mesin motor yang kamu bawa pulang. Cakupan & durasinya dijelaskan langsung oleh tim kami lewat WhatsApp saat booking, jadi kamu tahu persis apa yang berlaku sebelum DP. Masa garansi mulai dihitung sejak unit kamu terima.',
       'Kalau di masa garansi kamu merasa ada yang tidak beres dengan mesin, kabari tim kami lebih dulu sebelum membawa motor ke bengkel lain. Langkah ini penting supaya garansimu tetap berlaku. Tim kami akan memeriksa kondisinya secara menyeluruh, lalu menentukan apakah klaim bisa diproses.',
-      'Yang perlu kamu tahu, perlindungan ini fokus pada mesin dan tidak mencakup kerusakan akibat kecelakaan, banjir, kebakaran, modifikasi, atau pemakaian di luar panduan. Kalau unit dibongkar atau diservis tanpa sepengetahuan kami, garansinya otomatis gugur.',
+      'Yang perlu kamu tahu, garansi ini fokus pada mesin dan tidak mencakup kerusakan akibat kecelakaan, banjir, kebakaran, modifikasi, atau pemakaian di luar panduan. Kalau unit dibongkar atau diservis tanpa sepengetahuan kami, garansinya otomatis gugur.',
       'Hasil pemeriksaan tim Motorell menjadi keputusan akhir. Kami berkomitmen menilainya dengan jujur dan terbuka, supaya kamu paham betul dasar setiap keputusan. Ada yang ingin ditanyakan soal garansi? Hubungi tim kami lewat WhatsApp, kami siap membantu.',
     ],
   },
@@ -6147,7 +5859,7 @@ const POLICY = [
     q: 'Syarat & Ketentuan',
     body: [
       'Harga di halaman unit adalah harga motor apa adanya sesuai deskripsi. Belum termasuk balik nama, pajak tahunan yang belum dibayar, dan ongkir ke luar area yang disepakati.',
-      'Paket perlindungan (Avantgard, Spectre, Cullinan) mulai berlaku sejak serah terima, sesuai cakupan tiap paket.',
+      'Garansi mesin mulai berlaku sejak serah terima, sesuai cakupan yang dijelaskan tim kami saat booking.',
     ],
   },
   {
@@ -6697,13 +6409,10 @@ export default function App() {
   const [titipUnits, setTitipUnits] = useState([])   // titip jual 'approved', dinormalkan
   const [deepUnit, setDeepUnit] = useState(null)
   const [authOpen, setAuthOpen] = useState(false)
-  const [booking, setBooking] = useState(null) // {listing, warranty}
-  const [pending, setPending] = useState(null) // {slug, wcode} nunggu login
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)  // menu hamburger mobile
   const [toastMsg, setToastMsg] = useState('')
   const toastRef = useRef(null)
-  const [waHandoff, setWaHandoff] = useState(false)
   const [query, setQuery] = useState('')
   // Filter panel & urutan lahir dari URL, jadi link hasil filter yang dibuka
   // orang lain langsung menampilkan etalase yang sama persis.
@@ -7123,46 +6832,11 @@ export default function App() {
       .then(({ data }) => setDeepUnit(data ? { ...data, source: 'official' } : null))
   }, [route, units])
 
-  // lanjutkan booking otomatis setelah login
-  useEffect(() => {
-    if (!session || !pending) return
-    const l = listings.find((x) => x.slug === pending.slug)
-    const w = WARRANTIES.find((x) => x.code === pending.wcode) || WARRANTIES[0]
-    if (l && l.status === 'published') setBooking({ listing: l, warranty: w })
-    setPending(null)
-  }, [session, pending, listings])
-
-  // Checkout Doku (etalase DP / titip DP). null | { type, listing }.
+  // Checkout Doku (etalase DP / titip DP). null | { type, listing }. Jalur
+  // etalase-nya sudah tak terpasang di mana pun (lihat DetailView — tombol
+  // "Bayar DP" dikembalikan ke WhatsApp langsung, 2026-09); state & modal
+  // dipertahankan karena titip jual masih bisa memakainya via TITIP_DP_ENABLED.
   const [dokuCheckout, setDokuCheckout] = useState(null)
-
-  // CATATAN: halaman unit kini memanggil setDokuCheckout LANGSUNG lewat prop
-  // onPayDp (tombol "Bayar DP" selalu buka checkout Doku, tak lagi bercabang
-  // lewat PAYMENT_MODE — override basi di localStorage pada Safari iOS/macOS
-  // sempat menyembunyikan tombolnya). requestBooking + jalur 'whatsapp'/'qris'
-  // di bawah dipertahankan untuk rollback cepat bila perlu, tapi tidak terpasang.
-  const requestBooking = useCallback((listing, warranty) => {
-    if (PAYMENT_MODE === 'doku') {
-      // Gateway aktif: buka modal checkout Doku (bukan WA, bukan Midtrans lama).
-      setDokuCheckout({ type: 'etalase', listing })
-      return
-    }
-    if (PAYMENT_MODE === 'whatsapp') {
-      // window.open harus tetap sinkron di dalam gesture klik (supaya tidak
-      // diblokir popup blocker) — overlay handoff cuma lapisan visual di
-      // atasnya, tidak menunda pembukaan tab WhatsApp yang sesungguhnya.
-      openWhatsAppCS(listing, toast, warranty)
-      setWaHandoff(true)
-      setTimeout(() => setWaHandoff(false), 1100)
-      return
-    }
-    if (!session) {
-      setPending({ slug: listing.slug, wcode: warranty.code })
-      setAuthOpen(true)
-      toast('Masuk dulu untuk booking DP')
-      return
-    }
-    setBooking({ listing, warranty })
-  }, [session, toast])
 
   // Riwayat dicatat saat halaman unit BENAR-BENAR terbuka & unitnya ketemu —
   // bukan saat kartunya diklik. Slug ngawur atau unit yang sudah hilang tidak
@@ -7308,8 +6982,7 @@ export default function App() {
         {route.name === 'payment-success' && <PaymentSuccessView nav={nav} />}
 
         {route.name === 'unit' && (current
-          ? <DetailView listing={current} nav={nav}
-              onPayDp={(l) => setDokuCheckout({ type: 'etalase', listing: l })} />
+          ? <DetailView listing={current} nav={nav} />
           : <section className="detail"><div className="container">
               <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
               <p style={{ color: 'var(--muted)' }}>Unit tidak ditemukan atau sudah tidak tayang.</p>
@@ -7426,12 +7099,9 @@ export default function App() {
       </footer>
 
       {authOpen && <AuthModal toast={toast} onClose={() => setAuthOpen(false)} onDone={() => setAuthOpen(false)} />}
-      {booking && <BookingModal listing={booking.listing} warranty={booking.warranty}
-        toast={toast} onClose={() => setBooking(null)} />}
 
       {dokuCheckout && <DokuCheckout type={dokuCheckout.type} listing={dokuCheckout.listing}
         profile={profile} onClose={() => setDokuCheckout(null)} />}
-      <WaHandoff show={waHandoff} />
 
       <div className={'toast' + (toastMsg ? ' show' : '')} role="status">{toastMsg}</div>
     </>
