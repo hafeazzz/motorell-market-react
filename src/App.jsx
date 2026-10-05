@@ -2755,11 +2755,11 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     }
     const batch = okSize.slice(0, remaining)
     const notes = []
-    if (skipped.length) notes.push('Dilewati — hanya JPG/PNG/WEBP maks ' + PHOTO_MAX_MB + 'MB: ' + skipped.join(', '))
+    if (skipped.length) notes.push('Dilewati — hanya JPG/PNG/WEBP/HEIC maks ' + PHOTO_MAX_MB + 'MB: ' + skipped.join(', '))
     if (okSize.length > remaining) {
       notes.push('Maksimal ' + MAX_PHOTOS + ' foto per unit — hanya ' + remaining + ' foto pertama yang diunggah.')
     }
-    if (notes.length) setErr(notes.join(' · '))
+    if (notes.length) { setErr(notes.join(' · ')); toast(notes[0].slice(0, 120)) }
     if (!batch.length) return
 
     if (!editing) {
@@ -2944,7 +2944,7 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
                       onClick={() => fileRef.current && fileRef.current.click()}>＋</button>
                   )}
                 </div>
-                <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif"
                   multiple hidden
                   onChange={(e) => { const fl = Array.from(e.target.files || []); e.target.value = ''; handleFiles(fl) }} />
                 {prog && (
@@ -2955,7 +2955,7 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
                 )}
                 {upMsg && <p className="f-info">{upMsg}</p>}
                 <p className="f-info">Foto pertama = sampul di etalase. Seret thumbnail untuk mengubah urutan,
-                  atau jatuhkan file gambar langsung ke area ini. JPG/PNG/WEBP, maks {PHOTO_MAX_MB}MB per foto.</p>
+                  atau jatuhkan file gambar langsung ke area ini. JPG/PNG/WEBP/HEIC, maks {PHOTO_MAX_MB}MB per foto asli (dikompres otomatis).</p>
               </div>
             </div>
             <div className="uf-right">
@@ -6039,7 +6039,7 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
     })
     const remaining = MAX_PHOTOS - photos.length
     const batch = ok.slice(0, remaining)
-    if (skipped.length) setErr('Dilewati (hanya JPG/PNG/WEBP maks ' + PHOTO_MAX_MB + 'MB): ' + skipped.join(', '))
+    if (skipped.length) setErr('Dilewati (hanya JPG/PNG/WEBP/HEIC maks ' + PHOTO_MAX_MB + 'MB): ' + skipped.join(', '))
     if (!batch.length) return
     setProg({ done: 0, total: batch.length })
     for (let i = 0; i < batch.length; i++) {
@@ -6195,7 +6195,7 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
                   onClick={() => fileRef.current && fileRef.current.click()}>＋</button>
               )}
             </div>
-            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif"
               multiple hidden
               onChange={(e) => { const fl = Array.from(e.target.files || []); e.target.value = ''; handleFiles(fl) }} />
             {prog && (
@@ -6204,7 +6204,7 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
                 <span className="mono">{prog.done}/{prog.total}</span>
               </div>
             )}
-            <p className="f-info">Foto jelas dari beberapa sudut membantu unitmu cepat laku. JPG/PNG/WEBP, maks {PHOTO_MAX_MB}MB per foto.</p>
+            <p className="f-info">Foto jelas dari beberapa sudut membantu unitmu cepat laku. JPG/PNG/WEBP/HEIC, maks {PHOTO_MAX_MB}MB per foto asli (dikompres otomatis).</p>
 
             {err && <p className="f-err">{err}</p>}
             <div className="m-actions">

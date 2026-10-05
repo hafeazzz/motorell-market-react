@@ -39,8 +39,10 @@ ok('dir leading slash dibersihkan', buildPhotoPath('/user/', 'a.jpg').startsWith
 console.log('\n--- validasi ---')
 await throws('tipe gif ditolak', async () => validatePhoto(file({ type: 'image/gif' })), 'invalid_type')
 await throws('tanpa file ditolak', async () => validatePhoto(null), 'invalid_type')
-await throws('>5MB ditolak', async () => validatePhoto(file({ size: 6 * 1024 * 1024 })), 'file_too_large')
-ok('5MB pas diterima', (() => { try { validatePhoto(file({ size: PHOTO_MAX_MB * 1024 * 1024 })); return true } catch { return false } })())
+await throws('file mentah melebihi batas ditolak', async () => validatePhoto(file({ size: (PHOTO_MAX_MB + 1) * 1024 * 1024 })), 'file_too_large')
+ok('foto HP 8MB (mentah) diterima — dikompres sebelum upload', (() => { try { validatePhoto(file({ size: 8 * 1024 * 1024 })); return true } catch { return false } })())
+ok('HEIC (iPhone) diterima sebagai input', (() => { try { validatePhoto(file({ type: 'image/heic' })); return true } catch { return false } })())
+ok('batas mentah pas diterima', (() => { try { validatePhoto(file({ size: PHOTO_MAX_MB * 1024 * 1024 })); return true } catch { return false } })())
 
 console.log('\n--- klasifikasi error ---')
 ok('bucket_not_found', classifyUploadError({ message: 'Bucket not found' }, 'titip-jual-photos').code === 'bucket_not_found')

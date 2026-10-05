@@ -15,8 +15,18 @@
 // mengembalikan { url, path } saat sukses.
 // ============================================================
 
-export const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-export const PHOTO_MAX_MB = 5   // batas ukuran file MENTAH per foto (checklist)
+// Tipe yang boleh DIPILIH. HEIC/HEIF (default kamera iPhone) ikut diterima karena
+// browser mendekodenya & compress() mengubahnya ke WebP/JPEG sebelum diunggah.
+export const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+// Tipe yang boleh TIBA di Storage (bucket dibatasi jpeg/png/webp, maks 5MB).
+export const STORED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+// Batas file MENTAH per foto. Sengaja jauh di atas 5MB: foto HP modern 5-12MB
+// dikompres dulu ke <=1600px (~0,2-0,6MB) sebelum diunggah, jadi yang relevan
+// untuk Storage adalah ukuran HASIL kompresi (PHOTO_STORED_MAX_MB), bukan file
+// aslinya. Dulu batas 5MB dipasang ke file asli -> foto HP ditolak diam-diam
+// (6 dipilih, 3 naik).
+export const PHOTO_MAX_MB = 40
+export const PHOTO_STORED_MAX_MB = 5
 
 // Nama file dibersihkan: buang path & karakter aneh, buang ekstensi (konten
 // selalu di-transcode ke JPEG). Menghasilkan bagian nama yang aman dipakai di
@@ -112,6 +122,16 @@ export async function uploadPhoto(file, { client, bucket, dir, compress } = {}) 
     full = out
     if (out.type === 'image/webp') { ext = 'webp'; type = 'image/webp' }
     else if (out.type === 'image/png') { ext = 'png'; type = 'image/png' }
+  }
+
+  // Pagar akhir: yang diunggah HARUS tipe & ukuran yang diterima bucket. Kalau
+  // kompresi gagal & file asli HEIC / terlalu besar, beri pesan jelas di sini
+  // daripada error mime/RLS yang membingungkan dari Storage.
+  if (!STORED_PHOTO_TYPES.includes(type) || (full && full.size > PHOTO_STORED_MAX_MB * 1024 * 1024)) {
+    throw Object.assign(
+      new Error('Foto "' + (file.name || '') + '" gagal dikompres di browser ini (' + type + ', ' +
+        ((full && full.size || 0) / 1048576).toFixed(1) + 'MB). Coba format JPG/PNG atau foto lain.'),
+      { code: 'file_too_large' })
   }
 
   const path = buildPhotoPath(dir, file.name, ext)
