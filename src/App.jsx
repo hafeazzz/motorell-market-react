@@ -250,15 +250,21 @@ function canvasCanWebp() {
 async function compressImage(file) {
   const webp = canvasCanWebp()
   let type = webp ? 'image/webp' : 'image/jpeg'
+  let bmp = null
   try {
-    const bmp = await createImageBitmap(file)
+    bmp = await createImageBitmap(file)
+    // iOS Safari membatasi total memori canvas (~256MB) & TIDAK melepasnya otomatis
+    // antar-foto: tanpa bmp.close() + canvas dikecilkan ke 0, foto ke-4 dst. gagal
+    // dikompres (admin kira "mentok 3 foto"). Karena itu semua canvas dilepas
+    // segera setelah toBlob selesai.
+    const release = (canvas) => { canvas.width = 0; canvas.height = 0 }
     const encode = (maxW, quality) => {
       const scale = Math.min(1, maxW / bmp.width)
       const canvas = document.createElement('canvas')
       canvas.width = Math.max(1, Math.round(bmp.width * scale))
       canvas.height = Math.max(1, Math.round(bmp.height * scale))
       canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
-      return new Promise((res) => canvas.toBlob(res, type, quality))
+      return new Promise((res) => canvas.toBlob((b) => { release(canvas); res(b) }, type, quality))
     }
     let full = await encode(1600, webp ? 0.80 : 0.82)
     // Jaga-jaga: kalau toBlob mengabaikan WebP & jatuh ke PNG (Safari lama yang
@@ -271,7 +277,7 @@ async function compressImage(file) {
         c.width = Math.max(1, Math.round(bmp.width * scale))
         c.height = Math.max(1, Math.round(bmp.height * scale))
         c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height)
-        c.toBlob(res, 'image/jpeg', 0.82)
+        c.toBlob((b) => { release(c); res(b) }, 'image/jpeg', 0.82)
       })
     }
     const thumb = await encode(640, type === 'image/webp' ? 0.70 : 0.72)
@@ -281,6 +287,8 @@ async function compressImage(file) {
   } catch {
     // Kompresi gagal → unggah file asli apa adanya (jangan blokir upload).
     return { full: file, thumb: null, ext: 'jpg', type: file.type || 'image/jpeg' }
+  } finally {
+    if (bmp && bmp.close) bmp.close()   // lepas memori bitmap (penting di iOS)
   }
 }
 
@@ -2771,6 +2779,11 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
     // dir = slug unit supaya foto tiap unit terkelompok. Progres per FILE SELESAI
     // (supabase-js v2 tak memancarkan progres byte Storage).
     setProg({ done: 0, total: batch.length })
+    // Satu foto gagal TIDAK lagi menghentikan sisanya (dulu `break` → admin
+    // memilih 6, 3 naik, sisanya batal diam-diam). Kegagalan dikumpulkan lalu
+    // dilaporkan sekaligus, termasuk lewat toast supaya tak tersembunyi.
+    const failed = []
+    let okCount = 0
     for (let i = 0; i < batch.length; i++) {
       setUpMsg('Mengunggah foto ' + (i + 1) + ' dari ' + batch.length + '…')
       try {
@@ -2778,12 +2791,18 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
           client: supabase, bucket: 'unit-photos', dir: slugRef.current, compress: compressImage,
         })
         setPhotos((p) => [...p, url])
-        setProg({ done: i + 1, total: batch.length })
+        okCount++
       } catch (ex) {
         // ex.message sudah pesan yang jelas & terklasifikasi dari helper.
-        setErr(ex.message || 'Gagal mengunggah foto.')
-        break
+        failed.push(batch[i].name + ': ' + (ex.message || 'gagal'))
+        // Kegagalan izin/sesi berlaku untuk SEMUA file → hentikan, jangan spam.
+        if (ex.code === 'auth_error') break
       }
+      setProg({ done: i + 1, total: batch.length })
+    }
+    if (failed.length) {
+      const msg = okCount + ' dari ' + batch.length + ' foto terunggah. Gagal: ' + failed.join(' · ')
+      setErr(msg); toast(msg.slice(0, 140))
     }
     setUpMsg('')
     setProg(null)
@@ -6042,6 +6061,8 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
     if (skipped.length) setErr('Dilewati (hanya JPG/PNG/WEBP/HEIC maks ' + PHOTO_MAX_MB + 'MB): ' + skipped.join(', '))
     if (!batch.length) return
     setProg({ done: 0, total: batch.length })
+    const failed = []
+    let okCount = 0
     for (let i = 0; i < batch.length; i++) {
       try {
         // Helper terpusat; bucket 'titip-jual-photos' (case-sensitive), dir =
@@ -6051,11 +6072,14 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
           client: supabase, bucket: 'titip-jual-photos', dir: session.user.id, compress: compressImage,
         })
         setPhotos((p) => [...p, url])
-        setProg({ done: i + 1, total: batch.length })
+        okCount++
       } catch (ex) {
-        setErr(ex.message || 'Gagal mengunggah foto.'); break
+        failed.push(batch[i].name + ': ' + (ex.message || 'gagal'))
+        if (ex.code === 'auth_error') break   // berlaku untuk semua file
       }
+      setProg({ done: i + 1, total: batch.length })
     }
+    if (failed.length) setErr(okCount + ' dari ' + batch.length + ' foto terunggah. Gagal: ' + failed.join(' · '))
     setProg(null)
   }
 
