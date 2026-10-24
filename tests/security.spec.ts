@@ -1,5 +1,5 @@
 // ============================================================
-// tests/security.spec.ts — 16 pemeriksaan keamanan MotorellMarket.
+// tests/security.spec.ts — 16 pemeriksaan keamanan MotorellGarage.
 //
 // Menjalankan:
 //   npm i -D @playwright/test && npx playwright install chromium

@@ -1,11 +1,11 @@
 // ============================================================
 // Edge Function: ops-sync
-// Menerima motor dari Motorell Ops dan membuat/memperbarui listing di etalase Market.
+// Menerima motor dari Motorell Ops dan membuat/memperbarui listing di etalase Garage.
 //   • Hanya permintaan bertanda tangan HMAC (OPS_SYNC_SECRET) yang diproses; cap waktu maks. 5 menit.
 //   • Foto diunduh dari penyimpanan Ops (hanya URL berawalan OPS_STORAGE_PREFIX, anti-SSRF) lalu diunggah ke bucket unit-photos.
 //   • Idempoten: kolom listings.ops_unit_id unik, kiriman ulang memperbarui listing yang sama.
 //
-// Deploy TANPA verifikasi JWT (Ops tidak mengirim JWT Market):
+// Deploy TANPA verifikasi JWT (Ops tidak mengirim JWT Garage):
 //   supabase functions deploy ops-sync --no-verify-jwt
 // Secrets (jangan commit, jangan pakai prefix VITE_):
 //   supabase secrets set OPS_SYNC_SECRET=<min 32 karakter> OPS_STORAGE_PREFIX=https://<ref-ops>.supabase.co/storage/v1/object/sign/photos/
@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     const title = `${v.brand} ${v.model} ${v.year}`.replace(/\s+/g, ' ').trim()
     const slug = existing?.slug ?? `${slugify(title) || 'unit'}-${Math.random().toString(36).slice(2, 6)}`
 
-    // Unduh foto dari Ops, unggah ke Market (path unik; foto lama dibiarkan agar tautan lama tidak patah).
+    // Unduh foto dari Ops, unggah ke Garage (path unik; foto lama dibiarkan agar tautan lama tidak patah).
     const urls: string[] = []
     for (let i = 0; i < v.photos.length; i++) {
       const res = await fetch(v.photos[i], { signal: AbortSignal.timeout(25_000) })

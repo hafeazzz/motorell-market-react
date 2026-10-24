@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# backup.sh — Backup logis (pg_dump) database Supabase MotorellMarket.
+# backup.sh — Backup logis (pg_dump) database Supabase MotorellGarage.
 #
 # Alur:
 #   pg_dump skema `public`  →  gzip  →  ENKRIPSI AES-256  →  unggah ke GitHub

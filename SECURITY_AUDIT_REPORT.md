@@ -1,4 +1,4 @@
-# Security Audit Report — MotorellMarket
+# Security Audit Report — MotorellGarage
 
 **Tanggal:** 2026-07-26 · **Stack:** Vite + React (SPA) · Vercel · Supabase
 **Cakupan:** Phase 1–5. **Metode:** pemeriksaan langsung + 16 test otomatis yang
@@ -9,7 +9,7 @@ jujur (SKIP), bukan dipalsukan.
 
 ## 1. Executive Summary
 
-MotorellMarket **layak diluncurkan dengan catatan ringan**. Kontrol keamanan inti
+MotorellGarage **layak diluncurkan dengan catatan ringan**. Kontrol keamanan inti
 terbukti bekerja: **RLS memblokir tulisan anonim** di semua tabel, **tak ada
 secret bocor** ke frontend, **header keamanan aktif di produksi**, dan input
 pengguna **di-escape** (aman dari XSS) serta query **parameterized** (aman dari

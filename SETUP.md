@@ -1,4 +1,4 @@
-# Backup Database Otomatis — MotorellMarket
+# Backup Database Otomatis — MotorellGarage
 
 Backup logis harian database Supabase (skema `public`: `listings`,
 `titip_jual_units`, `profiles`, `mod_parts`, dst) lewat GitHub Actions, disimpan

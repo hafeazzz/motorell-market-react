@@ -1,5 +1,5 @@
 // ============================================================
-// MOTORELL MARKET — src/App.jsx (single-file SPA)
+// MOTORELL GARAGE — src/App.jsx (single-file SPA)
 // Tema: showroom terang ala Porsche (putih, lapang, bersih)
 // Stack: React + Vite + Supabase (auth, DB, storage, realtime)
 // Booking DP: langsung ke WhatsApp CS (2026-09) — bukan gateway pembayaran.
@@ -365,7 +365,7 @@ function DokuCheckout({ type, listing, profile, onClose }) {
     <div className="overlay" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal">
         <div className="m-head">
-          <div><h3>{label}</h3><span className="sub">{listing?.title || 'Motorell Market'}</span></div>
+          <div><h3>{label}</h3><span className="sub">{listing?.title || 'Motorell Garage'}</span></div>
           <button className="m-close" onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="m-body">
@@ -697,7 +697,7 @@ function normalizeTitip(row) {
 // Kontak pembeli titip jual mengarah LANGSUNG ke nomor penjual (keputusan
 // bisnis), bukan CS Motorell.
 function sellerWaLink(l) {
-  const msg = 'Halo, saya lihat motor Anda di Motorell Market:\n' +
+  const msg = 'Halo, saya lihat motor Anda di Motorell Garage:\n' +
     'Unit: ' + l.title + '\n' +
     'Harga: ' + rupiah(l.price) + '\n\n' +
     'Apakah masih tersedia?'
@@ -764,7 +764,7 @@ const CSS = `
   --panel:#ffffff; --panel-2:#f6f6f4;
   --line:#e4e4e1; --line-2:#d4d4d0;
   --ink:#111114; --muted:#5c6067; --dim:#9a9ea6;
-  --accent:#1a2f5e; --accent-ink:#0f1d3d; --ok:#1f9d55; --warn:#b8791b;
+  --accent:#111114; --accent-ink:#000000; --ok:#1f9d55; --warn:#b8791b;
   --radius:12px;
   --font:'Archivo',system-ui,-apple-system,sans-serif;
   --mono:'IBM Plex Mono',monospace;
@@ -777,7 +777,7 @@ const CSS = `
   --panel:#171b24; --panel-2:#1f242f;
   --line:rgba(255,255,255,.13); --line-2:rgba(255,255,255,.24);
   --ink:#f4f6f9; --muted:#b6bece; --dim:#8b95a5;
-  --accent:#3b82f6; --accent-ink:#2563eb; --ok:#34d17e; --warn:#eab543;
+  --accent:#f4f6f9; --accent-ink:#ffffff; --ok:#34d17e; --warn:#eab543;
   --shadow:0 1px 2px rgba(0,0,0,.55),0 14px 40px rgba(0,0,0,.6);
   color-scheme:dark;
 }
@@ -792,6 +792,8 @@ body,.nav,.card,.card-body,.card-go,.panel,.fp,.modal,.overlay,section,input,sel
 [data-theme="dark"] .btn-ghost{background:transparent}
 /* .btn-dark = pil terang di dark mode (bg var(--ink) jadi nyaris putih) → teksnya
    HARUS gelap, kalau tidak putih-di-atas-putih (tak terbaca). */
+[data-theme="dark"] .btn-accent,[data-theme="dark"] .btn-admin:hover:not(:disabled),
+[data-theme="dark"] .et-filter-btn .n,[data-theme="dark"] .ph-main-tag{color:#0d0f14}
 [data-theme="dark"] .btn-dark{background:var(--ink);color:#0d0f14}
 [data-theme="dark"] .btn-dark:hover:not(:disabled){background:#ffffff;color:#0d0f14}
 /* Tombol ghost di hero dipaksa berlatar putih → di dark mode teksnya ikut gelap. */
@@ -1989,6 +1991,8 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .foot{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
 .foot-logo{display:flex;flex-direction:column;gap:4px}
 .foot .logo{font-size:24px}
+.foot-badge{width:150px;height:auto;display:block;margin-bottom:6px}
+[data-theme="dark"] .foot-badge{filter:invert(1)}
 .foot-est{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.16em;
   text-transform:uppercase;color:var(--dim)}
 .foot-links{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
@@ -2360,7 +2364,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .nav-search{position:static}
   .ns-pop{left:12px;right:12px}
 }
-/* layar sempit: sembunyikan label "MARKET" di logo supaya search bar & tombol
+/* layar sempit: sembunyikan label "GARAGE" di logo supaya search bar & tombol
    Masuk tetap muat tanpa memicu horizontal scroll di HP kecil (≤560px) */
 @media(max-width:560px){
   .logo small{display:none}
@@ -5310,7 +5314,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             <div className={'hero-copy' + (playIntro ? ' intro' : '')}>
               <motion.p className="kicker" {...reveal(0.05)}>
                 {featName && <span className="feat-dot" style={featAccent ? { background: featAccent } : undefined} aria-hidden="true" />}
-                {featName ? 'Unggulan minggu ini — ' + featName : 'Motorell Market — Showroom motor terkurasi'}
+                {featName ? 'Unggulan minggu ini — ' + featName : 'Motorell Garage — Showroom motor terkurasi'}
               </motion.p>
               <HeroHeading play={playIntro} />
               <motion.p {...reveal(0.66)}>{featured?.description
@@ -5337,7 +5341,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             <div className="sec-head">
               <div>
                 <p className="kicker">Etalase</p>
-                <h2>Etalase Motorell Market.</h2>
+                <h2>Etalase Motorell Garage.</h2>
               </div>
               <p className="aside">Klik unit untuk foto & detail lengkap. Geser tiap galeri
                 untuk melihat lebih banyak unit.</p>
@@ -5369,7 +5373,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             <div className="gal-cta">
               <div>
                 <h3>Punya Motor yang Ingin Dijual?</h3>
-                <p>Titip motor Anda di Motorell Market dan jangkau lebih banyak pembeli.</p>
+                <p>Titip motor Anda di Motorell Garage dan jangkau lebih banyak pembeli.</p>
               </div>
               <a className="btn btn-accent" href="#/titip-jual"
                 onClick={(e) => { e.preventDefault(); nav('#/titip-jual') }}>Titip Jual Sekarang</a>
@@ -5775,7 +5779,7 @@ function EtalaseView({ listings, nav, loading = false, error = '' }) {
             <p className="kicker">Etalase lengkap</p>
             <h1 className="etalase-page-title">Semua Unit.</h1>
           </div>
-          <p className="aside">Jelajahi seluruh koleksi Motorell Market beserta unit titipan
+          <p className="aside">Jelajahi seluruh koleksi Motorell Garage beserta unit titipan
             masyarakat. Cari di tiap galeri, saring, dan urutkan sesukamu.</p>
         </div>
 
@@ -6114,7 +6118,7 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
         <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
         <p className="kicker">Titip Jual</p>
         <h1 className="titip-h1">Titip Jual Motor Anda</h1>
-        <p className="titip-lead">Punya motor yang ingin dijual? Titipkan ke Motorell Market.
+        <p className="titip-lead">Punya motor yang ingin dijual? Titipkan ke Motorell Garage.
           Tim kami review dulu (1–2 hari kerja) sebelum unitmu tayang di etalase. Setelah tayang,
           calon pembeli menghubungimu langsung lewat WhatsApp.</p>
 
@@ -6898,7 +6902,7 @@ export default function App() {
       <header className={'nav' + (scrolled ? ' scrolled' : '')}>
         <div className="container nav-in">
           <a className="logo" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>
-            MOTORELL<i>●</i><small>MARKET</small>
+            MOTORELL<i>●</i><small>GARAGE</small>
           </a>
           <NavSearch
             value={query}
@@ -7060,7 +7064,7 @@ export default function App() {
         <div className="container">
           <div className="foot">
             <div className="foot-logo">
-              <span className="logo">MOTORELL<i>●</i></span>
+              <img className="foot-badge" src="/icons/garage-logo.png" alt="Motorell Garage" width="150" height="149" loading="lazy" />
               <span className="foot-est">Est. 2023</span>
             </div>
             <div className="foot-links">
