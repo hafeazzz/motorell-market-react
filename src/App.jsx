@@ -764,7 +764,7 @@ const CSS = `
   --panel:#ffffff; --panel-2:#f6f6f4;
   --line:#e4e4e1; --line-2:#d4d4d0;
   --ink:#111114; --muted:#5c6067; --dim:#9a9ea6;
-  --accent:#111114; --accent-ink:#000000; --ok:#1f9d55; --warn:#b8791b;
+  --accent:#1a2f5e; --accent-ink:#0f1d3d; --ok:#1f9d55; --warn:#b8791b;
   --radius:12px;
   --font:'Archivo',system-ui,-apple-system,sans-serif;
   --mono:'IBM Plex Mono',monospace;
@@ -777,7 +777,7 @@ const CSS = `
   --panel:#171b24; --panel-2:#1f242f;
   --line:rgba(255,255,255,.13); --line-2:rgba(255,255,255,.24);
   --ink:#f4f6f9; --muted:#b6bece; --dim:#8b95a5;
-  --accent:#f4f6f9; --accent-ink:#ffffff; --ok:#34d17e; --warn:#eab543;
+  --accent:#3b82f6; --accent-ink:#2563eb; --ok:#34d17e; --warn:#eab543;
   --shadow:0 1px 2px rgba(0,0,0,.55),0 14px 40px rgba(0,0,0,.6);
   color-scheme:dark;
 }
@@ -792,8 +792,6 @@ body,.nav,.card,.card-body,.card-go,.panel,.fp,.modal,.overlay,section,input,sel
 [data-theme="dark"] .btn-ghost{background:transparent}
 /* .btn-dark = pil terang di dark mode (bg var(--ink) jadi nyaris putih) → teksnya
    HARUS gelap, kalau tidak putih-di-atas-putih (tak terbaca). */
-[data-theme="dark"] .btn-accent,[data-theme="dark"] .btn-admin:hover:not(:disabled),
-[data-theme="dark"] .et-filter-btn .n,[data-theme="dark"] .ph-main-tag{color:#0d0f14}
 [data-theme="dark"] .btn-dark{background:var(--ink);color:#0d0f14}
 [data-theme="dark"] .btn-dark:hover:not(:disabled){background:#ffffff;color:#0d0f14}
 /* Tombol ghost di hero dipaksa berlatar putih → di dark mode teksnya ikut gelap. */
@@ -861,6 +859,8 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .logo{font-weight:800;font-size:19px;letter-spacing:.01em;display:flex;
   align-items:center;gap:8px}
 .logo i{font-style:normal;color:var(--accent);font-size:15px}
+.logo-img{height:30px;width:auto;display:block}
+[data-theme="dark"] .logo-img{filter:invert(1)}
 .logo small{font-family:var(--mono);font-weight:500;font-size:10px;
   letter-spacing:.22em;color:var(--dim)}
 .nav-actions{display:flex;align-items:center;gap:10px}
@@ -6902,7 +6902,7 @@ export default function App() {
       <header className={'nav' + (scrolled ? ' scrolled' : '')}>
         <div className="container nav-in">
           <a className="logo" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>
-            MOTORELL<i>●</i><small>GARAGE</small>
+            <img className="logo-img" src="/icons/motorell-wordmark.png" alt="Motorell" width="122" height="30" /><i>●</i><small>GARAGE</small>
           </a>
           <NavSearch
             value={query}
