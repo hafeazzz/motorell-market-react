@@ -455,6 +455,15 @@ function FadeImg({ className = '', fallbackSrc, src, ...props }) {
   )
 }
 
+// Thumbnail kecil (versi *.thumb.*) untuk daftar/pratinjau — hemat egress.
+// Foto lama tanpa thumb otomatis jatuh ke URL full lewat onError.
+function Thumb({ src, ...props }) {
+  const [bad, setBad] = useState(false)
+  useEffect(() => { setBad(false) }, [src])
+  return <img {...props} src={bad ? src : thumbKey(src)} loading="lazy" decoding="async"
+    onError={() => setBad(true)} />
+}
+
 // Foto section fitur: photoUrl selalu berupa string (bukan hasil ?. yang bisa
 // falsy), jadi fallback ke Blueprint di sini dicek lewat error load — bukan
 // lewat "apakah src ada" seperti pola foto unit biasa.
@@ -3587,7 +3596,7 @@ function TitipReview({ profile, toast, nav }) {
               <div className="a-row">
                 <div className="a-thumb">
                   {Array.isArray(r.photos) && r.photos[0]
-                    ? <img src={r.photos[0]} alt="" />
+                    ? <Thumb src={r.photos[0]} alt="" />
                     : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
                 </div>
                 <div className="a-info">
@@ -3627,7 +3636,7 @@ function TitipReview({ profile, toast, nav }) {
               {openId === r.id && (
                 <div className="titip-detail">
                   <div className="titip-detail-photos">
-                    {(r.photos || []).map((u, i) => <img key={i} src={u} alt={'Foto ' + (i + 1)} />)}
+                    {(r.photos || []).map((u, i) => <img key={i} src={u} alt={'Foto ' + (i + 1)} loading="lazy" decoding="async" />)}
                   </div>
                   <dl>
                     <div><dt>Penjual</dt><dd>{r.seller_name} · {r.seller_phone}{r.seller_email ? ' · ' + r.seller_email : ''}</dd></div>
@@ -4213,7 +4222,7 @@ function AdminPanel({ profile, toast, nav }) {
                   <div className="a-row" key={l.id}>
                     <div className="a-thumb">
                       {Array.isArray(l.photos) && l.photos[0]
-                        ? <img src={l.photos[0]} alt="" />
+                        ? <Thumb src={l.photos[0]} alt="" />
                         : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
                     </div>
                     <div className="a-info">
@@ -4266,7 +4275,7 @@ function AdminPanel({ profile, toast, nav }) {
                   <div className="a-row" key={l.id}>
                     <div className="a-thumb">
                       {Array.isArray(l.photos) && l.photos[0]
-                        ? <img src={l.photos[0]} alt="" />
+                        ? <Thumb src={l.photos[0]} alt="" />
                         : <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>NO FOTO</span>}
                     </div>
                     <div className="a-info">
@@ -5634,7 +5643,7 @@ function NavSearch({ value, onChange, onSubmit, results = [], total = 0, filters
                   onMouseEnter={() => setCur(i)}
                   onClick={() => { setOpen(false); onPick(l) }}>
                   {l.photos?.[0]
-                    ? <img src={l.photos[0]} alt="" loading="lazy" />
+                    ? <Thumb src={l.photos[0]} alt="" />
                     : <span className="ns-thumb-empty" />}
                   <span className="ns-body">
                     <b>

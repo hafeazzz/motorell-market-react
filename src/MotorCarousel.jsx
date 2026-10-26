@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Blueprint from './Blueprint'
+import { thumbKey } from './photoUpload'
 
 // ============================================================
 // MotorCarousel — putar unit 360°, dan lihat part modifikasi terpasang.
@@ -211,16 +212,20 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
   const [loaded, setLoaded] = useState(0)
   const [lightbox, setLightbox] = useState(false)
 
-  // ---- preload: semua frame dimuat di depan, supaya memutar tidak nge-lag
-  // menunggu gambar berikutnya ter-fetch di tengah gesture ----
+  // ---- preload ----
+  // Desktop: semua frame dimuat di depan (auto-rotate mulus).
+  // HP/layar sentuh (hemat egress & kuota pengunjung): hanya foto 1 + tetangganya
+  // dimuat di depan; sisanya dimuat saat pengunjung berpindah (lihat efek di bawah).
+  const lazyMode = coarse()
   useEffect(() => {
     setLoaded(0)
     setI(0)
     if (!n) return
     let alive = true
     let done = 0
+    const target = lazyMode ? photos.filter((_, k) => k === 0 || k === 1 || k === n - 1) : photos
     const bump = () => { done++; if (alive) setLoaded(done) }
-    const imgs = photos.map((src) => {
+    const imgs = target.map((src) => {
       const im = new Image()
       im.onload = bump
       im.onerror = bump // gambar rusak tidak boleh menggantung skeleton selamanya
@@ -233,7 +238,13 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
     }
   }, [photos, n])
 
-  const allReady = n > 0 && loaded >= n
+  const allReady = n > 0 && (lazyMode ? loaded >= 1 : loaded >= n)
+
+  // Mode hemat: muat tetangga foto yang sedang tampil (di-cache browser)
+  useEffect(() => {
+    if (!lazyMode || !n) return
+    ;[mod(i + 1, n), mod(i - 1, n)].forEach((k) => { const im = new Image(); im.src = photos[k] })
+  }, [lazyMode, i, n, photos])
 
   // ---- auto-rotate: jalan sendiri sekali foto siap, berhenti begitu user
   // menyentuh apa pun (dia sudah pegang kendali — jangan direbut) ----
@@ -357,7 +368,8 @@ function MotorCarousel({ photos = [], title = '', selectedModParts = [] }) {
           {photos.map((url, k) => (
             <button key={url + '-' + k} type="button" className={k === i ? 'on' : ''}
               onClick={() => { stopAuto(); setI(k) }} aria-label={'Foto ' + (k + 1)}>
-              <img src={url} alt="" loading="lazy" />
+              <img src={thumbKey(url)} alt="" loading="lazy" decoding="async"
+                onError={(e) => { if (e.currentTarget.src !== url) e.currentTarget.src = url }} />
             </button>
           ))}
         </div>
