@@ -767,7 +767,7 @@ const CSS = `
   --accent:#1a2f5e; --accent-ink:#0f1d3d; --ok:#1f9d55; --warn:#b8791b;
   --radius:12px;
   --font:'Archivo',system-ui,-apple-system,sans-serif;
-  --mono:'IBM Plex Mono',monospace;
+  --mono:'Newsreader',Georgia,'Times New Roman',serif; --code:'IBM Plex Mono',monospace;
   --shadow:0 1px 2px rgba(17,17,20,.04),0 8px 30px rgba(17,17,20,.06);
   color-scheme:light;
 }
@@ -1000,7 +1000,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .foot-credit a:hover{color:var(--accent)}
 /* Ukuran diturunkan dari clamp(46px,6.4vw,86px): di ukuran lama "anti was-was."
    pecah di tanda hubung jadi "ANTI WAS-" / "WAS." — baris yatim yang jelek. */
-.hero-copy h1{font-size:clamp(34px,5.2vw,64px);font-weight:750;line-height:1.06;
+.hero-copy h1{font-size:clamp(44px,7vw,92px);font-weight:750;line-height:1.02;
   letter-spacing:-.02em;margin:22px 0 22px}
 /* nowrap di SEMUA ukuran: "anti was-was." tidak boleh pecah di tanda hubung
    (yang menyisakan baris yatim "WAS."). Ukuran minimum clamp sengaja 34px
@@ -1724,7 +1724,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .admin-diag dl > div{display:flex;gap:10px;font-size:13.5px}
 .admin-diag dt{flex:none;width:120px;color:var(--muted)}
 .admin-diag dd{word-break:break-all}
-.admin-diag .mono{font-family:var(--mono);font-size:12.5px}
+.admin-diag .mono{font-family:var(--code);font-size:12.5px}
 .admin-diag-hint{font-size:13.5px;line-height:1.6;color:var(--ink);margin-bottom:14px}
 .a-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
   flex-wrap:wrap;margin-bottom:28px}
@@ -2052,7 +2052,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .cfg div{max-width:520px;border:1px solid var(--line);border-radius:14px;padding:32px;
   background:var(--panel);font-size:14.5px;line-height:1.65;color:var(--muted);box-shadow:var(--shadow)}
 .cfg b{color:var(--ink)}
-.cfg code{font-family:var(--mono);font-size:12.5px;color:var(--accent)}
+.cfg code{font-family:var(--code);font-size:12.5px;color:var(--accent)}
 
 /* ---------- Tugas 4: search bar di header (typewriter placeholder) ---------- */
 .nav-search{flex:1 1 auto;min-width:0;max-width:360px;position:relative;
@@ -2364,13 +2364,20 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .nav-search{position:static}
   .ns-pop{left:12px;right:12px}
 }
-/* layar sempit: sembunyikan label "GARAGE" di logo supaya search bar & tombol
-   Masuk tetap muat tanpa memicu horizontal scroll di HP kecil (≤560px) */
+/* layar sempit: label "GARAGE" TIDAK disembunyikan lagi — logo dikecilkan
+   supaya search bar & tombol Masuk tetap muat tanpa horizontal scroll (≤560px) */
 @media(max-width:560px){
-  .logo small{display:none}
+  .logo{gap:5px;flex-shrink:0;white-space:nowrap}
+  .logo-img{height:24px}
+  .logo small{font-size:8.5px;letter-spacing:.14em}
   .nav-search{margin:0 10px}
   /* Lokasi kini di dalam menu dropdown dengan label penuh — jadi TIDAK lagi
      dijadikan ikon saja seperti dulu (nav sudah lega berkat hamburger). */
+}
+@media(max-width:380px){
+  .logo i{display:none}
+  .logo small{letter-spacing:.08em}
+  .logo-img{height:22px}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -2526,9 +2533,11 @@ function HeroHeading({ play }) {
   }
   return (
     <h1>
-      {word('Lebih')} {word('dari')} {word('motor')} {word('bekas.')}
+      {word('Classic')}
       <br />
-      {word('Kualitas')} {word('anti was-was.', true)}
+      {word('Classy')}
+      <br />
+      {word('Curated.', true)}
     </h1>
   )
 }
