@@ -143,13 +143,6 @@ const STATUS_LABEL = {
   draft: 'Draft', published: 'Tayang', booked: 'Di-booking', sold: 'Terjual', delisted: 'Arsip',
 }
 
-// Definisi grade lengkap — tampil sebagai kartu penjelasan di section kurasi.
-const GRADE_DEF = [
-  { g: 'S', text: 'Tidak berpatokan pada kilometer rendah, tapi meliputi seluruh kelayakan mesin, tampilan, dan suku cadang dalam kondisi prima — nyaris tidak ada minus.' },
-  { g: 'A', text: 'Unit siap pakai, terawat sesuai umur, tanpa masalah yang berarti.' },
-  { g: 'B', text: 'Minus ringan tercatat jujur dan tetap layak untuk digunakan sehari-hari.' },
-]
-
 // ---------- Section fitur "Kenapa Motorell" ----------
 // Foto tetap (bukan foto unit yang berganti-ganti) diunggah manual ke bucket
 // unit-photos/features/ di Supabase Storage — jadi tiap section punya foto
@@ -160,13 +153,13 @@ const FEATURE_SECTIONS = [
   {
     kicker: 'Kurasi jujur',
     title: 'Minus pun ditulis apa adanya.',
-    text: 'Setiap unit diperiksa mekanik sebelum boleh tayang — mesin, rangka, kelistrikan, dokumen, sampai uji jalan. Catatan kurasinya kamu baca sendiri di halaman unit, bukan disembunyikan.',
+    text: 'Setiap unit diperiksa mekanik sebelum boleh tayang — mesin, rangka, kelistrikan, dokumen, sampai uji jalan.',
     photoUrl: STORAGE_BASE + '/minus-pun.jpeg',
   },
   {
     kicker: 'Perlindungan',
     title: 'Garansi mesin.',
-    text: 'Setiap unit resmi Motorell dijamin garansi mesin sejak serah terima. Cakupan & durasinya dijelaskan langsung oleh tim kami — semua tertulis, bukan janji lisan.',
+    text: 'Setiap unit resmi Motorell dijamin garansi mesin selama 7 hari sejak serah terima.',
     photoUrl: STORAGE_BASE + '/garansi-mesin.jpeg',
   },
   {
@@ -182,9 +175,9 @@ const FEATURE_SECTIONS = [
 // paragraf terakhir (bukan disambung ke paragraf sebelumnya) supaya tetap
 // terbaca sebagai penutup, sesuai naskah aslinya.
 const ABOUT_STORY = [
-  'Motorell bukan lahir dari modal besar atau showroom mewah. Semua berawal pada tahun 2023, ketika pendirinya masih duduk di bangku Kelas 1 SMA. Berbekal ketertarikan pada dunia otomotif dan keinginan untuk membangun sesuatu sejak usia muda, perjalanan ini dimulai dari jual beli motor bekas secara sederhana.',
+  'Semua berawal pada tahun 2023, ketika pendirinya masih duduk di bangku Kelas 1 SMA. Berbekal ketertarikan pada dunia otomotif dan keinginan untuk membangun sesuatu sejak usia muda, perjalanan ini dimulai dari jual beli motor bekas secara sederhana.',
   'Di setiap transaksi, ada satu prinsip yang selalu dijaga: kejujuran. Kami percaya motor bekas tidak seharusnya dijual dengan cerita yang disembunyikan. Riwayat kendaraan, kondisi mesin, hingga kekurangan yang ada harus disampaikan apa adanya. Dari situlah kepercayaan pelanggan mulai tumbuh, satu unit demi satu unit.',
-  'Seiring waktu, Motorell berkembang dari aktivitas jual beli kecil menjadi sebuah perusahaan yang memiliki standar inspeksi, dokumentasi, serta proses penjualan yang mengutamakan transparansi. Apa yang awalnya dikerjakan sendiri kini berkembang bersama sebuah tim dengan satu visi yang sama: menghadirkan pengalaman membeli motor bekas yang aman, jelas, dan dapat dipercaya.',
+  'Seiring waktu, Motorell berkembang dari aktivitas jual beli kecil menjadi sebuah showroom yang memiliki standar inspeksi, dokumentasi, serta proses penjualan yang mengutamakan transparansi. Apa yang awalnya dikerjakan sendiri kini berkembang bersama sebuah tim dengan satu visi yang sama: menghadirkan pengalaman membeli motor bekas yang aman, jelas, dan dapat dipercaya.',
   'Hari ini, meski perjalanan masih panjang, semangatnya tetap tidak berubah. Motorell dibangun bukan hanya untuk menjual motor, tetapi untuk membuktikan bahwa usia bukanlah batas untuk membangun bisnis yang profesional. Setiap motor yang kami jual bukan sekadar membawa kendaraan, melainkan tentang membawa kepercayaan yang telah kami bangun sejak langkah pertama di bangku SMA.',
   'Karena bagi kami, reputasi selalu lebih berharga daripada satu kali penjualan.',
 ]
@@ -505,8 +498,6 @@ function parseQuery(raw) {
   // batas harga bawah: "di atas 20 juta", "min 20jt", "> 20 juta"
   s = s.replace(/(?:di\s?atas|diatas|lebih dari|min(?:imal)?|>=?)\s*(\d[\d.,]*)\s*(juta|jt)?/g,
     (_, n, u) => { const v = parseAmount(n, u); if (v) f.priceMin = v; return ' ' })
-  // grade: "grade a" / "grade-s"
-  s = s.replace(/grade[\s-]*([sab])\b/g, (_, g) => { f.grade = g.toUpperCase(); return ' ' })
   // tahun: 4 digit yang masuk akal untuk motor
   s = s.replace(/\b(19[89]\d|20[0-4]\d)\b/g, (_, y) => { f.year = Number(y); return ' ' })
   // "20 juta" telanjang (tanpa kata di bawah/di atas) diperlakukan sebagai plafon —
@@ -621,8 +612,7 @@ function facetsOf(listings) {
   // varian huruf jadi chip sendiri — dan memilih salah satunya menyembunyikan
   // unit dari varian lain.
   const brands = dedupeBrands(collectBrands(listings, 'brand'))
-  const grades = [...new Set(listings.map((l) => String(l.grade || '').toUpperCase()).filter(Boolean))]
-    .sort()
+  const grades = []   // sistem grade dihapus: filter Kondisi tidak muncul
   // Slider butuh rentang yang tidak nol-lebar walau etalase cuma berisi 1 unit.
   const lo = prices.length ? Math.min(...prices) : 0
   const hi = prices.length ? Math.max(...prices) : 100_000_000
@@ -775,8 +765,8 @@ const CSS = `
   --ink:#111114; --muted:#5c6067; --dim:#9a9ea6;
   --accent:#1a2f5e; --accent-ink:#0f1d3d; --ok:#1f9d55; --warn:#b8791b;
   --radius:12px;
-  --font:'Archivo',system-ui,-apple-system,sans-serif;
-  --mono:'Newsreader',Georgia,'Times New Roman',serif; --code:'IBM Plex Mono',monospace;
+  --font:'Jost',system-ui,-apple-system,sans-serif;
+  --mono:'Jost',system-ui,-apple-system,sans-serif; --code:'IBM Plex Mono',monospace;
   --shadow:0 1px 2px rgba(17,17,20,.04),0 8px 30px rgba(17,17,20,.06);
   color-scheme:light;
 }
@@ -865,12 +855,12 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   border-color:var(--line)}
 .nav-in{position:relative;display:flex;align-items:center;justify-content:space-between;
   padding-block:calc(16px + env(safe-area-inset-top)) 16px}
-.logo{font-weight:800;font-size:19px;letter-spacing:.01em;display:flex;
+.logo{font-weight:500;font-size:19px;letter-spacing:.01em;display:flex;
   align-items:center;gap:8px}
 .logo i{font-style:normal;color:var(--accent);font-size:15px}
 .logo-img{height:30px;width:auto;display:block}
 [data-theme="dark"] .logo-img{filter:invert(1)}
-.logo small{font-family:var(--mono);font-weight:500;font-size:10px;
+.logo small{position:relative;top:4px;font-family:var(--mono);font-weight:500;font-size:10px;
   letter-spacing:.22em;color:var(--dim)}
 .nav-actions{display:flex;align-items:center;gap:10px}
 .nav-links{display:flex;align-items:center;gap:10px}
@@ -1009,7 +999,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .foot-credit a:hover{color:var(--accent)}
 /* Ukuran diturunkan dari clamp(46px,6.4vw,86px): di ukuran lama "anti was-was."
    pecah di tanda hubung jadi "ANTI WAS-" / "WAS." — baris yatim yang jelek. */
-.hero-copy h1{font-size:clamp(44px,7vw,92px);font-weight:750;line-height:1.02;
+.hero-copy h1{font-size:clamp(44px,7vw,92px);font-weight:500;line-height:1.02;
   letter-spacing:-.02em;margin:22px 0 22px}
 /* nowrap di SEMUA ukuran: "anti was-was." tidak boleh pecah di tanda hubung
    (yang menyisakan baris yatim "WAS."). Ukuran minimum clamp sengaja 34px
@@ -1057,7 +1047,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   margin-top:28px;padding-top:22px;border-top:1px solid var(--line-2);max-width:100%}
 .spec-rail span{display:flex;flex-direction:column;gap:7px;font-family:var(--mono);
   font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.spec-rail b{color:var(--ink);font-size:clamp(19px,5vw,29px);font-weight:750;
+.spec-rail b{color:var(--ink);font-size:clamp(19px,5vw,29px);font-weight:500;
   letter-spacing:-.02em;line-height:1;font-family:var(--font);white-space:nowrap}
 
 /* ---------- section ---------- */
@@ -1072,7 +1062,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .section.grey{background:var(--bg-2);border-block:1px solid var(--line)}
 .sec-head{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:26px;
   margin-bottom:clamp(30px,4vw,46px)}
-.sec-head h2{font-size:clamp(30px,4vw,50px);font-weight:740;letter-spacing:-.025em;
+.sec-head h2{font-size:clamp(30px,4vw,50px);font-weight:500;letter-spacing:-.025em;
   line-height:1.02;margin-top:13px}
 .sec-head .aside{max-width:330px;font-size:14.5px;color:var(--muted);line-height:1.55}
 
@@ -1135,7 +1125,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .card-body{padding:19px 19px 17px;display:flex;flex-direction:column;gap:6px}
 .card-body h3{font-size:17.5px;font-weight:680;letter-spacing:-.01em}
 .card-meta{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
-.card-price{font-size:18px;font-weight:750;margin-top:9px;letter-spacing:-.01em}
+.card-price{font-size:18px;font-weight:500;margin-top:9px;letter-spacing:-.01em}
 .card-go{position:relative;border-top:1px solid var(--line);padding:14px 19px;font-size:13.5px;
   font-weight:600;color:var(--muted);display:flex;justify-content:space-between;
   transition:color .2s}
@@ -1158,7 +1148,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .card-hit:focus-visible{outline-offset:-3px}
 .badge,.card-status{pointer-events:none}
 .card-status{position:absolute;top:13px;left:13px;z-index:4;font-family:var(--mono);
-  font-size:10px;font-weight:700;letter-spacing:.07em;padding:6px 10px;border-radius:999px;
+  font-size:10px;font-weight:600;letter-spacing:.07em;padding:6px 10px;border-radius:999px;
   text-transform:uppercase;color:#fff;box-shadow:0 2px 8px rgba(17,17,20,.22)}
 .card-status.st-new{background:#c62828}
 .card-status.st-booked{background:#b85a0f}
@@ -1169,7 +1159,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    Badge grade kini mengikuti aturan yang sama. */
 .card-wa{position:absolute;right:12px;bottom:12px;z-index:5;display:inline-flex;
   align-items:center;gap:7px;padding:9px 14px;border-radius:999px;
-  background:#25D366;color:#fff;font-size:12.5px;font-weight:700;letter-spacing:.01em;
+  background:#25D366;color:#fff;font-size:12.5px;font-weight:600;letter-spacing:.01em;
   box-shadow:0 3px 12px rgba(37,211,102,.42);
   transition:transform .18s ease,box-shadow .18s ease}
 .card-wa:hover{transform:scale(1.08);box-shadow:0 5px 18px rgba(37,211,102,.55)}
@@ -1180,7 +1170,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .et-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;
   flex-wrap:wrap;margin-bottom:18px}
 .et-count{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--muted)}
-.et-count b{color:var(--ink);font-weight:700}
+.et-count b{color:var(--ink);font-weight:600}
 .et-tools{display:flex;align-items:center;gap:10px}
 .et-sort{appearance:none;border:1px solid var(--line-2);background:var(--panel);
   border-radius:999px;padding:10px 34px 10px 15px;font-size:13px;font-weight:600;
@@ -1198,7 +1188,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* ---------- galeri carousel (Motorell & Titip Jual, IDENTIK) ---------- */
 .gal{margin-bottom:clamp(30px,4vw,44px)}
 .gal-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:15px}
-.gal-title{font-size:clamp(19px,2.6vw,26px);font-weight:730;letter-spacing:-.02em}
+.gal-title{font-size:clamp(19px,2.6vw,26px);font-weight:500;letter-spacing:-.02em}
 .gal-sub{font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--muted);margin-top:5px}
 .gal-arrows{display:none;gap:8px;flex:none}
 .gal-arrows button{width:38px;height:38px;border-radius:50%;border:1px solid var(--line-2);
@@ -1290,7 +1280,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 
 /* ---------- halaman etalase lengkap ---------- */
 .etalase-page{padding-top:clamp(88px,12vw,116px)}
-.etalase-page-title{font-size:clamp(28px,5vw,46px);font-weight:760;letter-spacing:-.03em;margin-top:8px}
+.etalase-page-title{font-size:clamp(28px,5vw,46px);font-weight:500;letter-spacing:-.03em;margin-top:8px}
 .et-tabs{display:inline-flex;gap:4px;background:var(--panel);border:1px solid var(--line-2);
   border-radius:999px;padding:4px}
 .et-tab{border:none;background:transparent;border-radius:999px;padding:8px 15px;font-size:13px;
@@ -1369,7 +1359,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .gal-cta{display:flex;flex-direction:column;gap:15px;align-items:flex-start;
   border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,34px);
   background:var(--panel-2);margin:clamp(6px,1.5vw,16px) 0 clamp(30px,4vw,44px)}
-.gal-cta h3{font-size:clamp(20px,3vw,30px);font-weight:730;letter-spacing:-.02em;margin-bottom:7px}
+.gal-cta h3{font-size:clamp(20px,3vw,30px);font-weight:500;letter-spacing:-.02em;margin-bottom:7px}
 .gal-cta p{color:var(--muted);font-size:14.5px;line-height:1.55;max-width:520px}
 @media(min-width:640px){
   .gal-cta{flex-direction:row;align-items:center;justify-content:space-between;gap:28px}
@@ -1440,7 +1430,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .recent{margin-bottom:clamp(34px,5vw,52px)}
 .recent-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
   margin-bottom:16px}
-.recent-head h3{font-size:clamp(15px,2.2vw,18px);font-weight:700;letter-spacing:-.01em}
+.recent-head h3{font-size:clamp(15px,2.2vw,18px);font-weight:600;letter-spacing:-.01em}
 .recent-clear{font-size:12px;font-weight:600;color:var(--muted);text-decoration:underline;
   text-underline-offset:3px}
 /* Carousel scroll horizontal — snap supaya berhenti rapi di tiap kartu. */
@@ -1460,7 +1450,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .rcard-body{padding:10px 11px 12px;display:flex;flex-direction:column;gap:3px}
 .rcard-body b{font-size:12.5px;font-weight:650;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.rcard-body span{font-size:12px;font-weight:700;color:var(--accent)}
+.rcard-body span{font-size:12px;font-weight:600;color:var(--accent)}
 
 /* ---------- feature editorial (foto besar + teks berselang-seling) ---------- */
 .reveal{opacity:0;transform:translateY(28px);
@@ -1509,7 +1499,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .sticky-cta-price{display:flex;flex-direction:column;line-height:1.2;flex:none}
 .sticky-cta-price span{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;
   color:var(--muted);text-transform:uppercase}
-.sticky-cta-price b{font-size:13.5px;font-weight:760;white-space:nowrap;letter-spacing:-.01em}
+.sticky-cta-price b{font-size:13.5px;font-weight:500;white-space:nowrap;letter-spacing:-.01em}
 .sticky-cta .btn{flex:1;white-space:nowrap;min-height:46px;font-size:13px;padding:12px 14px}
 /* tombol besar di panel disembunyikan kalau sticky bar kembar sudah tampil,
    supaya tidak ada dua CTA identik terlihat berbarengan di layar sempit */
@@ -1552,7 +1542,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.25);color:#fff}
 /* Indikator level zoom (muncul saat diperbesar). */
 .lb-zoom{position:absolute;top:16px;left:16px;z-index:4;font-family:var(--mono);font-size:12px;
-  font-weight:700;letter-spacing:.04em;color:#fff;background:rgba(0,0,0,.55);
+  font-weight:600;letter-spacing:.04em;color:#fff;background:rgba(0,0,0,.55);
   padding:6px 11px;border-radius:999px;pointer-events:none}
 .lb-close{position:absolute;top:16px;right:16px;z-index:4;width:44px;height:44px;border-radius:50%;
   border:1.5px solid rgba(255,255,255,.4);color:#fff;font-size:16px;
@@ -1592,16 +1582,17 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .dtab-body .muted{color:var(--muted)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
   padding:28px;position:static;top:98px;box-shadow:var(--shadow)}
-.panel h1{font-size:clamp(25px,2.6vw,33px);font-weight:760;letter-spacing:-.02em;line-height:1.06}
-.panel .price{font-size:26px;font-weight:780;margin:11px 0 22px;letter-spacing:-.02em}
+.panel h1{font-size:clamp(25px,2.6vw,33px);font-weight:500;letter-spacing:-.02em;line-height:1.06}
+.panel .price{font-size:26px;font-weight:500;margin:11px 0 22px;letter-spacing:-.02em}
 .specs{display:grid;grid-template-columns:repeat(2,1fr);border:1px solid var(--line);
   border-radius:11px;overflow:hidden;margin-bottom:26px}
 .specs div{padding:13px 10px;border-right:1px solid var(--line);text-align:center}
 .specs div:last-child{border-right:none}
 .specs div:nth-child(2){border-right:none}
+.specs div:last-child:nth-child(odd){grid-column:1/-1}
 .specs small{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
   color:var(--dim);text-transform:uppercase;margin-bottom:6px}
-.specs b{font-size:14px;font-weight:700;white-space:nowrap}
+.specs b{font-size:14px;font-weight:600;white-space:nowrap}
 .w-title{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;
   color:var(--muted);margin-bottom:12px}
 .w-opts{display:flex;flex-direction:column;gap:9px;margin-bottom:24px}
@@ -1624,7 +1615,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .row span small{display:block;font-size:11px;color:var(--dim)}
 .row b{font-weight:680;white-space:nowrap;flex:none}
 .row.hl{background:var(--panel-2)}
-.row.hl b{color:var(--accent);font-size:16px;font-weight:760}
+.row.hl b{color:var(--accent);font-size:16px;font-weight:500}
 .fine{font-size:12px;color:var(--dim);line-height:1.58;margin-top:15px}
 .stnote{margin-bottom:17px;font-family:var(--mono);font-size:12px;padding:11px 14px;
   border-radius:9px;border:1px solid var(--line-2)}
@@ -1644,7 +1635,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .m-head{display:flex;justify-content:space-between;align-items:center;gap:12px;
   padding:19px 20px;border-bottom:1px solid var(--line);
   position:sticky;top:0;background:var(--panel);z-index:2}
-.m-head h3{font-size:16px;font-weight:700}
+.m-head h3{font-size:16px;font-weight:600}
 .m-head .sub{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
 .m-close{width:42px;height:42px;border-radius:50%;border:1.5px solid var(--line-2);
   font-size:15px;line-height:1;flex:none;transition:border-color .2s,color .2s}
@@ -1665,7 +1656,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .qr-tile{background:#fff;border:1px solid var(--line);border-radius:13px;padding:15px;
   width:fit-content;margin:0 auto 14px}
 .qr-tile img{width:220px;height:220px}
-.qr-amount{font-size:22px;font-weight:780;text-align:center;letter-spacing:-.02em}
+.qr-amount{font-size:22px;font-weight:500;text-align:center;letter-spacing:-.02em}
 .qr-timer{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-align:center;margin-top:6px}
 .qr-timer b{color:var(--accent)}
 .waiting{display:flex;align-items:center;justify-content:center;gap:9px;margin:15px 0 6px;
@@ -1690,7 +1681,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:48;stroke-dashoffset:48;
   animation:draw .5s .15s forwards}
 @keyframes draw{to{stroke-dashoffset:0}}
-.ok-title{text-align:center;font-size:18px;font-weight:700;margin-bottom:4px}
+.ok-title{text-align:center;font-size:18px;font-weight:600;margin-bottom:4px}
 .ok-sub{text-align:center;font-size:13px;color:var(--muted);margin-bottom:16px}
 .chip-ok{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ok);
   background:rgba(31,157,85,.1);padding:4px 10px;border-radius:999px}
@@ -1737,7 +1728,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .admin-diag-hint{font-size:13.5px;line-height:1.6;color:var(--ink);margin-bottom:14px}
 .a-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
   flex-wrap:wrap;margin-bottom:28px}
-.a-head h1{font-size:clamp(27px,3.4vw,40px);font-weight:750;letter-spacing:-.025em}
+.a-head h1{font-size:clamp(27px,3.4vw,40px);font-weight:500;letter-spacing:-.025em}
 /* width:fit-content memaksa pil ini selebar isinya dan menolak menyusut: empat
    tab butuh ~387px, jadi di layar 375px ia meluber dan MELEBARKAN SELURUH
    DOKUMEN (navbar ikut salah lebar, muncul scroll horizontal di semua halaman
@@ -1762,9 +1753,9 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   display:flex;align-items:center;justify-content:center}
 .a-thumb img{width:100%;height:100%;object-fit:cover}
 .a-info{flex:1;min-width:180px}
-.a-info b{display:block;font-size:15px;font-weight:700}
+.a-info b{display:block;font-size:15px;font-weight:600}
 .a-info span{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
-.a-price{font-size:15px;font-weight:750}
+.a-price{font-size:15px;font-weight:500}
 .st{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.06em;
   padding:5px 11px;border-radius:999px;border:1px solid var(--line-2)}
 .st.published,.st.approved{color:var(--ok);border-color:rgba(31,157,85,.32);background:rgba(31,157,85,.06)}
@@ -1779,7 +1770,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* ---------- featured motor panel ---------- */
 .feat-panel .feat-form{border:1px solid var(--line);border-radius:14px;padding:20px 22px;
   background:var(--panel-2);margin-bottom:20px}
-.feat-panel .feat-form h3,.feat-h{font-size:16px;font-weight:750;margin-bottom:14px;color:var(--ink)}
+.feat-panel .feat-form h3,.feat-h{font-size:16px;font-weight:500;margin-bottom:14px;color:var(--ink)}
 .feat-h{margin:26px 0 14px}
 .feat-grid{gap:14px}
 @media(min-width:620px){ .feat-grid{grid-template-columns:1fr 1fr} }
@@ -1799,7 +1790,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .feat-accent-dot{position:absolute;top:10px;right:10px;width:16px;height:16px;border-radius:50%;
   border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .feat-card-body{padding:12px 14px 4px;display:flex;flex-direction:column;gap:3px}
-.feat-card-body b{font-size:14.5px;font-weight:700;color:var(--ink)}
+.feat-card-body b{font-size:14.5px;font-weight:600;color:var(--ink)}
 .feat-meta{font-family:var(--mono);font-size:11px;color:var(--dim)}
 .feat-card-actions{display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px}
 .feat-card-actions .btn{flex:1 1 auto}
@@ -1808,7 +1799,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
   border-radius:11px;padding:12px 14px;background:var(--panel)}
 .feat-sched-item.on{border-color:var(--ok);background:rgba(31,157,85,.05)}
 .feat-sched-main{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
-.feat-sched-main b{font-size:14px;font-weight:700;color:var(--ink)}
+.feat-sched-main b{font-size:14px;font-weight:600;color:var(--ink)}
 /* aksen kicker hero saat ada motor unggulan */
 .feat-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;
   vertical-align:middle;background:var(--accent)}
@@ -1824,10 +1815,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .pay-stat{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel-2)}
 .pay-stat span{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
   text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.pay-stat b{font-size:22px;font-weight:750;color:var(--ink)}
+.pay-stat b{font-size:22px;font-weight:500;color:var(--ink)}
 .pay-done{border:1px solid var(--line);border-radius:16px;padding:34px 30px;text-align:center;
   background:var(--panel)}
-.pay-done h1{font-size:26px;font-weight:760;letter-spacing:-.02em;margin-bottom:8px}
+.pay-done h1{font-size:26px;font-weight:500;letter-spacing:-.02em;margin-bottom:8px}
 /* penanda "✓ dari profil" di label checkout (prefill) */
 .field label .pf-tag{float:right;text-transform:none;letter-spacing:0;font-family:var(--font);
   font-size:10px;font-weight:600;color:var(--ok)}
@@ -1848,16 +1839,16 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .t-loc{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 /* ---------- halaman Birojasa ---------- */
 .biro{padding:clamp(96px,12vw,132px) 0 clamp(56px,8vw,90px)}
-.biro-h1{font-size:clamp(28px,5vw,46px);font-weight:750;letter-spacing:-.025em;margin:12px 0 12px;max-width:18ch}
+.biro-h1{font-size:clamp(28px,5vw,46px);font-weight:500;letter-spacing:-.025em;margin:12px 0 12px;max-width:18ch}
 .biro-lead{font-size:16.5px;line-height:1.7;color:var(--muted);max-width:56ch;margin-bottom:26px}
 .biro-cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:44px}
 .biro-feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:48px}
 .biro-feat{border:1px solid var(--line);border-radius:14px;padding:20px;background:var(--panel);
   display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow)}
-.biro-feat b{font-size:16px;font-weight:700}
+.biro-feat b{font-size:16px;font-weight:600}
 .biro-feat span:last-child{font-size:13.5px;color:var(--muted);line-height:1.55}
 .biro-faq{max-width:640px}
-.biro-h2{font-size:22px;font-weight:750;letter-spacing:-.02em;margin-bottom:14px}
+.biro-h2{font-size:22px;font-weight:500;letter-spacing:-.02em;margin-bottom:14px}
 .biro-q{border-top:1px solid var(--line);padding:16px 0}
 .biro-q b{display:block;font-size:15.5px;font-weight:650;margin-bottom:6px}
 .biro-q p{font-size:14px;color:var(--muted);line-height:1.6;max-width:60ch}
@@ -1879,7 +1870,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 
 /* ---------- halaman Titip Jual ---------- */
 .titip{padding:clamp(96px,12vw,132px) 0 clamp(56px,8vw,90px)}
-.titip-h1{font-size:clamp(28px,5vw,46px);font-weight:750;letter-spacing:-.025em;margin:12px 0 12px}
+.titip-h1{font-size:clamp(28px,5vw,46px);font-weight:500;letter-spacing:-.025em;margin:12px 0 12px}
 .titip-lead{color:var(--muted);max-width:600px;line-height:1.62;margin-bottom:30px}
 .titip-sec{font-size:13px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;
   color:var(--muted);margin:28px 0 14px}
@@ -1915,7 +1906,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .titip-band-in{display:flex;flex-direction:column;gap:20px;align-items:flex-start;
   border:1px solid var(--line);border-radius:16px;padding:clamp(24px,4vw,40px);
   background:var(--panel-2)}
-.titip-band-in h2{font-size:clamp(22px,3.2vw,34px);font-weight:740;letter-spacing:-.02em;margin:10px 0 8px}
+.titip-band-in h2{font-size:clamp(22px,3.2vw,34px);font-weight:500;letter-spacing:-.02em;margin:10px 0 8px}
 .titip-band-in .aside{max-width:520px;font-size:14.5px;color:var(--muted);line-height:1.55}
 @media(min-width:768px){
   .titip-band-in{flex-direction:row;align-items:center;justify-content:space-between;gap:32px}
@@ -2024,7 +2015,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
    (--accent), bukan hijau — hijau tabrakan dengan palet showroom di sini. */
 .foot-brand{display:flex;flex-direction:column;gap:5px;text-align:right}
 .foot-brand small{font-size:10.5px;letter-spacing:.06em;color:var(--dim);text-transform:none}
-.foot-brand b{color:var(--accent);font-weight:700}
+.foot-brand b{color:var(--accent);font-weight:600}
 @media(max-width:560px){
   .foot-base{flex-direction:column;align-items:flex-start;gap:14px}
   .foot-brand{text-align:left}
@@ -2081,7 +2072,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 
 /* ---------- Tugas 8: kartu penjelasan grade ---------- */
 .grade-head{margin-top:clamp(56px,8vw,104px)}
-.grade-head h3{font-size:clamp(24px,3.4vw,36px);font-weight:740;letter-spacing:-.02em;margin-top:12px}
+.grade-head h3{font-size:clamp(24px,3.4vw,36px);font-weight:500;letter-spacing:-.02em;margin-top:12px}
 .grade-cards{display:grid;grid-template-columns:1fr;gap:16px;margin-top:clamp(26px,4vw,40px)}
 .grade-card{border:1px solid var(--line);border-radius:14px;padding:22px 20px;
   background:var(--panel);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px}
@@ -2091,7 +2082,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 /* ---------- section "Sejarah Motorell" ---------- */
 .section.about{background:var(--bg-2);border-block:1px solid var(--line)}
 .about-inner{max-width:760px}
-.about-inner h2{font-size:clamp(30px,4vw,50px);font-weight:740;letter-spacing:-.025em;
+.about-inner h2{font-size:clamp(30px,4vw,50px);font-weight:500;letter-spacing:-.025em;
   line-height:1.02;margin:13px 0 clamp(24px,3.5vw,38px)}
 .about-story{display:flex;flex-direction:column;gap:20px}
 /* rata kiri (bukan justify) — justify bikin "rivers" jarak antar-kata di kolom
@@ -2113,7 +2104,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .lokasi-map:hover{box-shadow:0 16px 50px rgba(26,47,94,.28)}
 .lokasi-info{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);
   border-radius:16px;padding:26px 24px;box-shadow:var(--shadow)}
-.lokasi-info h3{font-size:20px;font-weight:720;letter-spacing:-.01em;margin-bottom:8px}
+.lokasi-info h3{font-size:20px;font-weight:500;letter-spacing:-.01em;margin-bottom:8px}
 .lokasi-info > p{color:var(--muted);font-size:14.5px;line-height:1.62;margin-bottom:20px}
 .lokasi-facts{list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:22px}
 .lokasi-facts li{display:flex;flex-direction:column;gap:3px}
@@ -2149,19 +2140,19 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   color:var(--muted);margin-bottom:15px}
 .unit-terms ul{list-style:none;display:flex;flex-direction:column;gap:11px}
 .unit-terms li{display:flex;gap:11px;font-size:14px;line-height:1.5;color:var(--ink)}
-.unit-terms li .dot{color:var(--accent);flex:none;font-weight:800}
+.unit-terms li .dot{color:var(--accent);flex:none;font-weight:500}
 .unit-terms b{color:var(--ink)}
 .unit-terms a{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
 
 /* ---------- Tugas 11: halaman kebijakan / FAQ ---------- */
 .policy{padding:118px 0 90px}
-.policy h1{font-size:clamp(30px,5vw,46px);font-weight:750;letter-spacing:-.025em;margin:14px 0 10px}
+.policy h1{font-size:clamp(30px,5vw,46px);font-weight:500;letter-spacing:-.025em;margin:14px 0 10px}
 .policy .lead{color:var(--muted);max-width:560px;line-height:1.62;margin-bottom:30px}
 .policy-item{border-top:1px solid var(--line)}
 .policy-item:last-child{border-bottom:1px solid var(--line)}
 .policy-item summary{cursor:pointer;list-style:none;padding:22px 2px;display:flex;
   justify-content:space-between;align-items:center;gap:16px;
-  font-size:clamp(16px,2.3vw,20px);font-weight:700;letter-spacing:-.01em}
+  font-size:clamp(16px,2.3vw,20px);font-weight:600;letter-spacing:-.01em}
 .policy-item summary::-webkit-details-marker{display:none}
 .policy-item summary .pm{font-family:var(--mono);color:var(--muted);font-size:20px;
   transition:transform .25s;flex:none}
@@ -2253,7 +2244,7 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
 .ns-body span{display:block;font-family:var(--mono);font-size:10.5px;color:var(--dim);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ns-body mark{background:rgba(26,47,94,.16);color:var(--accent);border-radius:3px;padding:0 1px}
-.ns-price{font-size:13px;font-weight:720;white-space:nowrap;flex:none}
+.ns-price{font-size:13px;font-weight:500;white-space:nowrap;flex:none}
 .ns-all{width:100%;padding:12px;font-size:12.5px;font-weight:600;color:var(--accent);
   background:var(--panel-2);border-top:1px solid var(--line);transition:background .15s}
 .ns-all:hover{background:var(--bg-3)}
@@ -3034,12 +3025,6 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
                 <input id="u-color" value={f.color} onChange={set('color')} placeholder="Hitam" /></div>
               <div className={'field' + mark('price')}><label htmlFor="u-price">Harga jual (Rp)</label>
                 <input id="u-price" type="text" inputMode="numeric" value={groupDigits(f.price)} onChange={(e) => setF((p) => ({ ...p, price: onlyDigits(e.target.value) }))} placeholder="20.800.000" required /></div>
-              <div className="field"><label htmlFor="u-grade">Grade kurasi</label>
-                <select id="u-grade" value={f.grade} onChange={set('grade')}>
-                  <option value="S">S — istimewa, seperti baru</option>
-                  <option value="A">A — siap pakai</option>
-                  <option value="B">B — minus ringan tercatat</option>
-                </select></div>
               <div className="field"><label htmlFor="u-status">Status</label>
                 <select id="u-status" value={f.status} onChange={set('status')}>
                   <option value="published">Tayang di etalase</option>
@@ -3048,9 +3033,6 @@ function UnitForm({ initial, onClose, onSaved, toast }) {
               <div className={'field full' + mark('description')}><label htmlFor="u-desc">Deskripsi</label>
                 <textarea id="u-desc" value={f.description} onChange={set('description')}
                   placeholder="Kondisi mesin, riwayat servis, kelengkapan dokumen, plat…" /></div>
-              <div className="field full"><label htmlFor="u-issues">Catatan kurasi / minus (jujur)</label>
-                <textarea id="u-issues" value={f.known_issues} onChange={set('known_issues')}
-                  placeholder="Contoh: baret halus di sayap kiri, ban belakang 70%…" /></div>
               <div className="field full">
                 <label>Part Modifikasi</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px', marginBottom: '15px' }}>
@@ -4227,7 +4209,7 @@ function AdminPanel({ profile, toast, nav }) {
                     </div>
                     <div className="a-info">
                       <b>{l.title}</b>
-                      <span>{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' km' : 'km —'} · grade {l.grade}
+                      <span>{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' km' : 'km —'}
                         {l.sold_at ? ' · terjual ' + new Date(l.sold_at).toLocaleDateString('id-ID') : ''}</span>
                     </div>
                     <span className="a-price">{rupiah(l.price)}</span>
@@ -4280,7 +4262,7 @@ function AdminPanel({ profile, toast, nav }) {
                     </div>
                     <div className="a-info">
                       <b>{l.title}</b>
-                      <span>{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' km' : 'km —'} · grade {l.grade} · {Array.isArray(l.photos) ? l.photos.length : 0} foto</span>
+                      <span>{l.year} · {l.mileage_km ? fmt(l.mileage_km) + ' km' : 'km —'} · {Array.isArray(l.photos) ? l.photos.length : 0} foto</span>
                     </div>
                     <span className="a-price">{rupiah(l.price)}</span>
                     <span className={'st ' + l.status}>{STATUS_LABEL[l.status] || l.status}</span>
@@ -4431,7 +4413,6 @@ function FadeItem({ children, className = '', style, as = 'div', direction = 'up
 // ---------- Tab detail teknis unit (fade transition antar konten) ----------
 const DETAIL_TABS = [
   { id: 'unit', label: 'Tentang unit' },
-  { id: 'kurasi', label: 'Catatan kurasi' },
 ]
 
 function DetailTabs({ listing }) {
@@ -4444,7 +4425,7 @@ function DetailTabs({ listing }) {
   const [tab, setTab] = useState('unit')
   return (
     <div className="dtabs-wrap">
-      <div className="dtabs" role="tablist" aria-label="Detail unit">
+      <div className="dtabs" role="tablist" aria-label="Detail unit" style={tabs.length < 2 ? { display: 'none' } : undefined}>
         {tabs.map((t) => (
           <button key={t.id} type="button" role="tab" aria-selected={tab === t.id}
             className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
@@ -4474,14 +4455,7 @@ function DetailTabs({ listing }) {
               ? <p>{listing.kelengkapan}</p>
               : <p className="muted">Kelengkapan dokumen belum dicantumkan penjual — tanyakan langsung via WhatsApp.</p>}
           </div>
-        ) : (
-          <div className={'dtab-panel' + (tab === 'kurasi' ? ' on' : '')}
-            role="tabpanel" aria-hidden={tab !== 'kurasi'}>
-            {listing.known_issues
-              ? <p>{listing.known_issues}</p>
-              : <p className="muted">Tidak ada minus tercatat — unit ini lolos inspeksi tanpa catatan khusus.</p>}
-          </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -4543,7 +4517,7 @@ function DetailView({ listing, nav }) {
           {titip ? (
           <aside className="panel">
             <p className="stnote titip-note">
-              <b>Unit Titip Jual dari Masyarakat.</b> Unit ini dititipkan penjual perorangan,
+              <b>Unit titipan.</b> Unit ini dititipkan penjual perorangan,
               belum melalui kurasi & garansi resmi Motorell. Cek kondisi langsung sebelum
               bertransaksi. Motorell hanya menjembatani.
             </p>
@@ -4586,7 +4560,6 @@ function DetailView({ listing, nav }) {
             <div className="specs">
               <div><small>Tahun</small><b>{listing.year}</b></div>
               <div><small>Odometer</small><b>{listing.mileage_km ? fmt(listing.mileage_km) + ' km' : '—'}</b></div>
-              <div><small>Grade</small><b>{listing.grade}</b></div>
               <div><small>Warna</small><b>{listing.color || '—'}</b></div>
             </div>
 
@@ -4644,7 +4617,7 @@ function DetailView({ listing, nav }) {
                 </div>
               ))}
               <div className="row hl"><span>Total Harga</span><b>{rupiah(totalPrice)}</b></div>
-              <div className="row hl"><span>DP kunci unit<small>Book melalui Contact Kami</small></span><b>{rupiah(DP_FIXED)}</b></div>
+              <div className="row hl"><span>DP booking unit<small>Book melalui Contact Kami</small></span><b>{rupiah(DP_FIXED)}</b></div>
             </div>
 
             <div className={'panel-cta' + (canBook ? ' has-sticky-twin' : '')}>
@@ -4754,12 +4727,8 @@ function CardBase({ l, nav, index = 0, highlight = false }) {
         <div className="card-media">
           {photos[0] ? <FadeImg src={thumbKey(photos[0])} fallbackSrc={photos[0]} alt={l.title} loading="lazy" /> : <Blueprint />}
           {badge && <span className={'card-status ' + badge.cls}>{badge.label}</span>}
-          {/* Unit titip jual: badge "TITIP JUAL" (transparansi ke pembeli), TANPA
-              badge grade emas/perak — grade menandakan kurasi resmi Motorell yang
-              titip jual belum lalui. Unit resmi: badge grade seperti biasa. */}
-          {isTitip(l)
-            ? <span className="badge badge-titip">TITIP JUAL</span>
-            : <span className={'badge g-' + String(l.grade || '').toLowerCase()}>GRADE {l.grade}</span>}
+          {/* Unit titipan: badge "TITIP JUAL" (transparansi ke pembeli). Sistem grade sudah dihapus. */}
+          {isTitip(l) && <span className="badge badge-titip">TITIP JUAL</span>}
           {/* Tombol WhatsApp SENGAJA tidak di kartu etalase: grid tetap bersih &
               satu maksud (buka detail). Kontak WhatsApp muncul di halaman unit,
               sebelah tombol "Bayar DP", setelah pembeli lihat foto & spesifikasi. */}
@@ -5346,8 +5315,8 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
           </div>
           <div className="spec-rail">
             <span>titik inspeksi<b>50+</b></span>
-            <span>Garansi mesin<b>Termasuk</b></span>
-            <span>Kunci unit<b>{rupiah(DP_FIXED)}</b></span>
+            <span>Garansi mesin<b>7 hari</b></span>
+            <span>Booking unit<b>{rupiah(DP_FIXED)}</b></span>
             <span>Unit Terjual<b>100+</b></span>
           </div>
         </div>
@@ -5400,7 +5369,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
             {/* ---- Galeri Titip Jual (approved) — reveal dari ATAS ---- */}
             {!loading && !error && titipAll.length > 0 && (
               <Reveal once dir="down">
-                <PagedGallery title="Galeri Titip Jual" subtitle="Unit titipan dari masyarakat"
+                <PagedGallery title="Galeri Titip Jual" subtitle="Unit titipan"
                   units={titipUnits} nav={nav} />
               </Reveal>
             )}
@@ -5416,8 +5385,6 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <p className="kicker">Kunjungi kami</p>
                 <h2>Temukan Motorell.</h2>
               </div>
-              <p className="aside">Mampir langsung ke showroom untuk lihat dan cek kondisi motor
-                pilihanmu sendiri. Klik peta untuk buka rute di Google Maps.</p>
             </div>
             <div className="lokasi-grid">
               {/* Peta ASLI Google Maps, dibingkai lingkaran. iframe dibuat
@@ -5435,7 +5402,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <p>Koleksi motor terkurasi Motorell bisa kamu lihat dan cek langsung di tempat.</p>
                 <ul className="lokasi-facts">
                   <li><span>Alamat</span><b>{MAPS_ADDRESS} <small>(Plus Code: {MAPS_PLUS_CODE})</small></b></li>
-                  <li><span>Jam buka</span><b>Senin–Minggu · 09.00–18.00 WIB</b></li>
+                  <li><span>Jam buka</span><b>Selasa–Minggu · By appointment</b></li>
                   <li><span>Kontak</span><b>
                     <a href={'https://wa.me/' + CS_WHATSAPP_NUMBER} target="_blank" rel="noopener noreferrer">WhatsApp kami</a>
                   </b></li>
@@ -5477,19 +5444,6 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
               </Reveal>
             ))}
 
-            {/* Tugas 8: kartu penjelasan grade */}
-            <FadeIn className="grade-head">
-              <FadeItem as="p" className="kicker">Sistem grade</FadeItem>
-              <FadeItem as="h3">Tiga grade, satu standar jujur.</FadeItem>
-            </FadeIn>
-            <FadeIn className="grade-cards">
-              {GRADE_DEF.map((gd) => (
-                <FadeItem key={gd.g} className="grade-card">
-                  <span className={'badge g-' + gd.g.toLowerCase()}>GRADE {gd.g}</span>
-                  <p>{gd.text}</p>
-                </FadeItem>
-              ))}
-            </FadeIn>
           </div>
         </section>
       </Reveal>
@@ -5522,7 +5476,7 @@ const SEARCH_HINTS = [
 ]
 // Filter cepat sekali-klik — mengisi search bar dengan kalimat yang memang
 // dimengerti parser-nya, jadi chip dan ketikan manual jalannya sama persis.
-const QUICK_FILTERS = ['Grade S', 'Grade A', 'Di bawah 20 juta', 'Di bawah 30 juta']
+const QUICK_FILTERS = ['Di bawah 20 juta', 'Di bawah 30 juta']
 
 // Search bar navbar: mengetik langsung menyaring etalase (lihat App), dan
 // dropdown ini menawarkan lompatan LANGSUNG ke unit — tidak perlu scroll dan
@@ -5612,7 +5566,7 @@ function NavSearch({ value, onChange, onSubmit, results = [], total = 0, filters
 
       {showTips && (
         <div className="ns-pop ns-pop-tips">
-          <p className="ns-tip">Cari pakai brand, model, harga, tahun, atau grade — misalnya
+          <p className="ns-tip">Cari pakai brand, model, harga, atau tahun — misalnya
             <b> “benelli di bawah 20 juta”</b> atau <b>“w175 2019”</b>.</p>
           <div className="ns-quick">
             {QUICK_FILTERS.map((qf) => (
@@ -5650,7 +5604,7 @@ function NavSearch({ value, onChange, onSubmit, results = [], total = 0, filters
                       {highlight(l.title, words).map((p, k) =>
                         p.on ? <mark key={k}>{p.t}</mark> : <span key={k}>{p.t}</span>)}
                     </b>
-                    <span>{l.year} · GRADE {l.grade}{l.color ? ' · ' + l.color.toUpperCase() : ''}</span>
+                    <span>{l.year}{l.color ? ' · ' + l.color.toUpperCase() : ''}</span>
                   </span>
                   <span className="ns-price">{rupiah(l.price)}</span>
                 </button>
@@ -5797,8 +5751,8 @@ function EtalaseView({ listings, nav, loading = false, error = '' }) {
             <p className="kicker">Etalase lengkap</p>
             <h1 className="etalase-page-title">Semua Unit.</h1>
           </div>
-          <p className="aside">Jelajahi seluruh koleksi Motorell Garage beserta unit titipan
-            masyarakat. Cari di tiap galeri, saring, dan urutkan sesukamu.</p>
+          <p className="aside">Jelajahi seluruh koleksi Motorell Garage beserta unit titipan.
+            Cari di tiap galeri, saring, dan urutkan sesukamu.</p>
         </div>
 
         {!loading && !error && counts.all > 0 && (
@@ -5849,7 +5803,7 @@ function EtalaseView({ listings, nav, loading = false, error = '' }) {
             )}
             {visTitip.length > 0 && (
               <Gallery variant="full" localSearch title="Galeri Titip Jual"
-                subtitle="Unit titipan dari masyarakat" units={visTitip} nav={nav} />
+                subtitle="Unit titipan" units={visTitip} nav={nav} />
             )}
           </>
         )}
@@ -5890,7 +5844,7 @@ const POLICY = [
   {
     q: 'Garansi mesin',
     body: [
-      'Setiap unit resmi Motorell dijamin garansi mesin — jaminan atas performa mesin motor yang kamu bawa pulang. Cakupan & durasinya dijelaskan langsung oleh tim kami lewat WhatsApp saat booking, jadi kamu tahu persis apa yang berlaku sebelum DP. Masa garansi mulai dihitung sejak unit kamu terima.',
+      'Setiap unit resmi Motorell dijamin garansi mesin — jaminan atas performa mesin motor yang kamu bawa pulang. Garansi berlaku selama 7 hari sejak unit kamu terima.',
       'Kalau di masa garansi kamu merasa ada yang tidak beres dengan mesin, kabari tim kami lebih dulu sebelum membawa motor ke bengkel lain. Langkah ini penting supaya garansimu tetap berlaku. Tim kami akan memeriksa kondisinya secara menyeluruh, lalu menentukan apakah klaim bisa diproses.',
       'Yang perlu kamu tahu, garansi ini fokus pada mesin dan tidak mencakup kerusakan akibat kecelakaan, banjir, kebakaran, modifikasi, atau pemakaian di luar panduan. Kalau unit dibongkar atau diservis tanpa sepengetahuan kami, garansinya otomatis gugur.',
       'Hasil pemeriksaan tim Motorell menjadi keputusan akhir. Kami berkomitmen menilainya dengan jujur dan terbuka, supaya kamu paham betul dasar setiap keputusan. Ada yang ingin ditanyakan soal garansi? Hubungi tim kami lewat WhatsApp, kami siap membantu.',
@@ -5900,7 +5854,7 @@ const POLICY = [
     q: 'Syarat & Ketentuan',
     body: [
       'Harga di halaman unit adalah harga motor apa adanya sesuai deskripsi. Belum termasuk balik nama, pajak tahunan yang belum dibayar, dan ongkir ke luar area yang disepakati.',
-      'Garansi mesin mulai berlaku sejak serah terima, sesuai cakupan yang dijelaskan tim kami saat booking.',
+      'Garansi mesin berlaku selama 7 hari sejak serah terima.',
     ],
   },
   {
