@@ -766,7 +766,7 @@ const CSS = `
   --accent:#1a2f5e; --accent-ink:#0f1d3d; --ok:#1f9d55; --warn:#b8791b;
   --radius:12px;
   --font:'Archivo',system-ui,-apple-system,sans-serif;
-  --mono:'Newsreader',Georgia,'Times New Roman',serif; --code:'IBM Plex Mono',monospace;
+  --mono:'Newsreader',Georgia,'Times New Roman',serif; --label:'Manrope',system-ui,-apple-system,sans-serif; --code:'IBM Plex Mono',monospace;
   --shadow:0 1px 2px rgba(17,17,20,.04),0 8px 30px rgba(17,17,20,.06);
   color-scheme:light;
 }
@@ -1022,7 +1022,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 /* Teks kecil hero (kicker + subjudul) berdiri di atas model 3D → kontras dinaikkan:
    warna solid --ink, sedikit lebih tebal, plus halo putih tipis agar tetap terbaca
    saat kebetulan menimpa bagian gelap motor. */
-.hero .kicker{color:var(--ink);font-weight:600;
+.hero .kicker{font-family:var(--label);color:var(--ink);font-weight:600;
   text-shadow:0 1px 10px rgba(255,255,255,.9),0 0 2px rgba(255,255,255,.9)}
 .hero-copy p{color:var(--ink);font-weight:500;
   text-shadow:0 1px 10px rgba(255,255,255,.85),0 0 2px rgba(255,255,255,.85)}
@@ -1124,7 +1124,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 @keyframes badge-shine{0%{transform:translateX(-130%)}22%{transform:translateX(130%)}100%{transform:translateX(130%)}}
 .card-body{padding:19px 19px 17px;display:flex;flex-direction:column;gap:6px}
 .card-body h3{font-size:17.5px;font-weight:680;letter-spacing:-.01em}
-.card-meta{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
+.card-meta{font-family:var(--label);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
 .card-price{font-size:18px;font-weight:750;margin-top:9px;letter-spacing:-.01em}
 .card-go{position:relative;border-top:1px solid var(--line);padding:14px 19px;font-size:13.5px;
   font-weight:600;color:var(--muted);display:flex;justify-content:space-between;
@@ -1376,6 +1376,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .fp-reset:disabled{color:var(--dim);text-decoration:none;cursor:not-allowed}
 .fp-grp{display:flex;flex-direction:column;gap:11px}
 .fp-grp > label{font-size:12px;font-family:var(--mono);letter-spacing:.1em;color:var(--muted);
+.fp-grp > label.lbl-modern{font-family:var(--label);font-weight:600}
   text-transform:uppercase}
 .fp-opts{display:flex;flex-direction:column;gap:9px;max-height:190px;overflow-y:auto}
 .fp-opt{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;color:var(--ink)}
@@ -4805,7 +4806,7 @@ function FilterPanel({ facets, panel, setPanel, onReset, showSource = true }) {
       </div>
 
       <div className="fp-grp">
-        <label>Range Harga</label>
+        <label className="lbl-modern">Range Harga</label>
         <div className="fp-price-val">{rupiah(lo)} – {rupiah(hi)}</div>
         <div className="fp-range">
           <span className="track" />
