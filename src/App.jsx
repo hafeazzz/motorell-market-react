@@ -85,7 +85,7 @@ if (typeof window !== 'undefined') {
 }
 // DP yang ditampilkan di UI. Server (create-doku-payment PRICES) tetap SUMBER
 // KEBENARAN & memvalidasi ulang — nilai di sini hanya untuk tampilan.
-const PAYMENT_AMOUNTS = { etalase: 505000, titip: 18000 }
+const PAYMENT_AMOUNTS = { etalase: 505000, titip: 18000, titip_extend: 17000 }
 // DP Titip Jual DINONAKTIFKAN sementara — titip jual GRATIS selama Agustus 2026.
 // Set true untuk memunculkan lagi tombol "Bayar DP Titip Jual". (DP etalase tak
 // terpengaruh.) Ini hanya menyembunyikan pintu masuk UI; Edge Function tetap ada.
@@ -399,11 +399,11 @@ function PaymentSuccessView({ nav }) {
         <div className="pay-done">
           <h1>{done ? 'Pembayaran berhasil' : 'Pembayaran diproses'}</h1>
           <p className="muted">{done
-            ? 'Terima kasih. Pembayaranmu sudah kami terima.'
+            ? (pay.type === 'titip_extend' ? 'Terima kasih. Masa tayang unit titipanmu diperpanjang 3 bulan dan unit tayang kembali di etalase.' : 'Terima kasih. Pembayaranmu sudah kami terima.')
             : 'Kalau kamu baru menyelesaikan pembayaran, statusnya menyusul beberapa saat lagi (konfirmasi dari gateway).'}</p>
           {pay && (
             <div className="rows" style={{ marginTop: 16, textAlign: 'left' }}>
-              <div className="row"><span>Tipe</span><b>{pay.type === 'etalase' ? 'DP Pembelian Motor' : 'DP Titip Jual'}</b></div>
+              <div className="row"><span>Tipe</span><b>{pay.type === 'etalase' ? 'DP Pembelian Motor' : pay.type === 'titip_extend' ? 'Perpanjangan Titip Jual (3 bulan)' : 'DP Titip Jual'}</b></div>
               <div className="row"><span>Jumlah</span><b>{rupiah(pay.amount)}</b></div>
               <div className="row"><span>Referensi</span><b className="mono" style={{ fontSize: 12 }}>{pay.invoice_number}</b></div>
               <div className="row"><span>Status</span><b>{pay.status === 'success' ? 'Sukses' : pay.status === 'failed' ? 'Gagal' : 'Menunggu konfirmasi'}</b></div>
@@ -3100,6 +3100,7 @@ const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', kurator: 'Kurator', buyer: 
 const AUDIT_LABEL = {
   soft_delete: 'Hapus (soft)', hard_delete: 'Hapus permanen', restore: 'Pulihkan',
   titip_jual_archived: 'Titip jual diarsip',
+  titip_jual_extended: 'Titip jual diperpanjang',
   titip_jual_restored: 'Titip jual dipulihkan',
   titip_jual_deleted: 'Titip jual dihapus',
   titip_jual_edited: 'Titip jual diedit',
@@ -3487,9 +3488,14 @@ function TitipReview({ profile, toast, nav }) {
 
   async function restore(row) {
     setBusyId(row.id)
-    const { data, error } = await supabase.from('titip_jual_units').update({
-      archived_at: null, archived_by: null, archived_reason: null,
-    }).eq('id', row.id).select()
+    // Unit yang kedaluwarsa otomatis: sekaligus beri masa tayang baru 3 bulan, kalau tidak
+    // ia langsung hilang lagi dari etalase karena expires_at sudah lewat.
+    const patch = { archived_at: null, archived_by: null, archived_reason: null }
+    if (row.expired_at) {
+      const d = new Date(); d.setMonth(d.getMonth() + 3)
+      Object.assign(patch, { expired_at: null, expires_at: d.toISOString() })
+    }
+    const { data, error } = await supabase.from('titip_jual_units').update(patch).eq('id', row.id).select()
     setBusyId(null)
     if (error) { toast('Gagal memulihkan: ' + migrasiHint(error, '0015')); return }
     if (!data || data.length === 0) { toast('Pemulihan DITOLAK (0 baris diubah).'); return }
@@ -3498,6 +3504,23 @@ function TitipReview({ profile, toast, nav }) {
       ? 'Unit dipulihkan & tayang kembali di etalase'
       : 'Unit dipulihkan ke antrean ' + row.status)
     load()
+  }
+
+  // Perpanjang masa tayang 3 bulan secara manual (mis. pembayaran lewat transfer/WhatsApp).
+  async function extendAdmin(row) {
+    const label = [row.merek, row.model, row.tahun].filter(Boolean).join(' ')
+    if (!window.confirm('Perpanjang masa tayang "' + label + '" 3 bulan?')) return
+    setBusyId(row.id)
+    const base = Math.max(Date.now(), row.expires_at ? new Date(row.expires_at).getTime() : 0)
+    const d = new Date(base); d.setMonth(d.getMonth() + 3)
+    const patch = { expires_at: d.toISOString(), extended_count: (row.extended_count || 0) + 1 }
+    if (row.expired_at) Object.assign(patch, { expired_at: null, archived_at: null, archived_by: null, archived_reason: null })
+    const { data, error } = await supabase.from('titip_jual_units').update(patch).eq('id', row.id).select()
+    setBusyId(null)
+    if (error) { toast('Gagal memperpanjang: ' + migrasiHint(error, '0020')); return }
+    if (!data || data.length === 0) { toast('Perpanjangan DITOLAK (0 baris diubah).'); return }
+    logTitipAudit('titip_jual_extended', row, null)
+    toast('Masa tayang diperpanjang 3 bulan'); load()
   }
 
   // HAPUS PERMANEN. Audit ditulis SEBELUM delete: setelah barisnya lenyap,
@@ -3586,6 +3609,9 @@ function TitipReview({ profile, toast, nav }) {
                   <b>{[r.merek, r.model, r.tahun].filter(Boolean).join(' ')}</b>
                   <span>{rupiah(r.harga_diinginkan)} · {r.kondisi || '—'} · {(r.photos || []).length} foto · {r.seller_name} ({r.seller_phone})</span>
                   <span className="a-stat">Diupload: {formatUploadTime(r.created_at, true)}</span>
+                  {r.status === 'approved' && r.expires_at && (
+                    <span className="a-stat">Tayang sampai {fmtTanggal(r.expires_at)}{r.expired_at ? ' (habis, diarsipkan otomatis)' : ''}{r.extended_count ? ' · diperpanjang ' + r.extended_count + '×' : ''}</span>
+                  )}
                 </div>
                 <div className="a-actions">
                   <button className="btn btn-ghost btn-sm"
@@ -3598,6 +3624,10 @@ function TitipReview({ profile, toast, nav }) {
                       <button className="btn btn-sm btn-ghost" disabled={busyId === r.id}
                         onClick={() => review(r, 'rejected')}>Reject</button>
                     </>
+                  )}
+                  {r.status === 'approved' && (
+                    <button className="btn btn-ghost btn-sm" disabled={busyId === r.id}
+                      onClick={() => extendAdmin(r)}>+3 bln</button>
                   )}
                   {r.status === 'approved' && !r.archived_at && (
                     <button className="btn btn-ghost btn-sm"
@@ -5364,7 +5394,7 @@ function HomeView({ listings, nav, query = '', filters = null, searchActive = fa
                 <p>Titip motor Anda di Motorell Garage dan jangkau lebih banyak pembeli.</p>
               </div>
               <a className="btn btn-accent" href="#/titip-jual"
-                onClick={(e) => { e.preventDefault(); nav('#/titip-jual') }}>Titip Jual Sekarang</a>
+                onClick={(e) => { e.preventDefault(); nav('#/titip-jual') }}>Titip Jual Gratis</a>
             </div>
 
             {/* ---- Galeri Titip Jual (approved) — reveal dari ATAS ---- */}
@@ -5892,6 +5922,39 @@ function KebijakanView({ nav }) {
 
 // ---------- Halaman Titip Jual (route #/titip-jual) — form publik ----------
 const TITIP_MIN_PHOTOS = 3
+// ---- Masa tayang titip jual: 3 bulan, lalu auto-arsip; perpanjang Rp17.000 / 3 bulan (migrasi 0020) ----
+const TITIP_WARN_DAYS = 14
+const fmtTanggal = (iso) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+function titipExpiry(m) {
+  if (!m || m.status !== 'approved') return null
+  if (m.expired_at) return { state: 'expired', at: m.expires_at }
+  if (m.archived_at || !m.expires_at) return null
+  const ms = new Date(m.expires_at).getTime() - Date.now()
+  if (ms <= 0) return { state: 'expired', at: m.expires_at }          // penjadwal belum sempat mengarsipkan
+  const days = Math.ceil(ms / 86400000)
+  return { state: days <= TITIP_WARN_DAYS ? 'soon' : 'active', days, at: m.expires_at }
+}
+function TitipExpiryNote({ m, busy, onExtend }) {
+  const ex = titipExpiry(m)
+  if (!ex) return null
+  if (ex.state === 'active') {
+    return <span className="a-stat">Tayang sampai {fmtTanggal(ex.at)}</span>
+  }
+  const expired = ex.state === 'expired'
+  return (
+    <span className="a-note" style={{ display: 'block' }}>
+      {expired
+        ? 'Masa tayang 3 bulan unit ini sudah berakhir, jadi unit diarsipkan dan tidak tampil di etalase.'
+        : 'Masa tayang unit ini berakhir ' + fmtTanggal(ex.at) + ' (' + ex.days + ' hari lagi), lalu otomatis diarsipkan.'}
+      {' '}Mau diperpanjang 3 bulan? Biayanya {rupiah(PAYMENT_AMOUNTS.titip_extend)}.
+      <br />
+      <button type="button" className="btn btn-accent btn-sm" style={{ marginTop: 8 }}
+        disabled={busy} onClick={onExtend}>
+        {busy ? 'Membuka pembayaran…' : 'Perpanjang 3 bulan · ' + rupiah(PAYMENT_AMOUNTS.titip_extend)}
+      </button>
+    </span>
+  )
+}
 const TITIP_STATUS_LABEL = {
   pending: 'Menunggu review', approved: 'Tayang di etalase',
   rejected: 'Ditolak', sold: 'Terjual',
@@ -5932,8 +5995,25 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
   const [editPhotos, setEditPhotos] = useState([])   // foto saat mengedit submission
   const [editBusyUp, setEditBusyUp] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [extBusy, setExtBusy] = useState(null)  // id unit yang sedang membuka pembayaran perpanjangan
   const fileRef = useRef(null)
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+
+  // Perpanjang masa tayang 3 bulan: bayar lewat Doku. Harga ditetapkan SERVER; unit yang
+  // diperpanjang diverifikasi server (harus milik user ini). Webhook yang memperpanjang.
+  async function payExtend(m) {
+    setExtBusy(m.id)
+    try {
+      const res = await startDokuPayment({
+        type: 'titip_extend', listing_id: m.id,
+        full_name: m.seller_name || session?.user?.email || 'Penjual',
+        email: m.seller_email || session?.user?.email || '',
+        phone: m.seller_phone || '',
+      })
+      try { localStorage.setItem('mm-last-invoice', res.invoice_number) } catch { /* ok */ }
+      window.location.href = res.checkout_url
+    } catch (ex) { toast(ex.message); setExtBusy(null) }
+  }
 
   const loadMine = useCallback(async () => {
     if (!session) { setMine(null); return }
@@ -6234,10 +6314,11 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
                     {(m.status === 'approved' || m.status === 'sold') && (
                       <span className="a-stat">{(m.view_count || 0)} dilihat · {(m.click_count || 0)} chat</span>
                     )}
+                    <TitipExpiryNote m={m} busy={extBusy === m.id} onExtend={() => payExtend(m)} />
                     {m.status === 'pending' && !m.archived_at && (
                       <span className="a-note">Menunggu persetujuan admin — otomatis tayang di etalase setelah disetujui. Kamu masih bisa mengubah detail & foto selama menunggu.</span>
                     )}
-                    {m.archived_at && (
+                    {m.archived_at && !m.expired_at && (
                       <span className="a-note">Unit ini disingkirkan dari etalase oleh admin{m.archived_reason ? ' — alasan: ' + m.archived_reason : ''}. Perbaiki lalu hubungi CS bila ingin ditayangkan lagi.</span>
                     )}
                     {editId !== m.id && (
@@ -6253,7 +6334,7 @@ function TitipJualView({ session, nav, toast, onLoginClick, onPayDp = null }) {
                       jadi tanpa cabang ini penjual membaca "Tayang di etalase"
                       untuk unit yang justru sudah disingkirkan. */}
                   <span className={'st ' + (m.archived_at ? 'rejected' : m.status)}>
-                    {m.archived_at ? 'Disingkirkan admin' : (TITIP_STATUS_LABEL[m.status] || m.status)}
+                    {m.expired_at ? 'Masa tayang habis' : m.archived_at ? 'Disingkirkan admin' : (TITIP_STATUS_LABEL[m.status] || m.status)}
                   </span>
                   {editId === m.id && (
                     <div className="a-edit">
@@ -6753,7 +6834,13 @@ export default function App() {
     // boleh melihat semua) tak ikut melihat unit terarsip di etalase publik.
     const base = () => supabase.from('titip_jual_units')
       .select('*').eq('status', 'approved').order('reviewed_at', { ascending: false })
+    const nowIso = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
     let { data, error } = await base().is('archived_at', null)
+      .or('expires_at.is.null,expires_at.gt.' + nowIso)
+    // Migrasi 0020 (kolom expires_at) belum dijalankan → muat tanpa filter masa tayang.
+    if (error && /expires_at/.test(error.message || '')) {
+      ;({ data, error } = await base().is('archived_at', null))
+    }
     // Migrasi 0015 dijalankan MANUAL di SQL Editor, jadi deploy frontend bisa
     // mendahuluinya. Tanpa cadangan ini, kolom yang belum ada = query gagal =
     // SELURUH titip jual lenyap dari etalase sampai migrasinya jalan. Saat kolom
@@ -6778,6 +6865,26 @@ export default function App() {
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [loadTitipJual])
+
+  // ---------- Notifikasi masa tayang titip jual (penjual yang login, sekali per sesi) ----------
+  useEffect(() => {
+    if (!supabase || !session) return
+    let alive = true
+    ;(async () => {
+      const soon = new Date(Date.now() + TITIP_WARN_DAYS * 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z')
+      const { data, error } = await supabase.from('titip_jual_units')
+        .select('id, expires_at, expired_at').eq('seller_id', session.user.id).eq('status', 'approved')
+        .or('expired_at.not.is.null,expires_at.lt.' + soon)
+      if (error || !alive || !data || data.length === 0) return
+      const key = 'tj-expiry-notified-' + session.user.id
+      try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1') } catch { /* tetap tampil */ }
+      const habis = data.filter((r) => r.expired_at || new Date(r.expires_at) <= new Date()).length
+      toast(habis
+        ? habis + ' unit titipanmu sudah habis masa tayangnya. Perpanjang 3 bulan ' + rupiah(PAYMENT_AMOUNTS.titip_extend) + ' di halaman Titip Jual.'
+        : 'Masa tayang unit titipanmu hampir berakhir. Perpanjang 3 bulan ' + rupiah(PAYMENT_AMOUNTS.titip_extend) + ' di halaman Titip Jual.')
+    })()
+    return () => { alive = false }
+  }, [session, toast])
 
   // ---------- Motor unggulan (featured) untuk hero ----------
   // Rotasi berbasis WAKTU (bukan cron): ambil jadwal dengan start_date sudah

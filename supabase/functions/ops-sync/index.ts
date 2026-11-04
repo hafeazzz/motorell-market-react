@@ -1,6 +1,8 @@
 // ============================================================
 // Edge Function: ops-sync
 // Menerima motor dari Motorell Ops dan membuat/memperbarui listing di etalase Garage.
+// Juga menerima event status { event:'status', ops_unit_id, status:'live'|'hold'|'sold' }: booking di Ops menarik listing
+// sementara (draft), batal booking menayangkannya lagi, terjual menandai sold. Butuh migrasi 0022 (kolom ops_held).
 //   • Hanya permintaan bertanda tangan HMAC (OPS_SYNC_SECRET) yang diproses; cap waktu maks. 5 menit.
 //   • Foto diunduh dari penyimpanan Ops (hanya URL berawalan OPS_STORAGE_PREFIX, anti-SSRF) lalu diunggah ke bucket unit-photos.
 //   • Idempoten: kolom listings.ops_unit_id unik, kiriman ulang memperbarui listing yang sama.
@@ -12,7 +14,7 @@
 // SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY otomatis tersedia.
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { slugify, validatePayload, verifySignature } from './lib.ts'
+import { slugify, statusPatch, validatePayload, validateStatus, verifySignature } from './lib.ts'
 
 const json = (status: number, obj: unknown) =>
   new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } })
@@ -29,14 +31,35 @@ Deno.serve(async (req) => {
   if (!(await verifySignature(secret, req.headers.get('x-ops-timestamp'), req.headers.get('x-ops-signature'), raw))) {
     return json(401, { error: 'Tanda tangan tidak valid' })
   }
-  let body: unknown
+  let body: any
   try { body = JSON.parse(raw) } catch { return json(400, { error: 'JSON tidak valid' }) }
-  const parsed = validatePayload(body, prefix)
-  if (!parsed.ok) return json(422, { error: parsed.error })
-  const v = parsed.v
 
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     { auth: { persistSession: false, autoRefreshToken: false } })
+
+  // Event status dari Ops: booking -> tarik sementara, batal -> tayang lagi, terjual -> sold.
+  if (body?.event === 'status') {
+    const st = validateStatus(body)
+    if (!st.ok) return json(422, { error: st.error })
+    try {
+      const { data: cur, error: cErr } = await db.from('listings')
+        .select('id, status, ops_held, sold_at').eq('ops_unit_id', st.id).maybeSingle()
+      if (cErr) throw new Error(cErr.message)
+      if (!cur) return json(404, { error: 'Listing untuk motor ini belum ada di Market' })
+      const patch = statusPatch({ status: cur.status, ops_held: !!cur.ops_held, sold_at: cur.sold_at ?? null }, st.status, new Date().toISOString())
+      if (patch) {
+        const { error } = await db.from('listings').update(patch).eq('id', cur.id)
+        if (error) throw new Error(error.message)
+      }
+      return json(200, { listing_id: cur.id, status: patch?.status ?? cur.status, changed: !!patch })
+    } catch (e) {
+      return json(500, { error: (e as Error).message })
+    }
+  }
+
+  const parsed = validatePayload(body, prefix)
+  if (!parsed.ok) return json(422, { error: parsed.error })
+  const v = parsed.v
 
   try {
     const { data: existing, error: eErr } = await db.from('listings')
@@ -64,7 +87,7 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString()
     const payload = {
       brand: v.brand, model: v.model, title, year: v.year, mileage_km: v.mileage_km, color: v.color, price: v.price,
-      grade: v.grade, description: v.description, known_issues: v.known_issues, photos: urls, status: 'published',
+      grade: v.grade, description: v.description, known_issues: v.known_issues, photos: urls, status: 'published', ops_held: false,
       ops_unit_id: v.ops_unit_id, ops_synced_at: now,
     }
     if (existing) {

@@ -26,8 +26,8 @@ const json = (status: number, obj: unknown) =>
   new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 
 // SUMBER KEBENARAN harga (server-side). Ubah di sini, bukan di klien.
-const PRICES: Record<string, number> = { etalase: 505_000, titip: 18_000 }
-const DESC: Record<string, string> = { etalase: 'DP Pembelian Motor', titip: 'DP Titip Jual' }
+const PRICES: Record<string, number> = { etalase: 505_000, titip: 18_000, titip_extend: 17_000 }
+const DESC: Record<string, string> = { etalase: 'DP Pembelian Motor', titip: 'DP Titip Jual', titip_extend: 'Perpanjang Titip Jual 3 Bulan' }
 const CHECKOUT_PATH = '/checkout/v1/payment'
 
 function b64(bytes: Uint8Array): string {
@@ -75,6 +75,18 @@ Deno.serve(async (req) => {
     const phone = (body?.phone || '').toString().slice(0, 40)
     const listing_id = body?.listing_id ? String(body.listing_id) : null
     if (!full_name || !email || !phone) return json(400, { error: 'Nama, email, dan nomor WhatsApp wajib diisi.' })
+
+    // Perpanjangan titip jual: WAJIB login, dan unit harus milik pemanggil & berstatus approved.
+    // (Mencegah membayar/memperpanjang unit orang lain atau unit yang belum disetujui.)
+    if (type === 'titip_extend') {
+      if (!userId) return json(401, { error: 'Masuk dulu untuk memperpanjang masa tayang.' })
+      if (!listing_id) return json(400, { error: 'Unit tidak ditentukan.' })
+      const { data: unit } = await db.from('titip_jual_units')
+        .select('id, seller_id, status').eq('id', listing_id).maybeSingle()
+      if (!unit || unit.seller_id !== userId || unit.status !== 'approved') {
+        return json(403, { error: 'Unit tidak ditemukan atau bukan milikmu.' })
+      }
+    }
 
     const invoice = `INV-${type}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
     const origin = req.headers.get('Origin') || (body?.origin ? String(body.origin) : '')

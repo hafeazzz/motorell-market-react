@@ -72,11 +72,27 @@ Deno.serve(async (req) => {
     const supaUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const db = createClient(supaUrl, serviceKey, { auth: { persistSession: false } })
+    // Status SEBELUM update — dipakai agar perpanjangan hanya diproses SEKALI
+    // (Doku bisa mengirim notifikasi yang sama berulang kali).
+    const { data: prev } = await db.from('payments')
+      .select('type, listing_id, status').eq('invoice_number', invoice).maybeSingle()
     await db.from('payments').update({
       status,
       paid_at: status === 'success' ? new Date().toISOString() : null,
       raw_notification: body,
     }).eq('invoice_number', invoice)
+
+    // Perpanjangan titip jual berhasil dibayar → tambah 3 bulan (fungsi SQL titip_extend_3m, migrasi 0020).
+    if (status === 'success' && prev && prev.status !== 'success'
+        && prev.type === 'titip_extend' && prev.listing_id) {
+      const { error: extErr } = await db.rpc('titip_extend_3m', { p_unit: prev.listing_id })
+      if (extErr) {
+        console.error('[doku-webhook] Gagal memperpanjang unit:', extErr.message)
+        // Kembalikan status pembayaran agar kiriman ulang Doku diproses lagi (tidak "tertelan").
+        await db.from('payments').update({ status: prev.status, paid_at: null }).eq('invoice_number', invoice)
+        return new Response('Extend failed', { status: 500 })   // 500 → Doku mengirim ulang
+      }
+    }
 
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (e) {

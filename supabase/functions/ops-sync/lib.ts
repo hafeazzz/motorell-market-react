@@ -56,3 +56,23 @@ export function validatePayload(p: any, photoPrefix: string, nowYear = new Date(
     known_issues: p.known_issues ? String(p.known_issues).trim() || null : null, photos: p.photos,
   } }
 }
+
+// Event status dari Ops: { event: 'status', ops_unit_id, status: 'live' | 'hold' | 'sold' }
+export type OpsStatus = 'live' | 'hold' | 'sold'
+export function validateStatus(p: any): { ok: true; id: string; status: OpsStatus } | { ok: false; error: string } {
+  if (!p || typeof p !== 'object' || p.event !== 'status') return { ok: false, error: 'Bukan event status' }
+  if (typeof p.ops_unit_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p.ops_unit_id)) return { ok: false, error: 'ops_unit_id tidak valid' }
+  if (!['live', 'hold', 'sold'].includes(p.status)) return { ok: false, error: 'status harus live, hold, atau sold' }
+  return { ok: true, id: p.ops_unit_id.toLowerCase(), status: p.status }
+}
+
+// Perubahan kolom listing untuk satu event status. null = tidak ada yang diubah.
+//   hold: listing yang sedang tayang ditarik ke draft dan ditandai ops_held (supaya bisa ditayangkan lagi otomatis).
+//   live: hanya listing yang ditarik oleh Ops (ops_held) yang ditayangkan lagi. Draft buatan admin tidak disentuh.
+//   sold: ditandai terjual.
+export function statusPatch(cur: { status: string; ops_held: boolean; sold_at: string | null }, want: OpsStatus, nowIso: string):
+  Record<string, unknown> | null {
+  if (want === 'sold') return cur.status === 'sold' ? null : { status: 'sold', sold_at: cur.sold_at ?? nowIso, ops_held: false }
+  if (want === 'hold') return ['published', 'booked'].includes(cur.status) ? { status: 'draft', ops_held: true } : null
+  return cur.ops_held && cur.status === 'draft' ? { status: 'published', ops_held: false } : null
+}
