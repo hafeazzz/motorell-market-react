@@ -1487,6 +1487,10 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
    menyusut mengikuti layar dan tab-nya menggulung sendiri seperti yang
    dimaksudkan sejak awal. */
 .detail-grid > *{min-width:0}
+.detail-main{display:contents}
+.detail-main > .unit-terms{order:3;margin-top:0}
+.detail-grid > .panel{order:2}
+.detail-main > *:not(.unit-terms){order:1}
 /* CTA menempel di bawah layar HP (basis/default) — panel harga lengkap
    tetap ada di alur normal, sticky bar ini jalan pintas biar tak perlu
    scroll jauh. Disembunyikan lagi di layar besar lewat
@@ -1591,6 +1595,7 @@ h1,h2,h3,h4,.btn,.badge,.card-go,.w-body b,
 .specs div:last-child{border-right:none}
 .specs div:nth-child(2){border-right:none}
 .specs div:last-child:nth-child(odd){grid-column:1/-1}
+.specs div:nth-child(n+3){border-top:1px solid var(--line)}
 .specs small{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
   color:var(--dim);text-transform:uppercase;margin-bottom:6px}
 .specs b{font-size:14px;font-weight:700;white-space:nowrap}
@@ -2305,8 +2310,6 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .spec-rail{grid-template-columns:repeat(4,1fr)}
   .sec-head{flex-direction:row;align-items:flex-end}
   .f-grid{grid-template-columns:1fr 1fr}
-  .specs{grid-template-columns:repeat(4,1fr)}
-  .specs div:nth-child(2){border-right:1px solid var(--line)}
   .a-row{align-items:center}
 }
 /* dari tablet ke atas, panel harga di alur normal sudah cukup dekat —
@@ -2330,6 +2333,8 @@ footer{border-top:1px solid var(--line);padding:46px 0 30px;margin-top:20px;back
   .feature{grid-template-columns:1fr 1fr;gap:clamp(44px,6vw,88px)}
   .feature.flip .feature-media-slide{order:2}
   .detail-grid{grid-template-columns:7fr 5fr}
+  .detail-main{display:block}
+  .detail-main > .unit-terms{margin-top:36px}
   .panel{position:sticky}
   .hero{min-height:92vh;min-height:92svh;min-height:92dvh;padding-top:140px}
   /* teks kiri, model 3D kanan; kolom model diberi porsi sedikit lebih besar.
@@ -4528,7 +4533,7 @@ function DetailView({ listing, nav }) {
       <div className="container">
         <a className="back" href="#/" onClick={(e) => { e.preventDefault(); nav('#/') }}>← Kembali ke etalase</a>
         <div className="detail-grid">
-          <div>
+          <div className="detail-main">
             <MotorCarousel photos={photos} title={listing.title} selectedModParts={selectedModParts} />
             <DetailTabs listing={listing} />
             {/* Ketentuan DP/hold/refund hanya berlaku untuk unit resmi Motorell. */}
